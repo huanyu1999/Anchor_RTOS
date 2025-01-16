@@ -164,9 +164,19 @@
 #define SWS1_A3A_MODE                   0x02     //anchor/tag address A3
 #define SWS1_KAM_MODE                   0x01     //卡尔曼滤波开关
 
+/* uwb 射频配置枚举 */
+typedef enum {
+    CONFIG_BR_110K_1,
+    CONFIG_BR_6M8_1,
+    CONFIG_BR_6M8_2,
+    CONFIG_BR_850K_1,
+    CONFIG_BR_850K_2,
+    CONFIG_BR_NUM
+} rf_config_e;
+
+
 /* 状态机标志位 */
-typedef enum
-{
+typedef enum {
     STA_IDLE, 
     STA_SEND_POLL,
     STA_WAIT_RESP,
@@ -187,8 +197,7 @@ typedef enum
 
 
 /* TWR测距状态 */
-typedef enum
-{
+typedef enum {
     RANGE_NULL, 
     RANGE_TWR_OK,
     RANGE_ERROR
@@ -257,11 +266,12 @@ extern uint8_t ancrange_count;
 extern uint8_t target_ancid;
 #endif
 
+void uwb_init(void);
 void anchor_app(void);
 void tag_app(void);
 void print_config(void);
 void clear_sortDistance(void);
-void DW1000_init(void);
+
 int findMin(int arr[], int size);
 bool setElement(int arr[], int size, int index, int value);
 int32_t getAnchorDis(void);

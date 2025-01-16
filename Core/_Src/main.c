@@ -105,7 +105,7 @@ int main(void)
     MX_TIM3_Init();
     /* USER CODE BEGIN 2 */
     
-    DW1000_init();                      // dw1000模组初始化
+    uwb_init();                      // dw1000模组初始化
     pause_key_init();                   // 
     switch_key_init();                      
     // User_VoiceInit(30);                 // 

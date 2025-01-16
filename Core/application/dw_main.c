@@ -43,79 +43,31 @@ uint8_t USE_EEPROM = 0;
 
 int32_t min_distance[3] = {2000000, 2000000, 2000000};
 
+/* dw1000 rf 配置  */
+static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
+    {
+        .chan = 2, .prf = DWT_PRF_64M, .txPreambLength = DWT_PLEN_1024, .rxPAC = DWT_PAC32, .txCode = 10, .rxCode = 10, .nsSFD = 1, .dataRate = DWT_BR_110K, .phrMode = DWT_PHRMODE_STD, .sfdTO = (1025 + DW_NS_SFD_LEN_110K - 32) 
+    }, /* uwb_config1 */
+    {
+        .chan = 2, .prf = DWT_PRF_64M, .txPreambLength = DWT_PLEN_128, .rxPAC = DWT_PAC8, .txCode = 10, .rxCode = 10, .nsSFD = 1, .dataRate = DWT_BR_6M8, .phrMode = DWT_PHRMODE_STD, .sfdTO = (129 + DW_NS_SFD_LEN_6M8 - 8)
+    }, /* uwb_config2 */
+    {
+        .chan = 5, .prf = DWT_PRF_64M, .txPreambLength = DWT_PLEN_128, .rxPAC = DWT_PAC8, .txCode = 10, .rxCode = 10, .nsSFD = 1, .dataRate = DWT_BR_6M8, .phrMode = DWT_PHRMODE_STD, .sfdTO = (129 + DW_NS_SFD_LEN_6M8 - 8)
+    }, /* uwb_config3 */
+    {
+        .chan = 2, .prf = DWT_PRF_64M, .txPreambLength = DWT_PLEN_256, .rxPAC = DWT_PAC16, .txCode = 9, .rxCode = 9, .nsSFD = 1, .dataRate = DWT_BR_850K, .phrMode = DWT_PHRMODE_STD, .sfdTO = (257 + DW_NS_SFD_LEN_850K - 16)
+    }, /* uwb_config4 */
+    {
+        .chan = 5, .prf = DWT_PRF_64M, .txPreambLength = DWT_PLEN_256, .rxPAC = DWT_PAC16, .txCode = 10, .rxCode = 10, .nsSFD = 1, .dataRate = DWT_BR_850K, .phrMode = DWT_PHRMODE_STD, .sfdTO = (257 + DW_NS_SFD_LEN_850K - 16) 
+    }, /* uwb_config5 当前使用的配置，channel 5，baudrate 850K */
+};
+
 /*******************************************************函数声明********************************************************/
-void parse_uart(uint8_t* data);
 void read_anc_coord(void);
 void print_config(void);
-void DW1000_init(void);
 
-void DW1000_init(void)
+void uwb_init(void)
 {
-    static dwt_config_t config1 = {             //6.8M
-        .chan = 2,                              /* Channel number. */
-        .prf = DWT_PRF_64M,                     /* Pulse repetition frequency. */
-        .txPreambLength = DWT_PLEN_128,         /* Preamble length. Used in TX only. */
-        .rxPAC = DWT_PAC8,                      /* Preamble acquisition chunk size. Used in RX only. */
-        .txCode = 10,                           /* TX preamble code. Used in TX only. */
-        .rxCode = 10,                           /* RX preamble code. Used in RX only. */
-        .nsSFD = 1,                             /* 0 to use standard SFD, 1 to use non-standard SFD. */
-        .dataRate = DWT_BR_6M8,                 /* Data rate. */
-        .phrMode = DWT_PHRMODE_STD,             /* PHY header mode. */
-        .sfdTO = (129 + DW_NS_SFD_LEN_6M8 - 8)  /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    };
-
-    static dwt_config_t config2 = {             //110K
-        .chan = 2,                              /* Channel number. */
-        .prf = DWT_PRF_64M,                     /* Pulse repetition frequency. */
-        .txPreambLength = DWT_PLEN_1024,        /* Preamble length. Used in TX only. */
-        .rxPAC = DWT_PAC32,                     /* Preamble acquisition chunk size. Used in RX only. */
-        .txCode = 10,                           /* TX preamble code. Used in TX only. */
-        .rxCode = 10,                           /* RX preamble code. Used in RX only. */
-        .nsSFD = 1,                             /* 0 to use standard SFD, 1 to use non-standard SFD. */
-        .dataRate = DWT_BR_110K,                /* Data rate. */
-        .phrMode = DWT_PHRMODE_STD,             /* PHY header mode. */
-        .sfdTO = (1025 + DW_NS_SFD_LEN_110K - 32)           /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    };
-    
-    static dwt_config_t config3 = {
-         .chan = 2,                                  /* Channel number. */
-         .prf = DWT_PRF_64M,                         /* Pulse repetition frequency. */
-         .txPreambLength = DWT_PLEN_256,             /* Preamble length. Used in TX only. */
-         .rxPAC = DWT_PAC16,                         /* Preamble acquisition chunk size. Used in RX only. */
-         .txCode = 9,                                /* TX preamble code. Used in TX only. */
-         .rxCode = 9,                                /* RX preamble code. Used in RX only. */
-         .nsSFD = 1,                                 /* 0 to use standard SFD, 1 to use non-standard SFD. */
-         .dataRate = DWT_BR_850K,                    /* Data rate. */
-         .phrMode = DWT_PHRMODE_STD,                 /* PHY header mode. */
-         .sfdTO = (257 + DW_NS_SFD_LEN_850K - 16)    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    };
-    
-    static dwt_config_t config4 = {
-         .chan = 5,                                  /* Channel number. */
-         .prf = DWT_PRF_64M,                         /* Pulse repetition frequency. */
-         .txPreambLength = DWT_PLEN_128,             /* Preamble length. Used in TX only. */
-         .rxPAC = DWT_PAC8,                         /* Preamble acquisition chunk size. Used in RX only. */
-         .txCode = 10,                                /* TX preamble code. Used in TX only. */
-         .rxCode = 10,                                /* RX preamble code. Used in RX only. */
-         .nsSFD = 1,                                 /* 0 to use standard SFD, 1 to use non-standard SFD. */
-         .dataRate = DWT_BR_6M8,                    /* Data rate. */
-         .phrMode = DWT_PHRMODE_STD,                 /* PHY header mode. */
-         .sfdTO = (129 + DW_NS_SFD_LEN_6M8 - 8)    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    };
-    
-    static dwt_config_t config5 = {             //6.8M
-         .chan = 5,                                  /* Channel number. */
-         .prf = DWT_PRF_64M,                         /* Pulse repetition frequency. */
-         .txPreambLength = DWT_PLEN_256,             /* Preamble length. Used in TX only. */
-         .rxPAC = DWT_PAC16,                         /* Preamble acquisition chunk size. Used in RX only. */
-         .txCode = 10,                                /* TX preamble code. Used in TX only. */
-         .rxCode = 10,                                /* RX preamble code. Used in RX only. */
-         .nsSFD = 1,                                 /* 0 to use standard SFD, 1 to use non-standard SFD. */
-         .dataRate = DWT_BR_850K,                    /* Data rate. */
-         .phrMode = DWT_PHRMODE_STD,                 /* PHY header mode. */
-         .sfdTO = (257 + DW_NS_SFD_LEN_850K - 16)    /* SFD timeout (preamble length + 1 + SFD length - PAC size). Used in RX only. */
-    };
-
     static dwt_txconfig_t txconfig_options = {
         .PGdly = 0XC2,            /* PG delay */
         .power = TX_POWER         /* TX power */
@@ -137,9 +89,9 @@ void DW1000_init(void)
     port_set_dw1000_fastrate();
 
     inst_slot_number = MAX_TAG_NUMBER;
-    dwt_configure(&config5);
-    inst_dataRate = config5.dataRate;
-    inst_ch       = config5.chan;
+    dwt_configure(&uwb_config[4]);
+    inst_dataRate = uwb_config[4].dataRate;
+    inst_ch       = uwb_config[4].chan;
 
     /* 配置通信相关时序 */
     if(inst_dataRate == DWT_BR_6M8)
@@ -262,6 +214,7 @@ void DW1000_init(void)
     if(instance_mode == ANCHOR)
     {
         //设置基站的中断回调函数
+        // dwt_setcallbacks(&txCallback, &rxCallback, &rxTimeoutCallback, &rxFailedCallback);
         dwt_setcallbacks(&anc_tx_conf_cb, &anc_rx_ok_cb, &anc_rx_to_cb, &anc_rx_err_cb);
     }
     else 
@@ -397,6 +350,29 @@ bool setElement(int arr[], int size, int index, int value)
     arr[index] = value; // 设置值
     return 1;
 }
+
+/************************************************************call back function************************************************************/
+static void txCallback(const dwt_cb_data_t *cb_data)
+{
+    
+    UNUSED(cb_data);
+}
+
+static void rxCallback(const dwt_cb_data_t *cb_data)
+{
+    UNUSED(cb_data);
+}
+
+static void rxTimeoutCallback(const dwt_cb_data_t *cb_data)
+{
+    UNUSED(cb_data);
+}
+
+static void rxFailedCallback(const dwt_cb_data_t *cb_data)
+{
+    UNUSED(cb_data);
+}
+
 
 //int32_t getAnchorDis()
 //{

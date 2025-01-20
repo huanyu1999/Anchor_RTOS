@@ -205,7 +205,7 @@ void uwb_init(void)
 #endif
     {
         /* 配置设备ID */
-        dev_id = 0x01;
+        dev_id = 0x00;
     }
 
     //设置中断标志

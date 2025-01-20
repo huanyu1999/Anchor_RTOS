@@ -34,14 +34,17 @@ extern "C" {
 /* USER CODE END Includes */
 
 extern UART_HandleTypeDef huart4;
+extern UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
 
 void MX_UART4_Init(void);
+void MX_UART1_Init(void);
 
 /* USER CODE BEGIN Prototypes */
+int fputc(int ch, FILE *f);
 void printf_use_dma(const char *format, ...);
 
 /* USER CODE END Prototypes */

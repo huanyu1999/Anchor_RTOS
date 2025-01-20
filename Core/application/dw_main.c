@@ -205,7 +205,7 @@ void uwb_init(void)
 #endif
     {
         /* 配置设备ID */
-        dev_id = 0x00;
+        dev_id = 0x01;
     }
 
     //设置中断标志
@@ -301,28 +301,28 @@ void print_config(void)
     int len;
     uint8_t UART_TX_DATA[512];
     len = sprintf((char*)&UART_TX_DATA[0], "\r\n***************************************************\r\n");
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* role = TAG\r\n");
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* firmware = %s\r\n* role = %s\r\n* addr = %d\r\n", SOFTWARE_VER, (instance_mode == TAG)?"TAG":"AHCHOR", dev_id);
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* max_anc_num = %d\r\n* max_tag_num = %d\r\n* sync = 0\r\n", MAX_AHCHOR_NUMBER, inst_slot_number);
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* baud_rate = %s\r\n* channel = CH%d\r\n", (inst_dataRate == DWT_BR_110K)? "110K" : "6.8M", inst_ch);
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* data_rate = %dHz\r\n* update_time = %dms\r\n* kalmanfilter = %d\r\n", 1000 / (inst_slot_number * inst_one_slot_time), inst_slot_number * inst_one_slot_time, (switch8 & SWS1_KAM_MODE)? 1:0);
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* ant_dly  = %d\r\n* tx_power = %08lx\r\n", ant_dly, tx_power);
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "***************************************************\r\n");
-    HAL_UART_Transmit(&huart4, &UART_TX_DATA[0], len, 1000);
+    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 }
 
 int findMin(int arr[], int size)

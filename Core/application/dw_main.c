@@ -205,7 +205,7 @@ void uwb_init(void)
 #endif
     {
         /* 配置设备ID */
-        dev_id = 0x01;
+        dev_id = read_SwitchValue();
     }
 
     //设置中断标志
@@ -269,11 +269,9 @@ void dw_main(void)
         anchor_app();
         
         if(range_status == RANGE_TWR_OK)            //TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
-        {   
-            // HAL_GPIO_TogglePin(RUN_LED_GPIO_Port, RUN_LED_Pin); // 测距成功一次， LED闪烁一次          
+        {        
             range_status = RANGE_NULL;              //清空标志位
-
-            // anchorSelfDis = findMin(sort_distance, MAX_TAG_LIST_SIZE);
+            led_toggle(uwb_ok_led);
         }
         else if(range_status == RANGE_ERROR) 
         {
@@ -303,10 +301,7 @@ void print_config(void)
     len = sprintf((char*)&UART_TX_DATA[0], "\r\n***************************************************\r\n");
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
-    len = sprintf((char*)&UART_TX_DATA[0], "* role = TAG\r\n");
-    HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
-
-    len = sprintf((char*)&UART_TX_DATA[0], "* firmware = %s\r\n* role = %s\r\n* addr = %d\r\n", SOFTWARE_VER, (instance_mode == TAG)?"TAG":"AHCHOR", dev_id);
+    len = sprintf((char*)&UART_TX_DATA[0], "* firmware = %s\r\n* role = %s\r\n* addr = %x\r\n", SOFTWARE_VER, (instance_mode == TAG)?"TAG":"AHCHOR", dev_id);
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* max_anc_num = %d\r\n* max_tag_num = %d\r\n* sync = 0\r\n", MAX_AHCHOR_NUMBER, inst_slot_number);

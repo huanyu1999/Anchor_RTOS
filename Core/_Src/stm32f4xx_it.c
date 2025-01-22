@@ -58,7 +58,9 @@
 
 /* External variables --------------------------------------------------------*/
 extern DMA_HandleTypeDef hdma_uart4_tx;
+extern DMA_HandleTypeDef hdma_uart1_tx;
 extern UART_HandleTypeDef huart4;
+extern UART_HandleTypeDef huart1;
 extern TIM_HandleTypeDef htimer2;
 extern TIM_HandleTypeDef htimer3;
 extern TIM_HandleTypeDef htim6;
@@ -201,6 +203,11 @@ void DMA1_Stream4_IRQHandler(void)
     /* USER CODE END DMA1_Stream4_IRQn 1 */
 }
 
+void DMA2_Stream7_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(&hdma_uart1_tx);
+}
+
 /**
   * @brief This function handles timer2 global interrupt.
   */
@@ -222,7 +229,6 @@ void TIM3_IRQHandler(void)
   */
 void CAN1_RX0_IRQHandler(void)
 {
-   
     HAL_CAN_IRQHandler(&hcan1);
     // __HAL_CAN_CLEAR_FLAG(&hcan1, CAN_FLAG_FF0);
 }
@@ -254,6 +260,11 @@ void UART4_IRQHandler(void)
     /* USER CODE BEGIN UART4_IRQn 1 */
 
     /* USER CODE END UART4_IRQn 1 */
+}
+
+void USART1_IRQHandler(void)
+{
+    HAL_UART_IRQHandler(&huart1);
 }
 
 /* USER CODE BEGIN 1 */

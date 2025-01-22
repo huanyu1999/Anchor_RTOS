@@ -11,6 +11,7 @@
 #include "deca_types.h"
 #include "deca_spi.h"
 #include "usart.h"
+#include "gpio.h"
 #include "iwdg.h"
 #include "kalman.h"
 
@@ -35,6 +36,15 @@
 
 #define MAX_AHCHOR_NUMBER               3       //系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
 #define MAX_TAG_NUMBER                  40     // 设置最大标签个数
+
+#define ANCHOR_ID_0                     0x0
+#define ANCHOR_ID_1                     0x1
+#define ANCHOR_ID_2                     0x2
+#define ANCHOR_ID_3                     0x3
+#define ANCHOR_ID_4                     0x4
+#define ANCHOR_ID_5                     0x5
+#define ANCHOR_ID_6                     0x6
+#define ANCHOR_ID_7                     0x7
 
 /* 天线延时
  * 计算距离结果比实际距离小，需要增大距离，则减小这个数

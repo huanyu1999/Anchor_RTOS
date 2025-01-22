@@ -57,23 +57,42 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define Dw1000_IRQ_Pin GPIO_PIN_13
-#define Dw1000_IRQ_GPIO_Port GPIOC
-#define Dw1000_IRQ_EXTI_IRQn EXTI15_10_IRQn
-#define Dw1000_RSTn_Pin GPIO_PIN_14
-#define Dw1000_RSTn_GPIO_Port GPIOC
-#define RUN_LED_Pin GPIO_PIN_2
-#define RUN_LED_GPIO_Port GPIOA
-#define S_KEY_Pin GPIO_PIN_1
-#define S_KEY_GPIO_Port GPIOB
-#define P_KEY_Pin GPIO_PIN_0
-#define P_KEY_GPIO_Port GPIOB
-#define Onside_LED_Pin GPIO_PIN_6
-#define Onside_LED_GPIO_Port GPIOC
-#define Across_LED_Pin GPIO_PIN_7
-#define Across_LED_GPIO_Port GPIOC
-#define BEE_Pin GPIO_PIN_8
-#define BEE_GPIO_Port GPIOA
+#define Dw1000_IRQ_Pin          GPIO_PIN_13
+#define Dw1000_IRQ_GPIO_Port    GPIOC
+#define Dw1000_IRQ_EXTI_IRQn    EXTI15_10_IRQn
+
+#define Dw1000_RSTn_Pin         GPIO_PIN_14
+#define Dw1000_RSTn_GPIO_Port   GPIOC
+
+#define UwbOK_LED_Pin           GPIO_PIN_9
+#define UwbOK_LED_GPIO_Port     GPIOB
+
+#define S_KEY_Pin               GPIO_PIN_1
+#define S_KEY_GPIO_Port         GPIOB
+
+#define P_KEY_Pin               GPIO_PIN_0
+#define P_KEY_GPIO_Port         GPIOB
+
+#define Onside_LED_Pin          GPIO_PIN_6
+#define Onside_LED_GPIO_Port    GPIOC
+
+#define Across_LED_Pin          GPIO_PIN_7
+#define Across_LED_GPIO_Port    GPIOC
+
+#define BUZZER_Pin              GPIO_PIN_8
+#define BUZZER_GPIO_Port        GPIOA
+
+#define CAN_TX_LED_Pin          GPIO_PIN_3
+#define CAN_TX_LED_GPIO_Port    GPIOC
+#define CAN_RX_LED_Pin          GPIO_PIN_2
+#define CAN_RX_LED_GPIO_Port    GPIOA
+
+#define SW0_Pin                 GPIO_PIN_0
+#define SW0_GPIO_Port           GPIOC
+#define SW1_Pin                 GPIO_PIN_1
+#define SW1_GPIO_Port           GPIOC
+#define SW2_Pin                 GPIO_PIN_2
+#define SW2_GPIO_Port           GPIOC
 
 /* USER CODE BEGIN Private defines */
 /* USER CODE END Private defines */

@@ -296,11 +296,11 @@ void task2_canRx(void *argument)
         if(voiceOutputDis < 100000)
         {
             /* 打开蜂鸣器 */
-            HAL_GPIO_WritePin(BEE_GPIO_Port, BEE_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
         }
         else 
         {
-            HAL_GPIO_WritePin(BEE_GPIO_Port, BEE_Pin, GPIO_PIN_RESET);  /* 关闭蜂鸣器 */
+            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);  /* 关闭蜂鸣器 */
         }
         
         Report_Dis((float)voiceOutputDis / 1000.0);
@@ -334,18 +334,18 @@ void task4_rtcDate(void *argument)
 /*************************************************Key function*************************************************/
 void pause_key_handler1(void * buttonPause) 
 {
-    HAL_GPIO_DeInit(BEE_GPIO_Port, BEE_Pin);
+    HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
 }
 
 void pause_key_handler2(void * buttonPause)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     
-    GPIO_InitStruct.Pin = BEE_Pin;
+    GPIO_InitStruct.Pin = BUZZER_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    HAL_GPIO_Init(BEE_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(BUZZER_GPIO_Port, &GPIO_InitStruct);
 }
 
 void switch_key_handler1(void * buttonPause) 
@@ -374,6 +374,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)      /* Get RX message */
     {
+        led_toggle(can_rx_led);
         if ((RxHeader.ExtId == 0xAAA0) && (RxHeader.IDE == CAN_ID_EXT) && (RxHeader.DLC == 8))
         {
             anchorReceiveDis = combine8to32(RxData);             // CAN正确接收，填充距离
@@ -406,7 +407,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
     else if (htim->Instance == TIM6)
     {
-        HAL_IncTick();
+        HAL_IncTick();  // HAL延时所使用的时基
     }
 }
 

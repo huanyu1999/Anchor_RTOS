@@ -8,6 +8,9 @@
         "instance.h": "c",
         "stdarg.h": "c",
         "usart.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "gpio.h": "c",
+        "stdbool.h": "c",
+        "compare": "c"
     }
 }

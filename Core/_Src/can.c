@@ -18,10 +18,11 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include "can.h"
 
 /* USER CODE BEGIN 0 */
 #include "usart.h"
+#include "gpio.h"
+#include "can.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -78,7 +79,6 @@ void MX_CAN1_Init(void)
 
 void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
 {
-
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     if(canHandle->Instance==CAN1)
     {
@@ -156,12 +156,11 @@ void canSendMsg(uint32_t extId, uint8_t* data, uint32_t length)
     
     if(HAL_CAN_AddTxMessage(&hcan1, txHeader, data, &TxMailbox) == HAL_OK)
     {
-        // printf("can transmit success\n");
-        HAL_GPIO_TogglePin(RUN_LED_GPIO_Port, RUN_LED_Pin);
+        led_toggle(can_tx_led);
     } 
     else 
     {
-        // printf("can transmit failed\n");
+        led_on(can_tx_led);
     }
 }
 

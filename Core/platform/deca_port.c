@@ -153,18 +153,6 @@ void setup_DW1000RSTnIRQ(int enable)
     }
 }
 
-/* @fn		switch_is_on
- * @brief	check the switch status.
- * 			when switch (S1) is 'on' the pin is low
- * @return  1 if ON and 0 for OFF
- * */
-/*
-int switch_is_on(uint16_t GPIOpin)
-{
-    return ((GPIO_ReadInputDataBit(SW_GPIO, GPIOpin))?(0):(1));
-}
-*/
-
 /*
 void pa_pwr_on(void)
 {

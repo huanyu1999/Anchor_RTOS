@@ -130,7 +130,7 @@
         <SetRegEntry>
           <Number>0</Number>
           <Key>DLGTARM</Key>
-          <Name>(1010=1408,312,1858,869,0)(1007=-1,-1,-1,-1,0)(1008=-1,-1,-1,-1,0)(1009=-1,-1,-1,-1,0)(1012=135,169,612,484,0)</Name>
+          <Name>(1010=447,296,897,853,0)(1007=-1,-1,-1,-1,0)(1008=-1,-1,-1,-1,0)(1009=-1,-1,-1,-1,0)(1012=135,169,612,484,0)</Name>
         </SetRegEntry>
         <SetRegEntry>
           <Number>0</Number>
@@ -157,50 +157,82 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>208</LineNumber>
+          <LineNumber>223</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134246796</Address>
+          <Address>134246836</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\Core\application\dw_main.c</Filename>
+          <Filename>..\Core\_Src\freertos.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Anchor\../Core/application/dw_main.c\208</Expression>
+          <Expression>\\Anchor\../Core/_Src/freertos.c\223</Expression>
         </Bp>
         <Bp>
           <Number>1</Number>
           <Type>0</Type>
-          <LineNumber>212</LineNumber>
+          <LineNumber>160</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134246802</Address>
+          <Address>134240502</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\Core\application\dw_main.c</Filename>
+          <Filename>..\Core\decadriver\deca_device.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Anchor\../Core/application/dw_main.c\212</Expression>
+          <Expression>\\Anchor\../Core/decadriver/deca_device.c\160</Expression>
         </Bp>
         <Bp>
           <Number>2</Number>
           <Type>0</Type>
-          <LineNumber>192</LineNumber>
+          <LineNumber>99</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134245682</Address>
+          <Address>134246490</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\Core\_Src\gpio.c</Filename>
+          <Filename>..\Core\platform\deca_spi.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Anchor\../Core/_Src/gpio.c\192</Expression>
+          <Expression>\\Anchor\../Core/platform/deca_spi.c\99</Expression>
+        </Bp>
+        <Bp>
+          <Number>3</Number>
+          <Type>0</Type>
+          <LineNumber>2013</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>134227180</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>1</BreakIfRCount>
+          <Filename>../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_spi.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression>\\Anchor\../Drivers/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_spi.c\2013</Expression>
+        </Bp>
+        <Bp>
+          <Number>4</Number>
+          <Type>0</Type>
+          <LineNumber>1077</LineNumber>
+          <EnabledFlag>1</EnabledFlag>
+          <Address>134241092</Address>
+          <ByteObject>0</ByteObject>
+          <HtxType>0</HtxType>
+          <ManyObjects>0</ManyObjects>
+          <SizeOfObject>0</SizeOfObject>
+          <BreakByAccess>0</BreakByAccess>
+          <BreakIfRCount>1</BreakIfRCount>
+          <Filename>..\Core\decadriver\deca_device.c</Filename>
+          <ExecCommand></ExecCommand>
+          <Expression>\\Anchor\../Core/decadriver/deca_device.c\1077</Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow1>
@@ -238,6 +270,21 @@
           <count>6</count>
           <WinNumber>1</WinNumber>
           <ItemText>minDisQueue</ItemText>
+        </Ww>
+        <Ww>
+          <count>7</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>readBuffer</ItemText>
+        </Ww>
+        <Ww>
+          <count>8</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>regval</ItemText>
+        </Ww>
+        <Ww>
+          <count>9</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>errorcode</ItemText>
         </Ww>
       </WatchWindow1>
       <MemoryWindow1>

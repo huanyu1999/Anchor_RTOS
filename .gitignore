@@ -30,6 +30,10 @@ Examples/
 !*.bin
 !*.hex
 
+
 #JLINK file
 JLinkLog.txt
 *.dbgconf
+
+#Vscode file
+*.json

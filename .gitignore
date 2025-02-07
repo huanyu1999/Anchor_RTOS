@@ -37,3 +37,11 @@ JLinkLog.txt
 
 #Vscode file
 *.json
+.vscode
+
+#EIDE file 
+build
+*.clang-format
+.cmsis
+.eide
+*.code-workspace

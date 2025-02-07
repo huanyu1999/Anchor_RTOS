@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <math.h>
 
 #include "deca_port.h"
 #include "deca_device_api.h"
@@ -34,7 +35,7 @@
 
 #define SOFTWARE_VER                   "V1"
 
-#define MAX_AHCHOR_NUMBER               3       //系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
+#define MAX_AHCHOR_NUMBER               3    //系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
 #define MAX_TAG_NUMBER                  40     // 设置最大标签个数
 
 #define ANCHOR_ID_0                     0x0
@@ -69,7 +70,7 @@
 #if (MAX_AHCHOR_NUMBER == 3)            // 每个时隙的持续时间，时隙时间过小，会导致相邻ID的标签，位于后方的标签无法测距，被上一个标签测距所影响，尝试增大该值，但是标签的时隙值不能相同，否则还是一样的情况？
 #define ONE_SLOT_TIME_MS_110K           28
 #define ONE_SLOT_TIME_MS_850K           14
-#define ONE_SLOT_TIME_MS_6P8M           9
+#define ONE_SLOT_TIME_MS_6P8M           10
 #elif (MAX_AHCHOR_NUMBER == 8)
 #define ONE_SLOT_TIME_MS_110K           50
 #define ONE_SLOT_TIME_MS_850K           20
@@ -280,11 +281,10 @@ void uwb_init(void);
 void anchor_app(void);
 void tag_app(void);
 void print_config(void);
+double calculate_RSSI(dwt_rxdiag_t* rx_diag);
 void clear_sortDistance(void);
-
 int findMin(int arr[], int size);
 bool setElement(int arr[], int size, int index, int value);
-int32_t getAnchorDis(void);
 
 void pause_key_handler1(void * buttonPause);
 void pause_key_handler2(void * buttonPause);

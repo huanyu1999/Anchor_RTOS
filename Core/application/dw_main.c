@@ -38,8 +38,12 @@ uint8_t sos = 0;
 uint8_t alarm = 0;
 int user_data[10];
 
-/* 没有板载EEPROM */
-uint8_t USE_EEPROM = 0; 
+/* 計算接收功率 */
+static double  RX_level = 0;    // 接收功率
+static int  RX_level_C = 0;	    //0x12 CIR_PWR 接收功率参数
+static int  RX_level_N = 0;     //0x10 RXPACC  接收功率参数
+static float	RX_level_A=0;   //
+uint32_t D17F = 0;
 
 int32_t min_distance[3] = {2000000, 2000000, 2000000};
 
@@ -118,61 +122,24 @@ void uwb_init(void)
         inst_data_interval    = DATA_INTERVAL_TIME_850K;
         inst_poll2final_time  = ((FIRST_RESP_SEND_850K +  MAX_AHCHOR_NUMBER * inst_data_interval) * UUS_TO_DWT_TIME);
     }
+
+    if(uwb_config[4].prf == DWT_PRF_64M) 
+    { 
+        RX_level_A = 121.74;
+    }
+    else if (uwb_config[4].prf == DWT_PRF_16M)
+    {
+        RX_level_A = 113.77;
+    }
+    D17F = pow(2, 17);
     
-#if (USE_EEPROM == 1) //板载EEPROM
-    {
-        uint8_t tx_pwr_read[EEP_UNIT_SIZE]={0};
-        E2prom_Read(TX_PWR_ADDR, tx_pwr_read, EEP_UNIT_SIZE);
-        if(tx_pwr_read[0] == 0xAA) //固定AA
-        {
-            txconfig_options.power  = (uint32)tx_pwr_read[1] << 24;
-            txconfig_options.power += (uint32)tx_pwr_read[2] << 16;
-            txconfig_options.power += (uint32)tx_pwr_read[3] << 8;
-            txconfig_options.power += (uint32)tx_pwr_read[4];
-        }
-        else    //未配置，写入默认值
-        {
-            txconfig_options.power = TX_POWER;
-            uint8_t tx_pwr_write[EEP_UNIT_SIZE]={0};
-            tx_pwr_write[0] = 0xAA;
-            tx_pwr_write[1] = txconfig_options.power >> 24;
-            tx_pwr_write[2] = txconfig_options.power >> 16;
-            tx_pwr_write[3] = txconfig_options.power >> 8;
-            tx_pwr_write[4] = txconfig_options.power;
-            E2prom_Write(TX_PWR_ADDR, tx_pwr_write, EEP_UNIT_SIZE);
-        }
-    }
-    else    //未板载EEPROM，按define值设置
-#endif
-    {
-        txconfig_options.power = TX_POWER;
-    }
+    txconfig_options.power = TX_POWER;
+
     tx_power = txconfig_options.power;
     dwt_configuretxrf(&txconfig_options);//设置发射功率和pg值
 
-#if (USE_EEPROM == 1) //板载EEPROM
-    {
-        uint8_t ant_dly_read[EEP_UNIT_SIZE] = {0};
-        E2prom_Read(ANT_DLY_ADDR, ant_dly_read, EEP_UNIT_SIZE);
-        if(ant_dly_read[0] == 0xAA) //固定AA
-        {
-            ant_dly = (uint16)ant_dly_read[1] << 8 | (uint16)ant_dly_read[2];
-        }
-        else    //未配置，写入默认值
-        {
-            ant_dly = ANT_DLY;
-            uint8_t ant_dly_write[EEP_UNIT_SIZE] = {0};
-            ant_dly_write[0] = 0xAA;
-            ant_dly_write[1] = ant_dly >> 8;
-            ant_dly_write[2] = (uint8)ant_dly;
-            E2prom_Write(ANT_DLY_ADDR, ant_dly_write, EEP_UNIT_SIZE);
-        }
-    }
-    else    //未板载EEPROM，按define值设置
-#endif
-    {
-        ant_dly = ANT_DLY;
-    }
+    ant_dly = ANT_DLY;
+
     dwt_setrxantennadelay(ant_dly);                 //设置天线延时
     dwt_settxantennadelay(ant_dly);
 //    dwt_setrxtimeout(inst_resp_rx_timeout);         //设置接收超时时间
@@ -186,27 +153,9 @@ void uwb_init(void)
     
     /* 配置角色 */
     instance_mode = ANCHOR; //当前角色控制为标签
-    
-#if (USE_EEPROM == 1) //板载EEPROM
-    {
-        uint8_t dev_id_read[EEP_UNIT_SIZE] = {0};
-        E2prom_Read(DEV_ID_ADDR, dev_id_read, EEP_UNIT_SIZE);
-        if(dev_id_read[0] == 0xAA) //固定AA
-        {
-            dev_id = dev_id_read[1];
-        }
-        else
-        {
-            //读取拨码开关设备ID
-            dev_id = ((switch8 & SWS1_A1A_MODE) + (switch8 & SWS1_A2A_MODE) + (switch8 & SWS1_A3A_MODE)) >> 1;
-        }
-    }
-    else
-#endif
-    {
-        /* 配置设备ID */
-        dev_id = read_SwitchValue();
-    }
+
+    /* 配置设备ID */
+    dev_id = read_SwitchValue();
 
     //设置中断标志
     dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO), 1);
@@ -214,7 +163,6 @@ void uwb_init(void)
     if(instance_mode == ANCHOR)
     {
         //设置基站的中断回调函数
-        // dwt_setcallbacks(&txCallback, &rxCallback, &rxTimeoutCallback, &rxFailedCallback);
         dwt_setcallbacks(&anc_tx_conf_cb, &anc_rx_ok_cb, &anc_rx_to_cb, &anc_rx_err_cb);
     }
     else 
@@ -258,11 +206,8 @@ void uwb_init(void)
     minDisQueue = osMessageQueueNew(MIN_DIS_QUEUE_LEN, sizeof(distanceData_t), NULL);
 }
 
-// static int32_t anchorSelfDis;                       /* 保存基站自身最小距离 */
-
 void dw_main(void)
 {
-    
     while(1)                                        //测距功能实现，按角色执行基站状态机或标签状态机
     {
         HAL_IWDG_Refresh(&hiwdg);
@@ -284,6 +229,21 @@ void dw_main(void)
             printf_use_dma("RANGE_ERROR, ID = %d, rb = %d, range_time = %d\r\n", dev_id, range_nb, range_time);
         }
     }
+}
+
+double calculate_RSSI(dwt_rxdiag_t* rx_diag)
+{
+    dwt_readdiagnostics(rx_diag);
+    RX_level_C = (int)rx_diag->maxGrowthCIR;
+    RX_level_N = (int)rx_diag->rxPreamCount;
+
+    /* 計算接收功率 */
+    RX_level = RX_level_C * D17F;
+    RX_level = RX_level / (RX_level_N * RX_level_N);
+    RX_level = 10 * log10(RX_level);
+    RX_level = RX_level - RX_level_A;
+
+    return RX_level;
 }
 
 void clear_sortDistance(void)
@@ -367,16 +327,3 @@ static void rxFailedCallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
 }
-
-
-//int32_t getAnchorDis()
-//{
-//    return anchorSelfDis;
-//}
-//void HAL_UART_IdleCpltCallback(UART_HandleTypeDef *huart)
-//{
-//    //HAL_UART_Transmit(&huart2, &UART_RX_BUF[0], strlen((char*)UART_RX_BUF), 1000);
-//    uart_rx_len = strlen((char*)UART_RX_BUF);
-
-//}
-

@@ -67,10 +67,10 @@ void Error_Handler(void);
 #define UwbOK_LED_Pin           GPIO_PIN_9
 #define UwbOK_LED_GPIO_Port     GPIOB
 
-#define S_KEY_Pin               GPIO_PIN_1
+#define S_KEY_Pin               GPIO_PIN_4
 #define S_KEY_GPIO_Port         GPIOB
 
-#define P_KEY_Pin               GPIO_PIN_0
+#define P_KEY_Pin               GPIO_PIN_5
 #define P_KEY_GPIO_Port         GPIOB
 
 #define Onside_LED_Pin          GPIO_PIN_6

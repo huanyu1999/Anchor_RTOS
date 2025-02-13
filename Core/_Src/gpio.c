@@ -114,7 +114,7 @@ void gpioAndExti_init(void)
 struct Button pause_key_b;
 struct Button switch_key_b;
     
-void pause_key_init()
+void pause_key_init(void)
 {
     button_init(&pause_key_b, ReadButtonPin, 0, KEY_ID_PAUSE);
     button_attach(&pause_key_b, PRESS_DOWN, pause_key_handler1);

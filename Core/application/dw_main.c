@@ -8,6 +8,7 @@ uint8_t anc_id;                                         //如当前角色是基�
 uint8_t tag_id;                                         //如当前角色是标签，则表示当前标签ID
 uint8_t state = STA_IDLE;                               //状态机状态控制
 int32_t distance_report[8];                             //基站测距值数组，用于打包输出
+int32_t previous_sort_distance[MAX_TAG_LIST_SIZE] = {-1}; // 
 int32_t sort_distance[MAX_TAG_LIST_SIZE] = {-1};        //用于标签距离排序
 int32_t group_report[8];                                //基站组ID数组，用于打包输出
 uint32_t range_time;                                    //测距产生时间，串口打包发送
@@ -46,6 +47,7 @@ static float	RX_level_A=0;   //
 uint32_t D17F = 0;
 
 int32_t min_distance[3] = {2000000, 2000000, 2000000};
+MultiTimer timer_compareDistance;
 
 /* dw1000 rf 配置  */
 static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
@@ -67,7 +69,7 @@ static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
 };
 
 /*******************************************************函数声明********************************************************/
-void read_anc_coord(void);
+void timer_compareDistance_callBack(MultiTimer* timer, void* userData);
 void print_config(void);
 
 void uwb_init(void)
@@ -210,13 +212,14 @@ void dw_main(void)
 {
     while(1)                                        //测距功能实现，按角色执行基站状态机或标签状态机
     {
-        HAL_IWDG_Refresh(&hiwdg);
+        // HAL_IWDG_Refresh(&hiwdg);
         anchor_app();
         
         if(range_status == RANGE_TWR_OK)            //TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
         {        
             range_status = RANGE_NULL;              //清空标志位
             led_toggle(uwb_ok_led);
+            HAL_IWDG_Refresh(&hiwdg);
         }
         else if(range_status == RANGE_ERROR) 
         {
@@ -252,6 +255,38 @@ void clear_sortDistance(void)
     {
         setElement(sort_distance, MAX_TAG_LIST_SIZE, i, 2000000);
     }
+}
+
+void update_previous_values(void)
+{   
+    for(int i = 0; i < MAX_TAG_LIST_SIZE; i++)
+    {
+        previous_sort_distance[i] = sort_distance[i];
+    }
+}
+
+void compare_values(void)
+{   
+    for(int i = 0; i < MAX_TAG_LIST_SIZE; i++)
+    {
+        if (previous_sort_distance[i] == sort_distance[i])
+        {
+            sort_distance[i] = 2000000;
+            update_previous_values();
+        }
+    }
+}
+
+void start_monitoring(void)
+{
+    update_previous_values();
+    // multiTimerStart(&timer_compareDistance, 1000, timer_compareDistance_callBack, NULL);
+}
+
+void timer_compareDistance_callBack(MultiTimer* timer, void* userData)
+{
+    compare_values();
+    multiTimerStart(&timer_compareDistance, 1000, timer_compareDistance_callBack, NULL);
 }
 
 void print_config(void)

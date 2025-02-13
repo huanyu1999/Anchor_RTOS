@@ -160,7 +160,7 @@ void canSendMsg(uint32_t extId, uint8_t* data, uint32_t length)
     } 
     else 
     {
-        led_on(can_tx_led);
+        led_off(can_tx_led);
     }
 }
 

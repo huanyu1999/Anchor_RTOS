@@ -108,7 +108,8 @@ int main(void)
     
     uwb_init();                      // dw1000模组初始化
     pause_key_init();                   // 
-    switch_key_init();                      
+    switch_key_init();     
+    multiTimer_init();
     // User_VoiceInit(30);                 // 
     print_config();                     // 打印系统参数信息
     /* USER CODE END 2 */

@@ -32,6 +32,8 @@ static uint8_t sr, rr;                               //用于控制当前基站�
 /* 計算接收功率 */
 static dwt_rxdiag_t rx_diag;
 
+int sfCounter = 0;
+
 void anchor_app(void)
 {
     switch (state)
@@ -187,7 +189,6 @@ void anchor_app(void)
             break;
 
         case STA_SORR_RESP://根据基站ID按顺序进行发送或接收resp消息
-           
             if(sr > 0)// sr>0 处于resp阶段，按基站ID判断接收resp或发送resp
             {
                 if(rr & 0x01)//当前该基站需发送resp
@@ -197,7 +198,6 @@ void anchor_app(void)
                 }
                 else//当前该基站需接收resp
                 {
-                   
                    dwt_enableframefilter(DWT_FF_NOTYPE_EN); //关闭帧过滤，能够接收所有数据
 
                     //设置resp数据接收机开启时间
@@ -312,7 +312,7 @@ void anchor_app(void)
                 tx_resp_msg[RESP_MSG_SLEEP_COR_IDX + 1] = 0;
             }
 
-            dwt_writetxdata(RESP_MSG_LEN + FCS_LEN, tx_resp_msg, 0); //数据写入DW3000数据缓冲区
+            dwt_writetxdata(RESP_MSG_LEN + FCS_LEN, tx_resp_msg, 0); //数据写入DW1000数据缓冲区
             dwt_writetxfctrl(RESP_MSG_LEN + FCS_LEN, 0, 1); 
             tx_status = TX_WAIT; 
             int ret = dwt_starttx(DWT_START_TX_DELAYED);  //延时发送
@@ -370,13 +370,17 @@ void anchor_app(void)
                 {
                     state = STA_RECV_FINAL;
                 }
-
             }
             else if((rx_status == RX_TIMEOUT) || (rx_status == RX_ERROR))
             {
                 rx_status = RX_WAIT;
                 state = STA_INIT_POLL_SYNC;
                 range_status = RANGE_ERROR; 
+            }
+            sfCounter++;
+            if(sfCounter > (MAX_TAG_LIST_SIZE + 2))
+            {
+                sfCounter = 0;
             }
             break;
 
@@ -437,8 +441,8 @@ void anchor_app(void)
                     //更新prev_range为本次测距值
                     prev_range[recv_tag_id].distance = distance_now_m * 1000;//单位转换为mm
                     prev_range[recv_tag_id].range_nb = range_nb;
-                    double rx_power =  calculate_RSSI(&rx_diag);
-                    printf_use_dma("POWER : %.4f dBM\r\n", rx_power);
+                    // double rx_power =  calculate_RSSI(&rx_diag);
+                    // printf_use_dma("POWER : %.4f dBM\r\n", rx_power);
                     // printf("poll_tx_ts %lu resp_rx_ts %lu final_tx_ts %lu\n", poll_tx_ts, resp_rx_ts, final_tx_ts);
                     // printf("poll_rx_ts %d resp_tx_ts %d final_rx_ts %d\n", poll_rx_ts_32, resp_tx_ts_32, final_rx_ts_32);
                     // ("Ra %.lf Rb %.lf Da %.lf Db %.lf\n", Ra, Rb, Da, Db);
@@ -446,6 +450,7 @@ void anchor_app(void)
                     
                     /* 将获取到的各标签最新距离存入排序数组 */
                     sort_distance[recv_tag_id] = prev_range[recv_tag_id].distance;
+                    start_monitoring();
                 }
                 else
                 {

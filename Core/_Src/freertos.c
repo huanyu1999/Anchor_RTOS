@@ -61,7 +61,7 @@ uint8_t canSendBuf[8];
 static int32_t voiceOutputDis = 0;
 
 osMessageQueueId_t minDisQueue;                                 /* Definitions for minDisQueue */
-distanceData_t     minDisQueueBuffer[3 * sizeof(distanceData_t)];
+distanceData_t     minDisQueueBuffer[6 * sizeof(distanceData_t)];
 osStaticMessageQDef_t minDisQueueCB;
 const osMessageQueueAttr_t minDisQueue_attr = {
     .name    = "minDisQueue",
@@ -72,7 +72,7 @@ const osMessageQueueAttr_t minDisQueue_attr = {
 };
 
 osMessageQueueId_t rxDisQueue;                                 /* Definitions for rxDisQueue */
-distanceData_t     rxDisQueueBuffer[3 * sizeof(distanceData_t)];
+distanceData_t     rxDisQueueBuffer[6 * sizeof(distanceData_t)];
 osStaticMessageQDef_t rxDisQueueCB;
 const osMessageQueueAttr_t rxDisQueue_attr = {
     .name    = "rxDisQueue",
@@ -262,14 +262,14 @@ void task1_anchorDisHandling(void *argument)
         if(anchorSelfDis >= anchorRxDis)
         {
             anchorFinalDis = anchorRxDis;                   /* 最近的标签位于对侧基站*/
-            HAL_GPIO_TogglePin(Across_LED_GPIO_Port, Across_LED_Pin);
-            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_SET);
         }
         else
         {
             anchorFinalDis = anchorSelfDis;                 /* 最近的标签位于本侧基站*/
-            HAL_GPIO_TogglePin(Onside_LED_GPIO_Port, Onside_LED_Pin);
-            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_SET);
         }
         
         voiceOutputDis = anchorFinalDis;
@@ -317,24 +317,27 @@ void task3_canSend(void *argument)
     for(;;)
     {
         status = osMessageQueueGet(minDisQueue, &sendDis, 0, portMAX_DELAY);
-        if (status  == osOK)
+        if(status  == osOK)
         {
             split32to8(sendDis.dis_value, canSendBuf);
-            canSendMsg(anchorCanExtId, canSendBuf, 8);                                 // CAN 发送基站本测最小距离值
+            canSendMsg(anchorCanExtId, canSendBuf,8);                                 // CAN 发送基站本测最小距离值
         }
+        osDelay(200);
     }
 }
 
 void task4_rtcDate(void *argument)
 {
     for(;;)
-    {}
+    {
+        multiTimerYield();
+    }
 }
 
 /*************************************************Key function*************************************************/
 void pause_key_handler1(void * buttonPause) 
 {
-    HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
+    HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);      //按键短按，关闭蜂鸣器
 }
 
 void pause_key_handler2(void * buttonPause)
@@ -345,18 +348,18 @@ void pause_key_handler2(void * buttonPause)
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    HAL_GPIO_Init(BUZZER_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(BUZZER_GPIO_Port, &GPIO_InitStruct);  //按键长按，恢复蜂鸣器功能
 }
 
 void switch_key_handler1(void * buttonPause) 
 {
-    // printf_use_dma("switch key presse down switch key pressed down switch key pressed down\n");
+    printf_use_dma("switch key presse down switch key pressed down. \r\n");
     
 }
 
 void switch_key_handler2(void * buttonPause)
 {
-    printf_use_dma("switch key presse UP switch key presse UP switch key presse UP \n");
+    printf_use_dma("switch key presse UP switch key presse UP switch key presse UP \r\n");
 }
 
 /*************************************************some callback function*************************************************/
@@ -374,13 +377,14 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)      /* Get RX message */
     {
-        led_toggle(can_rx_led);
+        
         if ((RxHeader.ExtId == 0xAAA0) && (RxHeader.IDE == CAN_ID_EXT) && (RxHeader.DLC == 8))
         {
             anchorReceiveDis = combine8to32(RxData);             // CAN正确接收，填充距离
             rxMsg.dis_class = OTHER_ANCHOR_DIS;
             rxMsg.dis_value = anchorReceiveDis;
             osMessageQueuePut(rxDisQueue, &rxMsg, 0, 0);
+            led_toggle(can_rx_led);
         }
     } 
     else
@@ -398,8 +402,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM2) 
     {
-        clear_sortDistance();
-        clearReceiveDis();
+        // clear_sortDistance();
+        // clearReceiveDis();
     }
     else if (htim->Instance == TIM3)
     {

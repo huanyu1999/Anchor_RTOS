@@ -642,6 +642,11 @@
               <FileType>1</FileType>
               <FilePath>..\Core\com\com_multiButton.c</FilePath>
             </File>
+            <File>
+              <FileName>com_MultiTimer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Core\com\com_MultiTimer.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

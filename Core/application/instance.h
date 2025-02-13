@@ -21,10 +21,7 @@
 #include "task.h"
 #include "queue.h"
 
-//#include "e2prom.h"
-//#include "cw2015.h"
-//#include "trilateration.h"
-//#include "iwdg.h"
+#include "com_MultiTimer.h"
 
 /***********************************定义板卡角色，只能定义一个*************************************/
 #define LD150
@@ -69,8 +66,8 @@
 
 #if (MAX_AHCHOR_NUMBER == 3)            // 每个时隙的持续时间，时隙时间过小，会导致相邻ID的标签，位于后方的标签无法测距，被上一个标签测距所影响，尝试增大该值，但是标签的时隙值不能相同，否则还是一样的情况？
 #define ONE_SLOT_TIME_MS_110K           28
-#define ONE_SLOT_TIME_MS_850K           14
-#define ONE_SLOT_TIME_MS_6P8M           10
+#define ONE_SLOT_TIME_MS_850K           12
+#define ONE_SLOT_TIME_MS_6P8M           9
 #elif (MAX_AHCHOR_NUMBER == 8)
 #define ONE_SLOT_TIME_MS_110K           50
 #define ONE_SLOT_TIME_MS_850K           20
@@ -92,7 +89,7 @@
 #define TAG_FINALE_SEND_BACK_110K       1080    //110K通信速率下，标签延后发送FINAL消息时间
 
 #define FINAL_RX_TIMEOUT_850K           1300
-#define RESP_RX_TIMEOUT_850K            800     
+#define RESP_RX_TIMEOUT_850K            1000     
 #define FIRST_RESP_SEND_850K            1250     //850K通信速率下，第一个resp消息发送延时
 #define DATA_INTERVAL_TIME_850K         1650    //850K通信速率下，相邻消息间隔时间
 #define ANC_RESP_SEND_BACK_850K         300     //850K通信速率下，基站延后发送RESP消息时间
@@ -280,9 +277,13 @@ extern uint8_t target_ancid;
 void uwb_init(void);
 void anchor_app(void);
 void tag_app(void);
-void print_config(void);
+
 double calculate_RSSI(dwt_rxdiag_t* rx_diag);
 void clear_sortDistance(void);
+void update_previous_values(void);
+void compare_values(void);
+void start_monitoring(void);
+void print_config(void);
 int findMin(int arr[], int size);
 bool setElement(int arr[], int size, int index, int value);
 

@@ -1,6 +1,7 @@
 #include "timer.h"
 #include "usart.h"
-
+#include "com_MultiTimer.h"
+#include "instance.h"
 
 TIM_HandleTypeDef htimer2;
 TIM_HandleTypeDef htimer3;
@@ -8,6 +9,8 @@ TIM_HandleTypeDef htimer3;
 extern void clear_sortDistance(void);
 
 uint32_t uwPrescalerValue = 0;
+
+void timer_test_callBack(MultiTimer* timer, void* userData);
 
 /* TIM2 init function period 600ms */
 void MX_TIM2_Init(void)
@@ -105,7 +108,6 @@ void MX_TIM3_Init(void)
     }
 }
 
-
 /**
   * @brief TIM MSP Initialization 
   *        This function configures the hardware resources used in this example: 
@@ -129,4 +131,25 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
     /* Enable the TIMx global Interrupt */
     HAL_NVIC_EnableIRQ(TIM2_IRQn);
     HAL_NVIC_EnableIRQ(TIM3_IRQn);
+}
+
+/**********************************************multi timer  init**s************************************************** */
+MultiTimer timer_test;
+
+void multiTimer_init(void)
+{
+    multiTimerInstall(platform_Ticks_Get);
+    multiTimerStart(&timer_test, 4000, timer_test_callBack, NULL);
+}
+
+uint64_t platform_Ticks_Get(void)
+{
+    return (uint64_t)HAL_GetTick();
+}
+
+void timer_test_callBack(MultiTimer* timer, void* userData)
+{
+    // printf_use_dma("timer test for printf.\r\n");
+    compare_values();
+    multiTimerStart(&timer_test, 4000, timer_test_callBack, NULL);
 }

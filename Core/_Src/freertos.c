@@ -110,9 +110,9 @@ const osThreadAttr_t task3_canSend_attr = {
     .priority = (osPriority_t) osPriorityRealtime7,
 };
 
-osThreadId_t task4_rtcDate_Handle;
-const osThreadAttr_t task4_rtcDate_attr = {
-    .name = "task4_rtcDate",
+osThreadId_t task4_Handle;
+const osThreadAttr_t task4_attr = {
+    .name = "task4",
     .stack_size = 128 * 4,
     .priority = (osPriority_t) osPriorityRealtime7,
 };
@@ -134,7 +134,7 @@ void task0_uwb(void *argument);
 void task1_anchorDisHandling(void *argument);
 void task2_canRx(void *argument);
 void task3_canSend(void *argument);
-void task4_rtcDate(void *argument);
+void task4_timerYield(void *argument);
 
 void split32to8(uint32_t value, uint8_t *bytes);
 uint32_t combine8to32(const uint8_t *bytes);
@@ -176,14 +176,14 @@ void MX_FREERTOS_Init(void)
 
     /* Create the thread(s) */
     /* creation of defaultTask */
-
+    // defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
     task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
     task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
     task2_canRx_Handle             = osThreadNew(task2_canRx, NULL, &task2_canRx_attr);
     task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
-    task4_rtcDate_Handle           = osThreadNew(task4_rtcDate, NULL, &task4_rtcDate_attr);
+    task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
     if(task0_uwb_Handle == NULL) { Error_Handler(); }
     /* USER CODE END RTOS_THREADS */
 
@@ -192,6 +192,9 @@ void MX_FREERTOS_Init(void)
     /* USER CODE END RTOS_EVENTS */
 }
 
+    uint32_t flag;
+    uint8_t voice_clear_left[] = "clear voice L";
+    uint32_t anchorCanExtId1 = 0xAAA1;
 /* USER CODE BEGIN Header_StartDefaultTask */
 /**
   * @brief  Function implementing the defaultTask thread.
@@ -202,10 +205,23 @@ void MX_FREERTOS_Init(void)
 void StartDefaultTask(void *argument)
 {
     /* USER CODE BEGIN StartDefaultTask */
+
     /* Infinite loop */
     for(;;)
     {
-        osDelay(100);
+        flag = osThreadFlagsWait(0x0000003U, osFlagsWaitAny, osWaitForever);
+        if(flag & (1 << 0))
+        {
+            canSendMsg(anchorCanExtId1, voice_clear_left, ARRAY_LENGTH(voice_clear_left));
+            printf_use_dma("send sound clear message.\r\n");
+        }
+        else if(flag & (1 << 1))
+        {
+            // CAN接收到消音信息，消音
+            printf_use_dma("task excute clear message.\r\n");
+            HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
+            HAL_UART_DeInit(&huart4);
+        }
     }
     /* USER CODE END StartDefaultTask */
 }
@@ -221,11 +237,6 @@ void StartDefaultTask(void *argument)
 void task0_uwb(void *argument) 
 {
     dw_main();
-//    for(;;)
-//    {
-//        led_toggle(RUN_LED);
-//        osDelay(100);
-//    }
 }
 
 int32_t anchorSelfDis  = 2000000;
@@ -259,23 +270,23 @@ void task1_anchorDisHandling(void *argument)
             anchorRxDis = rxDisMsg.dis_value;
         }
         
-        if(anchorSelfDis >= anchorRxDis)
+        if(anchorSelfDis > anchorRxDis)
         {
             anchorFinalDis = anchorRxDis;                   /* 最近的标签位于对侧基站*/
-            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_RESET);
-            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_SET);
         }
         else
         {
             anchorFinalDis = anchorSelfDis;                 /* 最近的标签位于本侧基站*/
-            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_RESET);
-            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_RESET);
         }
         
         voiceOutputDis = anchorFinalDis;
 
         printf_use_dma("SelfDis %.2f, RxDis %.2f, FinalDis %.2f \n", (float)(anchorSelfDis) / 1000, (float)(anchorRxDis) / 1000, (float)(anchorFinalDis) / 1000);
-        osDelay(500);       /* 定时处理距离数据 */
+        osDelay(300);       /* 定时处理距离数据 */
     }
 }
 
@@ -295,16 +306,15 @@ void task2_canRx(void *argument)
     {
         if(voiceOutputDis < 100000)
         {
-            /* 打开蜂鸣器 */
-            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
+
+            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);    // 打开蜂鸣器
         }
         else 
         {
-            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);  /* 关闭蜂鸣器 */
+            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);  // 关闭蜂鸣器 
         }
         
         Report_Dis((float)voiceOutputDis / 1000.0);
-
         tick += 1100;
         osDelayUntil(tick);
     }
@@ -320,13 +330,12 @@ void task3_canSend(void *argument)
         if(status  == osOK)
         {
             split32to8(sendDis.dis_value, canSendBuf);
-            canSendMsg(anchorCanExtId, canSendBuf,8);                                 // CAN 发送基站本测最小距离值
+            canSendMsg(anchorCanExtId, canSendBuf, 8);                                 // CAN 发送基站本测最小距离值
         }
-        osDelay(200);
     }
 }
 
-void task4_rtcDate(void *argument)
+void task4_timerYield(void *argument)
 {
     for(;;)
     {
@@ -334,32 +343,50 @@ void task4_rtcDate(void *argument)
     }
 }
 
+void task5_voiceManage(void *argument)
+{
+    for(;;)
+    {
+        
+    }
+}
+
 /*************************************************Key function*************************************************/
 void pause_key_handler1(void * buttonPause) 
 {
-    HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);      //按键短按，关闭蜂鸣器
+    // 按键短按，关闭蜂鸣器，关闭扬声器
+    HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
+    HAL_UART_DeInit(&huart4);
 }
 
 void pause_key_handler2(void * buttonPause)
 {
+    // 按键长按，恢复蜂鸣器以及串口功能
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     
     GPIO_InitStruct.Pin = BUZZER_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    HAL_GPIO_Init(BUZZER_GPIO_Port, &GPIO_InitStruct);  //按键长按，恢复蜂鸣器功能
-}
-
-void switch_key_handler1(void * buttonPause) 
-{
-    printf_use_dma("switch key presse down switch key pressed down. \r\n");
+    HAL_GPIO_Init(BUZZER_GPIO_Port, &GPIO_InitStruct);  
     
+    MX_UART4_Init();
 }
 
-void switch_key_handler2(void * buttonPause)
+
+void switch_key_left_handler(void * buttonPause) 
 {
-    printf_use_dma("switch key presse UP switch key presse UP switch key presse UP \r\n");
+    // 旋钮切换，发送任务通知
+    //    osThreadFlagsSet(defaultTaskHandle, 0x01U);         // 标志位第0位置1，使用该方法同步任务，会出现任务初始能够触发，运行一段时间后无法触发的现象，后续排查
+//    printf_use_dma("switch_key_left_handler\r\n");
+    canSendMsg(anchorCanExtId1, voice_clear_left, ARRAY_LENGTH(voice_clear_left));
+    printf_use_dma("send sound clear message.\r\n");
+}
+
+void switch_key_right_handler(void * buttonPause)
+{
+    osThreadFlagsSet(defaultTaskHandle, 0x01U);         // 标志位第0位置1
+    printf_use_dma("switch_key_right_handler\r\n");
 }
 
 /*************************************************some callback function*************************************************/
@@ -385,6 +412,13 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
             rxMsg.dis_value = anchorReceiveDis;
             osMessageQueuePut(rxDisQueue, &rxMsg, 0, 0);
             led_toggle(can_rx_led);
+        } 
+        else if ((RxHeader.ExtId == 0xAAA1) && (RxHeader.IDE == CAN_ID_EXT))
+        {
+//            osThreadFlagsSet(defaultTaskHandle, 0x02U);         // CAN接收到消音消息，标志位第1位置1
+            printf_use_dma("receive sound clear message.\n");
+            HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
+            HAL_UART_DeInit(&huart4);
         }
     } 
     else

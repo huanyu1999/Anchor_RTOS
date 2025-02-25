@@ -149,7 +149,6 @@ uint64_t platform_Ticks_Get(void)
 
 void timer_test_callBack(MultiTimer* timer, void* userData)
 {
-    // printf_use_dma("timer test for printf.\r\n");
     compare_values();
     multiTimerStart(&timer_test, 4000, timer_test_callBack, NULL);
 }

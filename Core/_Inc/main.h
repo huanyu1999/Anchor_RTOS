@@ -95,6 +95,8 @@ void Error_Handler(void);
 #define SW2_GPIO_Port           GPIOC
 
 /* USER CODE BEGIN Private defines */
+
+#define ARRAY_LENGTH(arr) (sizeof(arr) / sizeof((arr)[0]))
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

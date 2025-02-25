@@ -25,14 +25,14 @@ uint8_t inst_prf;                                       //PRF
 uint8_t inst_one_slot_time;                             //一个slot的时间，根据通信速率不同而不同，单位ms
 uint32_t inst_final_rx_timeout;                         //基站final接收超时时间，根据通信速率不同而不同，单位us
 uint32_t inst_resp_rx_timeout;                          //标签发送poll后接收resp超时时间，根据通信速率不同而不同，单位us
-// uint32_t inst_init_rx_timeout;                          //标签发送blink后接收init超时时间，根据通信速率不同而不同，单位us
+// uint32_t inst_init_rx_timeout;                       //标签发送blink后接收init超时时间，根据通信速率不同而不同，单位us
 uint64_t inst_poll2final_time;                          //单TWR周期poll起始到final结束的总时间
 uint32_t inst_data_interval;                            //相邻两条数据的间隔，如poll和第一个resp的间隔，resp1和resp2的间隔，根据通信速率不同而不同，单位us
 uint16 ant_dly = ANT_DLY;                               //天线延时
 uint32 tx_power;                                        //发射增益代码
 uint8_t UART_RX_BUF[200];                               //串口接收BUF
 uint32_t uart_rx_len;                                   //串口接收数据长度
-// vec3d anchorArray[8];                                   //基站坐标，用于标签解算自身位置
+// vec3d anchorArray[8];                                //基站坐标，用于标签解算自身位置
 double distance_now_m;                                  //基站计算本周期测距结果，单位米
 int32 distance_offset_cm;                               //距离校准，单位cm
 uint8_t sos = 0;
@@ -40,10 +40,10 @@ uint8_t alarm = 0;
 int user_data[10];
 
 /* 計算接收功率 */
-static double  RX_level = 0;    // 接收功率
-static int  RX_level_C = 0;	    //0x12 CIR_PWR 接收功率参数
-static int  RX_level_N = 0;     //0x10 RXPACC  接收功率参数
-static float	RX_level_A=0;   //
+static double   RX_level = 0;       // 接收功率
+static int      RX_level_C = 0;	    //0x12 CIR_PWR 接收功率参数
+static int      RX_level_N = 0;     //0x10 RXPACC  接收功率参数
+static float    RX_level_A=0;       //
 uint32_t D17F = 0;
 
 int32_t min_distance[3] = {2000000, 2000000, 2000000};
@@ -144,8 +144,6 @@ void uwb_init(void)
 
     dwt_setrxantennadelay(ant_dly);                 //设置天线延时
     dwt_settxantennadelay(ant_dly);
-//    dwt_setrxtimeout(inst_resp_rx_timeout);         //设置接收超时时间
-//    dwt_setpreambledetecttimeout(0);                //设置前导码超时
 
     dwt_setpanid(PAN_ID);                                   //设置PAN ID 组号
     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  //设置帧过滤模式开启
@@ -153,10 +151,10 @@ void uwb_init(void)
     dwt_setlnapamode(1, 1);//设置外置PA和LNA控制开启
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);//设置DW3000控制的收发指示灯开启，低功耗时可注释掉
     
-    /* 配置角色 */
+    // 配置角色 
     instance_mode = ANCHOR; //当前角色控制为标签
 
-    /* 配置设备ID */
+    // 配置设备ID
     dev_id = read_SwitchValue();
 
     //设置中断标志
@@ -182,7 +180,7 @@ void uwb_init(void)
         dwt_setaddress16(anc_short_add);
         anc_id = dev_id;
 
-        if(anc_id == 0)             //A0的group ID最高bit设置为1，为时序校准基站
+        if(anc_id == 0)             // A0的group ID最高bit设置为1，为时序校准基站
         {
             group_id = group_id | 0x80;
         }
@@ -210,21 +208,24 @@ void uwb_init(void)
 
 void dw_main(void)
 {
-    while(1)                                        //测距功能实现，按角色执行基站状态机或标签状态机
+    while(1)                                        // 测距功能实现，按角色执行基站状态机或标签状态机
     {
-        // HAL_IWDG_Refresh(&hiwdg);
         anchor_app();
         
-        if(range_status == RANGE_TWR_OK)            //TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
+        if(range_status == RANGE_TWR_OK)            // TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
         {        
-            range_status = RANGE_NULL;              //清空标志位
+            range_status = RANGE_NULL;              // 清空标志位
             led_toggle(uwb_ok_led);
             HAL_IWDG_Refresh(&hiwdg);
+            for(int i = 0; i < MAX_TAG_LIST_SIZE; i++)
+            {
+                // sort_distance[i] = kalman_filter(sort_distance[i], dev_id, i);
+            }
         }
         else if(range_status == RANGE_ERROR) 
         {
-            range_status = RANGE_NULL;              //清空标志位
-            for(uint8_t i = 0; i < 8; i++)          //清空distance_report数组，设置无效值
+            range_status = RANGE_NULL;              // 清空标志位
+            for(uint8_t i = 0; i < 8; i++)          // 清空distance_report数组，设置无效值
             {
                 distance_report[i] = -1; 
                 group_report[i] = -1; 
@@ -339,26 +340,4 @@ bool setElement(int arr[], int size, int index, int value)
     }
     arr[index] = value; // 设置值
     return 1;
-}
-
-/************************************************************call back function************************************************************/
-static void txCallback(const dwt_cb_data_t *cb_data)
-{
-    
-    UNUSED(cb_data);
-}
-
-static void rxCallback(const dwt_cb_data_t *cb_data)
-{
-    UNUSED(cb_data);
-}
-
-static void rxTimeoutCallback(const dwt_cb_data_t *cb_data)
-{
-    UNUSED(cb_data);
-}
-
-static void rxFailedCallback(const dwt_cb_data_t *cb_data)
-{
-    UNUSED(cb_data);
 }

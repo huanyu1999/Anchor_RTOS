@@ -289,8 +289,8 @@ bool setElement(int arr[], int size, int index, int value);
 
 void pause_key_handler1(void * buttonPause);
 void pause_key_handler2(void * buttonPause);
-void switch_key_handler1(void * buttonPause);
-void switch_key_handler2(void * buttonPause);
+void switch_key_left_handler(void * buttonPause);
+void switch_key_right_handler(void * buttonPause);
 
 void tag_rx_ok_cb(const dwt_cb_data_t *cb_data);
 void tag_rx_to_cb(const dwt_cb_data_t *cb_data);

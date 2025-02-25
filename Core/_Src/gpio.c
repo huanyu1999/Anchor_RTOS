@@ -101,6 +101,7 @@ void gpioAndExti_init(void)
         GPIO_InitStruct.Speed = gpio_config[i].gpio_speed;
 
         HAL_GPIO_Init(gpio_config[i].gpio_port, &GPIO_InitStruct);
+        HAL_GPIO_WritePin(gpio_config[i].gpio_port, gpio_config[i].gpio_pin, GPIO_PIN_RESET);
     }
     
     for(int i = 0; i < exti_num; i++)
@@ -125,8 +126,8 @@ void pause_key_init(void)
 void switch_key_init(void)
 {
     button_init(&switch_key_b, ReadButtonPin, 0, KEY_ID_SWITCH);
-    button_attach(&switch_key_b, PRESS_DOWN, switch_key_handler1);
-    button_attach(&switch_key_b, PRESS_UP, switch_key_handler2);
+    button_attach(&switch_key_b, PRESS_DOWN, switch_key_left_handler);
+    button_attach(&switch_key_b, PRESS_UP, switch_key_right_handler);
     button_start(&switch_key_b);
 
 }

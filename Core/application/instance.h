@@ -22,6 +22,7 @@
 #include "queue.h"
 
 #include "com_MultiTimer.h"
+#include "com_heap.h"
 
 /***********************************定义板卡角色，只能定义一个*************************************/
 #define LD150
@@ -224,11 +225,25 @@ typedef enum
 #define FINAL_DIS        2
 #define MIN_DIS_QUEUE_LEN 3
 
-typedef struct {            /* 三种距离状态 */
+typedef struct {            
     int32_t dis_value;
     uint8_t dis_class;
-} distanceData_t;
+} outDistance_t;
 
+typedef struct {
+    uint8_t poll_receiveSign;
+    uint8_t final_receiveSign;
+    int32_t tag_distance;
+} tagDistance_t;
+
+typedef struct {
+    tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];        // 标签排序的数组
+    outDistance_t disMsg[3];                                // 输出距离时使用的数组
+    int32_t min_dis;                                        // 最小的距离值
+    int newRange;
+    uint8_t dis_idx;                                        // 最小距离值对应的索引，也就是对应的标签ID
+    min_heap dis_min_heap;                                 // 用于查找最小值距离的最小堆                       
+} distance_type;
 
 extern uint8_t instance_mode;                           //设备运行角色
 extern uint8_t dev_id;                                  //设备ID
@@ -239,6 +254,7 @@ extern uint8_t group_id;                                //组ID
 extern uint8_t state;
 extern int32_t distance_report[8];
 extern int32_t sort_distance[MAX_TAG_LIST_SIZE];
+extern tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];
 extern int32_t group_report[8];                         //基站组ID数组，用于打包输出
 extern uint32_t range_time;
 extern uint8_t inst_ch;                                 //信道号Channel number
@@ -279,13 +295,11 @@ void anchor_app(void);
 void tag_app(void);
 
 double calculate_RSSI(dwt_rxdiag_t* rx_diag);
-void clear_sortDistance(void);
-void update_previous_values(void);
-void compare_values(void);
-void start_monitoring(void);
+void tag_distance_handler(void);
+distance_type* get_the_local_structure_of_dis(void);
+int get_newrange(void);
+uint8_t get_sign(uint8_t tad_idx);
 void print_config(void);
-int findMin(int arr[], int size);
-bool setElement(int arr[], int size, int index, int value);
 
 void pause_key_handler1(void * buttonPause);
 void pause_key_handler2(void * buttonPause);

@@ -4,6 +4,11 @@
 IWDG_HandleTypeDef hiwdg;
 
 
+/**
+  * @brief  独立看门狗初始化
+  * @param  none 
+  * @retval none
+  */
 void IWDG_Init(void)
 {
     /* Set counter reload value to obtain 500ms IWDG TimeOut.

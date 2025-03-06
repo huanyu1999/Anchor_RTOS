@@ -36,6 +36,7 @@ int sfCounter = 0;
 
 void anchor_app(void)
 {
+    distance_type* distance =  get_the_local_structure_of_dis();
     switch (state)
     {
         case STA_INIT_POLL_SYNC: //初始化接收机，接收poll消息
@@ -137,21 +138,22 @@ void anchor_app(void)
                 recv_tag_id = rx_buffer[SENDER_SHORT_ADD_IDX];  //取发送标签的ID
                 sos         = rx_buffer[POLL_MSG_SOS_IDX];
                 if(sos > 1) { sos = 0; }
-                // battery = rx_buffer[POLL_MSG_BATTERY_IDX];
+                
                 if(recv_tag_id >= inst_slot_number)             //标签ID如果大于标签总容量则退出
                 {
                     state = STA_INIT_POLL_SYNC;
                     break;
                 }
                 
-                for(int i = 0; i < 10; i++)  //接收用户字节
+                for(int i = 0; i < 10; i++)             //接收用户字节
                 {
                     user_data[i] = rx_buffer[POLL_MSG_USER_IDX + i];
                 }
 
-                range_time = portGetTickCnt();       //取得测距时间
-                poll_rx_ts = get_rx_timestamp_u64(); //获得poll_rx时间戳
-
+                range_time = portGetTickCnt();          // 取得测距时间
+                poll_rx_ts = get_rx_timestamp_u64();    // 获得poll_rx时间戳
+                distance->sort_distance1[recv_tag_id].poll_receiveSign = 0x01; // 获取到该标签的poll帧，设置为有效
+                
                 sr = MAX_AHCHOR_NUMBER;
                 rr = 0x01 << anc_id;
                 state = STA_SORR_RESP;
@@ -338,7 +340,7 @@ void anchor_app(void)
             }   
             break;
 
-            case STA_RECV_RESP: //接收到其他基站的resp消息
+        case STA_RECV_RESP: //接收到其他基站的resp消息
             {
                 if(rx_buffer[FUNC_CODE_IDX] == FUNC_CODE_RESP)//正确接收到resp消息
                 {
@@ -388,12 +390,13 @@ void anchor_app(void)
                 // distance_report[anc_id] = prev_range[recv_tag_id].distance;  //将上次的测距值写入distance_report用于串口输出
                 // group_report[anc_id] = group_id & 0x7f;
                 resp_valid = rx_buffer[FINAL_MSG_FINAL_VALID_IDX];
+                distance->sort_distance1[recv_tag_id].final_receiveSign = 0x01;           // 获取到该标签的final帧，设置为有效
                 // if(rx_buffer[FINAL_MSG_A0_GROUP_ID_IDX + anc_id * 5] != (group_id & 0x7f)) // 验证标签final内的基站组号和当前组号相同
                 // {
                 //     printf("recv = %x, me = %x\n", rx_buffer[FINAL_MSG_A0_GROUP_ID_IDX + anc_id * 5], group_id & 0x7f);
                 //     resp_valid = resp_valid & (uint8_t)(~(0x01 << anc_id));     //设置该基站无效
                 // }
-                // printf_use_dma("recv = %x, me = %x\n", rx_buffer[FINAL_MSG_A0_GROUP_ID_IDX + anc_id * 5], group_id & 0x7f);
+
                 if((resp_valid >> anc_id) & 0x01)                               //final消息中，本基站发送的resp消息是有效的,则进行距离计算
                 {
                     uint32_t poll_tx_ts, resp_rx_ts, final_tx_ts;
@@ -447,9 +450,10 @@ void anchor_app(void)
                     // printf_use_dma("tag %d dis : %.2f \n", recv_tag_id, (float)(prev_range[recv_tag_id].distance) / 1000.0);
                     
                     /* 将获取到的各标签最新距离存入排序数组 */
-                    sort_distance[recv_tag_id] = prev_range[recv_tag_id].distance;
-                    start_monitoring();
+                    distance->sort_distance1[recv_tag_id].tag_distance = prev_range[recv_tag_id].distance;
+
                     range_status = RANGE_TWR_OK;            // 设置TWR成功测距标志，在dw_main.c里判断打包串口输出
+                    distance->newRange = 0x01;
                 }
                 else
                 {

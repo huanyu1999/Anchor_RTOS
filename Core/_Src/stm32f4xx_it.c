@@ -211,10 +211,10 @@ void DMA2_Stream7_IRQHandler(void)
 /**
   * @brief This function handles timer2 global interrupt.
   */
-void TIM2_IRQHandler(void)
-{
-    HAL_TIM_IRQHandler(&htimer2);
-}
+// void TIM2_IRQHandler(void)
+// {
+//     HAL_TIM_IRQHandler(&htimer2);
+// }
 
 /**
   * @brief This function handles timer3 global interrupt.
@@ -230,7 +230,6 @@ void TIM3_IRQHandler(void)
 void CAN1_RX0_IRQHandler(void)
 {
     HAL_CAN_IRQHandler(&hcan1);
-    // __HAL_CAN_CLEAR_FLAG(&hcan1, CAN_FLAG_FF0);
 }
 
 /**

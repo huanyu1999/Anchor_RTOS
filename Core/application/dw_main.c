@@ -9,7 +9,8 @@ uint8_t tag_id;                                         //如当前角色是标�
 uint8_t state = STA_IDLE;                               //状态机状态控制
 int32_t distance_report[8];                             //基站测距值数组，用于打包输出
 int32_t previous_sort_distance[MAX_TAG_LIST_SIZE] = {-1}; // 
-int32_t sort_distance[MAX_TAG_LIST_SIZE] = {-1};        //用于标签距离排序
+// int32_t sort_distance[MAX_TAG_LIST_SIZE] = {-1};        //用于标签距离排序
+// tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];
 int32_t group_report[8];                                //基站组ID数组，用于打包输出
 uint32_t range_time;                                    //测距产生时间，串口打包发送
 uint8_t frame_seq_nb = 0;                               //每帧数据增加1
@@ -46,8 +47,10 @@ static int      RX_level_N = 0;     //0x10 RXPACC  接收功率参数
 static float    RX_level_A=0;       //
 uint32_t D17F = 0;
 
-int32_t min_distance[3] = {2000000, 2000000, 2000000};
-MultiTimer timer_compareDistance;
+static distance_type distance_data;
+
+min_heap sort_heap = {0};
+MultiTimer sort_timer;
 
 /* dw1000 rf 配置  */
 static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
@@ -69,8 +72,9 @@ static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
 };
 
 /*******************************************************函数声明********************************************************/
-void timer_compareDistance_callBack(MultiTimer* timer, void* userData);
-void print_config(void);
+static void distance_init(distance_type* data);
+static void sort_timer_callBack(MultiTimer* timer, void* userData);
+static void print_config(void);
 
 void uwb_init(void)
 {
@@ -78,7 +82,7 @@ void uwb_init(void)
         .PGdly = 0XC2,            /* PG delay */
         .power = TX_POWER         /* TX power */
     };
-
+    distance_type* distance = get_the_local_structure_of_dis();
     reset_DW1000();               /* Target specific drive of RSTn line into DW1000 low for a period. */
     port_set_dw1000_slowrate();
     if(DWT_DEVICE_ID != dwt_readdevid())    // 若读取ID失败，先执行唤醒
@@ -197,30 +201,24 @@ void uwb_init(void)
     // 因为当前板子引脚分配，dw1000中断脚为PC13，复位引脚为PC14，共用一个中断处理，在setup_DW1000RSTnIRQ中会关闭该中断，因此在这里重新打开。
     HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
-    // 初始化距离排序数组
-    for(int i = 0; i < MAX_TAG_LIST_SIZE; i++)
-    {
-        sort_distance[i] = 2000000;
-    }
-    
-    minDisQueue = osMessageQueueNew(MIN_DIS_QUEUE_LEN, sizeof(distanceData_t), NULL);
+    distance_init(distance);        // 初始化距离结构体
+
+    multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL);   // 维护一个定时任务，用于堆中更新数据。
 }
 
 void dw_main(void)
 {
-    while(1)                                        // 测距功能实现，按角色执行基站状态机或标签状态机
+    print_config();                                     // 打印系统参数信息
+    while(1)                                            // 测距功能实现，按角色执行基站状态机或标签状态机
     {
+        distance_type* distance = get_the_local_structure_of_dis();
         anchor_app();
         
         if(range_status == RANGE_TWR_OK)            // TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
         {        
             range_status = RANGE_NULL;              // 清空标志位
-            led_toggle(uwb_ok_led);
-            HAL_IWDG_Refresh(&hiwdg);
-            for(int i = 0; i < MAX_TAG_LIST_SIZE; i++)
-            {
-                // sort_distance[i] = kalman_filter(sort_distance[i], dev_id, i);
-            }
+            led_toggle(uwb_ok_led);                 // PCB闪烁LED，说明标签同基站本次测距成功
+            // HAL_IWDG_Refresh(&hiwdg);
         }
         else if(range_status == RANGE_ERROR) 
         {
@@ -250,47 +248,95 @@ double calculate_RSSI(dwt_rxdiag_t* rx_diag)
     return RX_level;
 }
 
-void clear_sortDistance(void)
+void tag_distance_handler(void)
 {
-    for(int i = 0; i < MAX_TAG_LIST_SIZE; i++) 
-    {
-        setElement(sort_distance, MAX_TAG_LIST_SIZE, i, 2000000);
-    }
-}
+    distance_type* distance =  get_the_local_structure_of_dis();
+    int a;
+    int rx = 0;
+    int cur_size = distance->dis_min_heap.heap_current_size;
+    uint8_t array[cur_size];
+    int sign;
 
-void update_previous_values(void)
-{   
-    for(int i = 0; i < MAX_TAG_LIST_SIZE; i++)
-    {
-        previous_sort_distance[i] = sort_distance[i];
-    }
-}
+    rx = get_newrange();    
+    a = heap_find_index(&distance->dis_min_heap, recv_tag_id);
 
-void compare_values(void)
-{   
-    for(int i = 0; i < MAX_TAG_LIST_SIZE; i++)
-    {
-        if (previous_sort_distance[i] == sort_distance[i])
+    if (rx == 0x01)                 // 基站标签TWR成功，针对当前成功的标签进行处理
+    {   
+        if (a == -1)                // 当前有效的标签距离之前没有入堆，插入
         {
-            sort_distance[i] = 2000000;
-            update_previous_values();
+            heap_insert(&distance->dis_min_heap, distance->sort_distance1[recv_tag_id].tag_distance, recv_tag_id);
+        }
+        else                        // 当前有效的标签距离之前已经入堆，更新
+        {
+            heap_update(&distance->dis_min_heap, recv_tag_id, distance->sort_distance1[recv_tag_id].tag_distance);          // 有效距离，将对应的索引存储的数据，更新到堆里面
+        }
+    }
+    // 更新完有效距离之后，遍历当前堆，移除无效的节点
+    // 获取当前堆的节点对应的索引，也就是获取当前堆存储了哪些标签的距离
+    // 针对这些索引进行final包的标志位判断（当前TWR成功的标签无需判断），无效就从堆中删除。
+    for (int i = 0; i < cur_size; i++)  // 获取当前堆中所有节点对应的索引
+    {
+        array[i] = heap_getNodeIndex(&distance->dis_min_heap, i);
+    }
+    
+    for (int i = 0; i < cur_size; i++ )
+    {
+        if(array[i] != recv_tag_id)     // 跳过当前TWR成功的标签
+        {
+            sign = get_sign(array[i]);
+            if (sign == 0)              // 该节点数据无效
+            {
+                heap_remove(&distance->dis_min_heap, array[i]);     // 寻找无效距离，从堆中删除
+            }
         }
     }
 }
 
-void start_monitoring(void)
+distance_type* get_the_local_structure_of_dis(void)
 {
-    update_previous_values();
-    // multiTimerStart(&timer_compareDistance, 1000, timer_compareDistance_callBack, NULL);
+    return &distance_data;
 }
 
-void timer_compareDistance_callBack(MultiTimer* timer, void* userData)
+int get_newrange(void)
 {
-    compare_values();
-    multiTimerStart(&timer_compareDistance, 1000, timer_compareDistance_callBack, NULL);
+    distance_type* distance = get_the_local_structure_of_dis();
+    int x = distance->newRange;
+    distance->newRange = 0x00;
+    return x;
 }
 
-void print_config(void)
+// 获取标签的有效位
+uint8_t get_sign(uint8_t tad_idx)
+{
+    distance_type* distance = get_the_local_structure_of_dis();
+
+    uint8_t x = distance->sort_distance1[tad_idx].final_receiveSign;
+    distance->sort_distance1[tad_idx].final_receiveSign = 0;
+    return x;
+}   
+
+static void distance_init(distance_type* data)
+{
+    data->dis_idx = 0;
+    data->disMsg->dis_class = 0; 
+    data->min_dis = 2000000;
+    data->newRange = 0x00;
+    for (int i = 0; i < MAX_TAG_LIST_SIZE; i++)
+    {
+        data->sort_distance1[i].final_receiveSign = 0x00;
+        data->sort_distance1[i].poll_receiveSign = 0x00;
+        data->sort_distance1[i].tag_distance = 2000000;
+    }
+    heap_init(&data->dis_min_heap);
+}
+
+static void sort_timer_callBack(MultiTimer* timer, void* userData)
+{
+    tag_distance_handler();
+    multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL); 
+}
+
+static void print_config(void)
 {
     int len;
     uint8_t UART_TX_DATA[512];
@@ -314,30 +360,4 @@ void print_config(void)
 
     len = sprintf((char*)&UART_TX_DATA[0], "***************************************************\r\n");
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
-}
-
-int findMin(int arr[], int size)
-{
-    if (size <= 0) {
-        printf("Array size must be greater than 0.\n");
-        return -1;      // 返回错误值
-    }
-
-    int min = arr[0]; // 假设第一个元素为最小值
-    for (int i = 1; i < size; i++) {
-        if (arr[i] < min) {
-            min = arr[i]; // 更新最小值
-        }
-    }
-    return min; // 返回最终的最小值
-}
-
-bool setElement(int arr[], int size, int index, int value)
-{
-    if (index < 0 || index >= size) 
-    {
-        return 0;   // 索引超出范围
-    }
-    arr[index] = value; // 设置值
-    return 1;
 }

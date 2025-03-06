@@ -6,8 +6,6 @@
 TIM_HandleTypeDef htimer2;
 TIM_HandleTypeDef htimer3;
 
-extern void clear_sortDistance(void);
-
 uint32_t uwPrescalerValue = 0;
 
 void timer_test_callBack(MultiTimer* timer, void* userData);
@@ -125,21 +123,21 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
 
     /*##-2- Configure the NVIC for TIMx ########################################*/
     /* Set Interrupt Group Priority */ 
-    HAL_NVIC_SetPriority(TIM2_IRQn, 3, 0);
+    // HAL_NVIC_SetPriority(TIM2_IRQn, 3, 0);
     HAL_NVIC_SetPriority(TIM3_IRQn, 6, 0);
 
     /* Enable the TIMx global Interrupt */
-    HAL_NVIC_EnableIRQ(TIM2_IRQn);
+    // HAL_NVIC_EnableIRQ(TIM2_IRQn);
     HAL_NVIC_EnableIRQ(TIM3_IRQn);
 }
 
-/**********************************************multi timer  init**s************************************************** */
+/**********************************************multi timer init**************************************************** */
 MultiTimer timer_test;
 
 void multiTimer_init(void)
 {
     multiTimerInstall(platform_Ticks_Get);
-    multiTimerStart(&timer_test, 4000, timer_test_callBack, NULL);
+    // multiTimerStart(&timer_test, 400, timer_test_callBack, NULL);
 }
 
 uint64_t platform_Ticks_Get(void)
@@ -149,6 +147,7 @@ uint64_t platform_Ticks_Get(void)
 
 void timer_test_callBack(MultiTimer* timer, void* userData)
 {
-    compare_values();
-    multiTimerStart(&timer_test, 4000, timer_test_callBack, NULL);
+
+    printf_use_dma("timer_test_callBack\r\n");
+    multiTimerStart(&timer_test, 400, timer_test_callBack, NULL);
 }

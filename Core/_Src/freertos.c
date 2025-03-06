@@ -61,7 +61,7 @@ uint8_t canSendBuf[8];
 static int32_t voiceOutputDis = 0;
 
 osMessageQueueId_t minDisQueue;                                 /* Definitions for minDisQueue */
-distanceData_t     minDisQueueBuffer[6 * sizeof(distanceData_t)];
+outDistance_t     minDisQueueBuffer[6 * sizeof(outDistance_t)];
 osStaticMessageQDef_t minDisQueueCB;
 const osMessageQueueAttr_t minDisQueue_attr = {
     .name    = "minDisQueue",
@@ -72,7 +72,7 @@ const osMessageQueueAttr_t minDisQueue_attr = {
 };
 
 osMessageQueueId_t rxDisQueue;                                 /* Definitions for rxDisQueue */
-distanceData_t     rxDisQueueBuffer[6 * sizeof(distanceData_t)];
+outDistance_t     rxDisQueueBuffer[6 * sizeof(outDistance_t)];
 osStaticMessageQDef_t rxDisQueueCB;
 const osMessageQueueAttr_t rxDisQueue_attr = {
     .name    = "rxDisQueue",
@@ -170,8 +170,8 @@ void MX_FREERTOS_Init(void)
 
     /* USER CODE BEGIN RTOS_QUEUES */
     /* add queues, ... */
-    minDisQueue = osMessageQueueNew(3, sizeof(distanceData_t), &minDisQueue_attr);
-    rxDisQueue = osMessageQueueNew(3, sizeof(distanceData_t), &rxDisQueue_attr);
+    minDisQueue = osMessageQueueNew(3, sizeof(outDistance_t), &minDisQueue_attr);
+    rxDisQueue = osMessageQueueNew(3, sizeof(outDistance_t), &rxDisQueue_attr);
     /* USER CODE END RTOS_QUEUES */
 
     /* Create the thread(s) */
@@ -192,39 +192,9 @@ void MX_FREERTOS_Init(void)
     /* USER CODE END RTOS_EVENTS */
 }
 
-    uint32_t flag;
-    uint8_t voice_clear_left[] = "clear voice L";
-    uint32_t anchorCanExtId1 = 0xAAA1;
-/* USER CODE BEGIN Header_StartDefaultTask */
-/**
-  * @brief  Function implementing the defaultTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-    /* USER CODE BEGIN StartDefaultTask */
-
-    /* Infinite loop */
-    for(;;)
-    {
-        flag = osThreadFlagsWait(0x0000003U, osFlagsWaitAny, osWaitForever);
-        if(flag & (1 << 0))
-        {
-            canSendMsg(anchorCanExtId1, voice_clear_left, ARRAY_LENGTH(voice_clear_left));
-            printf_use_dma("send sound clear message.\r\n");
-        }
-        else if(flag & (1 << 1))
-        {
-            // CAN接收到消音信息，消音
-            printf_use_dma("task excute clear message.\r\n");
-            HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
-            HAL_UART_DeInit(&huart4);
-        }
-    }
-    /* USER CODE END StartDefaultTask */
-}
+uint32_t flag;
+uint8_t voice_clear_left[] = "clear voice L";
+uint32_t anchorCanExtId1 = 0xAAA1;
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
@@ -243,31 +213,40 @@ int32_t anchorSelfDis  = 2000000;
 int32_t anchorRxDis    = 2000000;
 int32_t anchorFinalDis = 2000000;
 /**
-  * @brief  
+  * @brief  距离输出处理，此任务需要跟堆更新任务进行同步
   * @param  none 
   * @retval none
   */
 void task1_anchorDisHandling(void *argument) 
 {
-    distanceData_t selfDisMsg;              // 用于消息队列发送
-    distanceData_t rxDisMsg;                // 用于消息队列接收
     osStatus status;
+    bool status1;
     // uint32_t time = portTICK_RATE_MS(100);
-    
+
     for(;;)
     {
-        anchorSelfDis = findMin(sort_distance, MAX_TAG_LIST_SIZE);              // 获取最小距离
+        distance_type* distance =  get_the_local_structure_of_dis();
+        status1 = heap_peek_root(&distance->dis_min_heap, &distance->min_dis, &distance->dis_idx);     // 堆更新完毕后，采集一次堆顶，也就是最小值
+
+        if (status1 == true)
+        {
+            anchorSelfDis = distance->min_dis;      // 获取最小距离
+        }
+        else                                        // 堆为空的时候，说明没有有效距离，将该距离设置为无效值
+        {
+            anchorSelfDis = 2000000;
+        }
         
         /* 存储最小距离，通过队列发送出去 */ 
-        selfDisMsg.dis_class = ANCHOR_SELF_DIS;
-        selfDisMsg.dis_value = anchorSelfDis;
-        status = osMessageQueuePut(minDisQueue, &selfDisMsg, 0, 100);
+        distance->disMsg[0].dis_class = ANCHOR_SELF_DIS;
+        distance->disMsg[0].dis_value = anchorSelfDis;
+        status = osMessageQueuePut(minDisQueue, &distance->disMsg[0], 0, 100);
         
         /* 从CAN接收中断中获取对侧基站最小距离 */
-        status = osMessageQueueGet(rxDisQueue, &rxDisMsg, 0, 100);
-        if((status == osOK) && (rxDisMsg.dis_class == OTHER_ANCHOR_DIS))
+        status = osMessageQueueGet(rxDisQueue, &distance->disMsg[1], 0, 100);
+        if((status == osOK) && (distance->disMsg[1].dis_class == OTHER_ANCHOR_DIS))
         {
-            anchorRxDis = rxDisMsg.dis_value;
+            anchorRxDis = distance->disMsg[1].dis_value; // 获取接收的距离
         }
         
         if(anchorSelfDis > anchorRxDis)
@@ -286,7 +265,7 @@ void task1_anchorDisHandling(void *argument)
         voiceOutputDis = anchorFinalDis;
 
         printf_use_dma("SelfDis %.2f, RxDis %.2f, FinalDis %.2f \n", (float)(anchorSelfDis) / 1000, (float)(anchorRxDis) / 1000, (float)(anchorFinalDis) / 1000);
-        osDelay(300);       /* 定时处理距离数据 */
+        osDelay(400);       /* 定时处理距离数据 */
     }
 }
 
@@ -298,8 +277,6 @@ void task1_anchorDisHandling(void *argument)
 void task2_canRx(void *argument)
 {
     uint32_t tick;
-    distanceData_t disMsg;
-    osStatus status;
     
     tick = osKernelGetTickCount();
     for(;;)
@@ -322,7 +299,7 @@ void task2_canRx(void *argument)
 
 void task3_canSend(void *argument)
 {   
-    distanceData_t sendDis;
+    outDistance_t sendDis;
     osStatus_t status;
     for(;;)
     {
@@ -335,6 +312,7 @@ void task3_canSend(void *argument)
     }
 }
 
+// 定时器任务，可无线扩展
 void task4_timerYield(void *argument)
 {
     for(;;)
@@ -400,7 +378,7 @@ void switch_key_right_handler(void * buttonPause)
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     static int32_t anchorReceiveDis = 2000000;  /* 用于储存基站接收到的距离 */
-    distanceData_t rxMsg;
+    outDistance_t rxMsg;
 
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)      /* Get RX message */
     {
@@ -434,12 +412,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    if (htim->Instance == TIM2) 
-    {
-        // clear_sortDistance();
-        // clearReceiveDis();
-    }
-    else if (htim->Instance == TIM3)
+    if (htim->Instance == TIM3)
     {
         button_ticks();
     }

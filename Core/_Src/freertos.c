@@ -120,24 +120,25 @@ const osThreadAttr_t task4_attr = {
 /* USER CODE END Variables */
 
 /* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-    .name = "defaultTask",
+osThreadId_t task5_uwbInttruptTrigger_Handle;
+const osThreadAttr_t task5_uwbInttruptTrigger_attr = {
+    .name = "uwb_interruptTriggerTask",
     .stack_size = 128 * 4,
     .priority = (osPriority_t) osPriorityRealtime7,
 };
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-void StartDefaultTask(void *argument);
+
 void task0_uwb(void *argument);
 void task1_anchorDisHandling(void *argument);
 void task2_canRx(void *argument);
 void task3_canSend(void *argument);
 void task4_timerYield(void *argument);
+void task5_uwbInterruptTrigger(void *argument);
 
-void split32to8(uint32_t value, uint8_t *bytes);
-uint32_t combine8to32(const uint8_t *bytes);
+static void split32to8(uint32_t value, uint8_t *bytes);
+static uint32_t combine8to32(const uint8_t *bytes);
 
 void clearReceiveDis(void);
 
@@ -152,31 +153,12 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) 
 {
-    /* USER CODE BEGIN Init */
-    
-    /* USER CODE END Init */
-
-    /* USER CODE BEGIN RTOS_MUTEX */
-    /* add mutexes, ... */
-    /* USER CODE END RTOS_MUTEX */
-
-    /* USER CODE BEGIN RTOS_SEMAPHORES */
-    /* add semaphores, ... */
-    /* USER CODE END RTOS_SEMAPHORES */
-
-    /* USER CODE BEGIN RTOS_TIMERS */
-    /* start timers, add new ones, ... */
-    /* USER CODE END RTOS_TIMERS */
-
     /* USER CODE BEGIN RTOS_QUEUES */
     /* add queues, ... */
     minDisQueue = osMessageQueueNew(3, sizeof(outDistance_t), &minDisQueue_attr);
-    rxDisQueue = osMessageQueueNew(3, sizeof(outDistance_t), &rxDisQueue_attr);
+    rxDisQueue  = osMessageQueueNew(3, sizeof(outDistance_t), &rxDisQueue_attr);
     /* USER CODE END RTOS_QUEUES */
 
-    /* Create the thread(s) */
-    /* creation of defaultTask */
-    // defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
     task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
@@ -184,12 +166,9 @@ void MX_FREERTOS_Init(void)
     task2_canRx_Handle             = osThreadNew(task2_canRx, NULL, &task2_canRx_attr);
     task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
     task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
-    if(task0_uwb_Handle == NULL) { Error_Handler(); }
-    /* USER CODE END RTOS_THREADS */
+    task5_uwbInttruptTrigger_Handle = osThreadNew(task5_uwbInterruptTrigger, NULL\, &task5_uwbInttruptTrigger_attr);
 
-    /* USER CODE BEGIN RTOS_EVENTS */
-    /* add events, ... */
-    /* USER CODE END RTOS_EVENTS */
+    /* USER CODE END RTOS_THREADS */
 }
 
 uint32_t flag;
@@ -221,8 +200,7 @@ void task1_anchorDisHandling(void *argument)
 {
     osStatus status;
     bool status1;
-    // uint32_t time = portTICK_RATE_MS(100);
-
+    
     for(;;)
     {
         distance_type* distance =  get_the_local_structure_of_dis();
@@ -321,11 +299,11 @@ void task4_timerYield(void *argument)
     }
 }
 
-void task5_voiceManage(void *argument)
+void task5_uwbInterruptTrigger(void *argument)
 {
     for(;;)
     {
-        
+        osDelay(2000);
     }
 }
 
@@ -354,16 +332,12 @@ void pause_key_handler2(void * buttonPause)
 
 void switch_key_left_handler(void * buttonPause) 
 {
-    // 旋钮切换，发送任务通知
-    //    osThreadFlagsSet(defaultTaskHandle, 0x01U);         // 标志位第0位置1，使用该方法同步任务，会出现任务初始能够触发，运行一段时间后无法触发的现象，后续排查
-//    printf_use_dma("switch_key_left_handler\r\n");
     canSendMsg(anchorCanExtId1, voice_clear_left, ARRAY_LENGTH(voice_clear_left));
     printf_use_dma("send sound clear message.\r\n");
 }
 
 void switch_key_right_handler(void * buttonPause)
 {
-    osThreadFlagsSet(defaultTaskHandle, 0x01U);         // 标志位第0位置1
     printf_use_dma("switch_key_right_handler\r\n");
 }
 
@@ -393,8 +367,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
         } 
         else if ((RxHeader.ExtId == 0xAAA1) && (RxHeader.IDE == CAN_ID_EXT))
         {
-//            osThreadFlagsSet(defaultTaskHandle, 0x02U);         // CAN接收到消音消息，标志位第1位置1
-            printf_use_dma("receive sound clear message.\n");
+            // printf_use_dma("receive sound clear message.\n");
             HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
             HAL_UART_DeInit(&huart4);
         }

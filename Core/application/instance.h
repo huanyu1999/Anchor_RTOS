@@ -24,16 +24,14 @@
 #include "com_MultiTimer.h"
 #include "com_heap.h"
 
-/***********************************定义板卡角色，只能定义一个*************************************/
-#define LD150
 /***********************************************************************************************/
-// #define ANCRANGE                 //基站间测距，用于基站自标定
+// #define ANCRANGE                         //基站间测距，用于基站自标定
 /***********************************************************************************************/
 
 
 #define SOFTWARE_VER                   "V1"
 
-#define MAX_AHCHOR_NUMBER               3    //系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
+#define MAX_AHCHOR_NUMBER               3       //系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
 #define MAX_TAG_NUMBER                  40     // 设置最大标签个数
 
 #define ANCHOR_ID_0                     0x0
@@ -49,16 +47,9 @@
  * 计算距离结果比实际距离小，需要增大距离，则减小这个数
  * 计算距离结果比实际距离大，需要减小距离，则增大这个数
  */                                                                                                               
-#if defined(ULM1)
-#define ANT_DLY                         16460
-#define TX_POWER                        0x1f1f1f1f
-#elif defined (LD150)
 #define ANT_DLY                         16485
 #define TX_POWER                        0x1f1f1f1f
-#elif defined (LD_PA)
-#define ANT_DLY                         16500
-#define TX_POWER                        0X9c9c9c9c
-#endif
+
 
 #define MAX_TAG_LIST_SIZE       (MAX_TAG_NUMBER)  
 
@@ -154,7 +145,6 @@
 #define FINAL_MSG_RESP8_RX_TS_IDX       56
 #define SYNC_MSG_TIME_IDX               10
 
-
 /*  function code */
 #define FUNC_CODE_POLL                  0x21
 #define FUNC_CODE_RESP                  0x10
@@ -162,16 +152,6 @@
 #define FUNC_CODE_BLINK                 0x36
 #define FUNC_CODE_INIT                  0x38
 #define FUNC_CODE_SYNC                  0x42
-
-/* 拨码开关键值 */
-#define SWS1_IMU_MODE                   0x80        //IMU标签 on=输出IMU数据， off=输出正常mc数据
-#define SWS1_SHF_MODE                   0x40        //默认off=10标签，100ms更新一次，on=1标签，10ms更新一次，可修改宏定义MAX_TAG_NUMBER_SW2_OFF 和 MAX_TAG_NUMBER_SW2_ON
-#define SWS1_HPR_MODE                   0x20        //外部功耗增加开关
-#define SWS1_ROLE_MODE                  0x10     //工作模式0=tag 1=anchor
-#define SWS1_A1A_MODE                   0x08     //anchor/tag address A1
-#define SWS1_A2A_MODE                   0x04     //anchor/tag address A2
-#define SWS1_A3A_MODE                   0x02     //anchor/tag address A3
-#define SWS1_KAM_MODE                   0x01     //卡尔曼滤波开关
 
 /* uwb 射频配置枚举 */
 typedef enum {
@@ -182,7 +162,6 @@ typedef enum {
     CONFIG_BR_850K_2,
     CONFIG_BR_NUM
 } rf_config_e;
-
 
 /* 状态机标志位 */
 typedef enum {
@@ -204,7 +183,6 @@ typedef enum {
     STA_SEND_SYNC
 } instStatus;
 
-
 /* TWR测距状态 */
 typedef enum {
     RANGE_NULL, 
@@ -219,7 +197,7 @@ typedef enum
     ANCHOR
 } instanceModes;
 
-
+/******************************************************Distance Manage************************************************************/
 #define ANCHOR_SELF_DIS  0
 #define OTHER_ANCHOR_DIS 1
 #define FINAL_DIS        2
@@ -238,12 +216,16 @@ typedef struct {
 
 typedef struct {
     tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];        // 标签排序的数组
-    outDistance_t disMsg[3];                                // 输出距离时使用的数组
+    outDistance_t disMsg[MIN_DIS_QUEUE_LEN];                                // 输出距离时使用的数组
     int32_t min_dis;                                        // 最小的距离值
     int newRange;
     uint8_t dis_idx;                                        // 最小距离值对应的索引，也就是对应的标签ID
     min_heap dis_min_heap;                                 // 用于查找最小值距离的最小堆                       
 } distance_type;
+
+/******************************************************Uwb Event************************************************************/
+
+
 
 extern uint8_t instance_mode;                           //设备运行角色
 extern uint8_t dev_id;                                  //设备ID
@@ -281,7 +263,6 @@ extern uint8_t alarm;
 extern uint8_t battery;
 extern uint8_t USE_IMU;
 extern int user_data[10];
-extern osMessageQueueId_t minDisQueue;
 
 #if defined(ANCRANGE)
 extern uint8_t temp_dev_id;

@@ -37,6 +37,7 @@ int sfCounter = 0;
 void anchor_app(void)
 {
     distance_type* distance =  get_the_local_structure_of_dis();
+
     switch (state)
     {
         case STA_INIT_POLL_SYNC: //初始化接收机，接收poll消息
@@ -60,15 +61,13 @@ void anchor_app(void)
         {
             if(rx_status == RX_OK)                                 //接收到数据
             {
-                rx_status = RX_WAIT;
-                {
-                    state = STA_RECV_POLL_SYNC;
-                }
+                state = STA_RECV_POLL_SYNC;
             }
             else if((rx_status == RX_TIMEOUT) || (rx_status == RX_ERROR))  //接收数据错误，重新开启接收
             {
                 state = STA_INIT_POLL_SYNC;
             }
+
 #if defined (ANCRANGE) //设置基站间测距模式开启 1=开始 2=运行中 0=停止
             static uint32_t next_sync_time = 0;                     //基站A0下次广播并启动测距的时间
 
@@ -156,6 +155,7 @@ void anchor_app(void)
                 
                 sr = MAX_AHCHOR_NUMBER;
                 rr = 0x01 << anc_id;
+                rx_status = RX_WAIT;
                 state = STA_SORR_RESP;
                 // led_on(RUN_LED1);
             }
@@ -366,9 +366,7 @@ void anchor_app(void)
             if(rx_status == RX_OK)
             {   
                 rx_status = RX_WAIT;
-                {
-                    state = STA_RECV_FINAL;
-                }
+                state = STA_RECV_FINAL;
             }
             else if((rx_status == RX_TIMEOUT) || (rx_status == RX_ERROR))
             {

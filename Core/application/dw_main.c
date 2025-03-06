@@ -211,14 +211,12 @@ void dw_main(void)
     print_config();                                     // 打印系统参数信息
     while(1)                                            // 测距功能实现，按角色执行基站状态机或标签状态机
     {
-        distance_type* distance = get_the_local_structure_of_dis();
         anchor_app();
-        
+
         if(range_status == RANGE_TWR_OK)            // TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
         {        
             range_status = RANGE_NULL;              // 清空标志位
             led_toggle(uwb_ok_led);                 // PCB闪烁LED，说明标签同基站本次测距成功
-            // HAL_IWDG_Refresh(&hiwdg);
         }
         else if(range_status == RANGE_ERROR) 
         {
@@ -352,7 +350,7 @@ static void print_config(void)
     len = sprintf((char*)&UART_TX_DATA[0], "* baud_rate = %s\r\n* channel = CH%d\r\n", (inst_dataRate == DWT_BR_110K)? "110K" : "6.8M", inst_ch);
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
-    len = sprintf((char*)&UART_TX_DATA[0], "* data_rate = %dHz\r\n* update_time = %dms\r\n* kalmanfilter = %d\r\n", 1000 / (inst_slot_number * inst_one_slot_time), inst_slot_number * inst_one_slot_time, (switch8 & SWS1_KAM_MODE)? 1:0);
+    len = sprintf((char*)&UART_TX_DATA[0], "* data_rate = %dHz\r\n* update_time = %dms\r\n*", 1000 / (inst_slot_number * inst_one_slot_time), inst_slot_number * inst_one_slot_time);
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* ant_dly  = %d\r\n* tx_power = %08lx\r\n", ant_dly, tx_power);

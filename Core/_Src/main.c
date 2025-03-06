@@ -107,10 +107,10 @@ int main(void)
     /* USER CODE BEGIN 2 */
     multiTimer_init();
     uwb_init();                      // dw1000模组初始化
-    pause_key_init();                   // 
+    pause_key_init();                
     switch_key_init();     
 
-    // User_VoiceInit(30);                 // 
+    // User_VoiceInit(30);               
     /* USER CODE END 2 */
     
     /* Init scheduler */

@@ -2193,7 +2193,7 @@ uint8 dwt_checkirq(void)
 void dwt_isr(void)
 {
     uint32 status = pdw1000local->cbData.status = dwt_read32bitreg(SYS_STATUS_ID); // Read status register low 32bits
-
+        
     // Handle RX good frame event
     if(status & SYS_STATUS_RXFCG)
     {

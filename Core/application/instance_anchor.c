@@ -2,6 +2,12 @@
 
 extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
 
+/* 保存当前ID标签的测距值，下次发送resp时发给标签 */
+typedef struct {
+    uint8_t range_nb;
+    int32_t distance;
+} prev_range_t;
+
 /* RESP数据帧格式 */
 static uint8_t tx_resp_msg[RESP_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0x00, 0x00, 0x00, 0x80, FUNC_CODE_RESP, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 #if defined (ANCRANGE)
@@ -19,24 +25,19 @@ static uint64_t final_rx_ts;
 static volatile uint8_t rx_status = RX_WAIT;
 static volatile uint8_t tx_status = TX_WAIT;
 
-/* 保存当前ID标签的测距值，下次发送resp时发给标签 */
-typedef struct {
-    uint8_t range_nb;
-    int32_t distance;
-} prev_range_t;
-
 static prev_range_t prev_range[MAX_TAG_LIST_SIZE];
 static uint8_t resp_valid = 0x00;                    //基站数据有效标志 
 static uint8_t sr, rr;                               //用于控制当前基站处于resp时是发送还是接收
+static dwt_rxdiag_t rx_diag;                         // 計算接收功率
 
-/* 計算接收功率 */
-static dwt_rxdiag_t rx_diag;
-
-int sfCounter = 0;
-
+/**
+  * @brief  uwb 基站状态机处理
+  * @param  none 
+  * @retval none
+  */
 void anchor_app(void)
 {
-    distance_type* distance =  get_the_local_structure_of_dis();
+    dwDistance_t* distance =  get_the_local_structure_of_dis();
 
     switch (state)
     {
@@ -374,11 +375,6 @@ void anchor_app(void)
                 state = STA_INIT_POLL_SYNC;
                 range_status = RANGE_ERROR; 
             }
-            sfCounter++;
-            if(sfCounter > (MAX_TAG_LIST_SIZE + 2))
-            {
-                sfCounter = 0;
-            }
             break;
 
         case STA_RECV_FINAL:  // 接收到final消息，数据处理
@@ -467,6 +463,49 @@ void anchor_app(void)
             break;
     }
 }
+
+/*******************************************event********************************************/
+
+
+
+
+static void twrAnchor_Init(dwDevice_t* dev)
+{
+
+}
+
+static uint32_t twrAnchor_onEvent(dwDevice_t *dev, uwbEvent_t event)
+{
+    switch (event)
+    {
+        case eventPacketReceived:
+        
+            break;
+
+        case eventPacketSent:
+
+            break;
+
+        case eventReceiveFailed:
+
+            break;
+
+        case eventReceiveTimeout:
+
+            break;    
+        
+        default:
+            configASSERT(false);
+            break;
+    }
+
+    return portMAX_DELAY;
+}
+
+uwbAlgorithm_t uwbTwr_AnchorAlgorithm = {
+    .init = twrAnchor_Init,
+    .onEvent = twrAnchor_onEvent
+};
 
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn anc_rx_ok_cb()

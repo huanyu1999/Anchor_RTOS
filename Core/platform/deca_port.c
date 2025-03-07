@@ -153,45 +153,6 @@ void setup_DW1000RSTnIRQ(int enable)
     }
 }
 
-/*
-void pa_pwr_on(void)
-{
-    HAL_GPIO_WritePin(PA_PWR_EN_GPIO_Port, PA_PWR_EN_Pin, GPIO_PIN_SET);
-}
-
-void pa_pwr_off(void)
-{
-    HAL_GPIO_WritePin(PA_PWR_EN_GPIO_Port, PA_PWR_EN_Pin, GPIO_PIN_RESET);
-}
-
-void motor_on(void)
-{
-    HAL_GPIO_WritePin(MOTOR_EN_GPIO_Port, MOTOR_EN_Pin, GPIO_PIN_SET);
-}
-
-void motor_off(void)
-{
-    HAL_GPIO_WritePin(MOTOR_EN_GPIO_Port, MOTOR_EN_Pin, GPIO_PIN_RESET);
-}
-*/
-
-/*
-void expr_on(void)
-{
-	//HAL_GPIO_TogglePin(EXPR_GPIO_Port, EXPR_Pin);
-	HAL_GPIO_WritePin(EXPR_GPIO_Port, EXPR_Pin, GPIO_PIN_SET);
-}
- */
-
-/*
-void expr_off(void)
-{
-	//HAL_GPIO_TogglePin(EXPR_GPIO_Port, EXPR_Pin);
-	HAL_GPIO_WritePin(EXPR_GPIO_Port, EXPR_Pin, GPIO_PIN_RESET);
-}
- */
-
-
 /* @fn      port_wakeup_IC
  * @brief   "slow" waking up of DW1000 using DW_CS only
  **/
@@ -236,7 +197,10 @@ void port_wakeup_IC_fast(void)
     usleep(35);
 }
 
-
+void port_set_signalReset(void)
+{
+    signalResetDone = 1;
+}
 
 /* @fn      port_set_dw1000_slowrate
  * @brief   set 2.25MHz
@@ -256,24 +220,6 @@ void port_set_dw1000_fastrate(void)
 {
     hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
     HAL_SPI_Init(&hspi1);
-}
-
-
-
-/* @fn		HAL_GPIO_EXTI_Callback
- * @brief	IRQ HAL call-back for all EXTI configured lines
- * 			i.e. DW_RESET_Pin and DW_IRQn_Pin
- * */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-    if (GPIO_Pin == Dw1000_RSTn_Pin)
-    {
-        signalResetDone = 1;
-    }
-    else if (GPIO_Pin == Dw1000_IRQ_Pin)
-    {
-        process_deca_irq();
-    }
 }
 
 /* @fn		process_deca_irq
@@ -327,10 +273,3 @@ __INLINE uint32_t port_CheckEXT_IRQ(void)
 {
     return HAL_GPIO_ReadPin(DECAIRQ_GPIO, DECAIRQ);
 }
-
-
-
-
-
-
- 

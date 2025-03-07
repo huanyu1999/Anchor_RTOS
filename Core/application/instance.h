@@ -196,6 +196,23 @@ typedef enum
     TAG, 
     ANCHOR
 } instanceModes;
+/******************************************************Dw1000 Device************************************************************/
+typedef void (*dwHandler_t)(struct dwDevice_s *dev);
+
+typedef struct dwDevice_s
+{
+    /* data */
+    void* user_data;
+
+    // callback handles
+    dwHandler_t handler_sent;
+    dwHandler_t handler_error;
+    dwHandler_t handler_received;
+    dwHandler_t handler_receiveTimeout;
+    dwHandler_t handler_receiveError;
+    
+} dwDevice_t;
+
 
 /******************************************************Distance Manage************************************************************/
 #define ANCHOR_SELF_DIS  0
@@ -216,16 +233,27 @@ typedef struct {
 
 typedef struct {
     tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];        // 标签排序的数组
-    outDistance_t disMsg[MIN_DIS_QUEUE_LEN];                                // 输出距离时使用的数组
+    outDistance_t disMsg[MIN_DIS_QUEUE_LEN];                // 输出距离时使用的数组
     int32_t min_dis;                                        // 最小的距离值
     int newRange;
     uint8_t dis_idx;                                        // 最小距离值对应的索引，也就是对应的标签ID
     min_heap dis_min_heap;                                 // 用于查找最小值距离的最小堆                       
-} distance_type;
+} dwDistance_t;
 
 /******************************************************Uwb Event************************************************************/
+typedef enum uwbEvent_e {
+    eventTimeout,
+    eventPacketReceived,
+    eventPacketSent,
+    eventReceiveTimeout,
+    eventReceiveFailed,
+} uwbEvent_t;
 
-
+// Callback for one uwb algorithm
+typedef struct uwbAlgorithm_s {
+    void (*init)(dwDevice_t *dev);
+    uint32_t (*onEvent)(dwDevice_t *dev, uwbEvent_t event);
+} uwbAlgorithm_t;
 
 extern uint8_t instance_mode;                           //设备运行角色
 extern uint8_t dev_id;                                  //设备ID
@@ -274,10 +302,9 @@ extern uint8_t target_ancid;
 void uwb_init(void);
 void anchor_app(void);
 void tag_app(void);
-
 double calculate_RSSI(dwt_rxdiag_t* rx_diag);
 void tag_distance_handler(void);
-distance_type* get_the_local_structure_of_dis(void);
+dwDistance_t* get_the_local_structure_of_dis(void);
 int get_newrange(void);
 uint8_t get_sign(uint8_t tad_idx);
 void print_config(void);

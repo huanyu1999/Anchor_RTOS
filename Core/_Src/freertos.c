@@ -60,6 +60,14 @@ uint8_t RxData[8];
 uint8_t canSendBuf[8];
 static int32_t voiceOutputDis = 0;
 
+osSemaphoreId_t binSem;
+StaticSemaphore_t binSemCB;
+osSemaphoreAttr_t binSem_attr = {
+    .name = "binSem",
+    .cb_mem = &binSemCB,
+    .cb_size = sizeof(StaticSemaphore_t)
+};
+
 osMessageQueueId_t minDisQueue;                                 /* Definitions for minDisQueue */
 outDistance_t     minDisQueueBuffer[6 * sizeof(outDistance_t)];
 osStaticMessageQDef_t minDisQueueCB;
@@ -140,8 +148,6 @@ void task5_uwbInterruptTrigger(void *argument);
 static void split32to8(uint32_t value, uint8_t *bytes);
 static uint32_t combine8to32(const uint8_t *bytes);
 
-void clearReceiveDis(void);
-
 /* USER CODE END FunctionPrototypes */
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -157,6 +163,7 @@ void MX_FREERTOS_Init(void)
     /* add queues, ... */
     minDisQueue = osMessageQueueNew(3, sizeof(outDistance_t), &minDisQueue_attr);
     rxDisQueue  = osMessageQueueNew(3, sizeof(outDistance_t), &rxDisQueue_attr);
+    binSem = osSemaphoreNew(1, 0, &binSem_attr);
     /* USER CODE END RTOS_QUEUES */
 
     /* USER CODE BEGIN RTOS_THREADS */
@@ -166,7 +173,7 @@ void MX_FREERTOS_Init(void)
     task2_canRx_Handle             = osThreadNew(task2_canRx, NULL, &task2_canRx_attr);
     task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
     task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
-    task5_uwbInttruptTrigger_Handle = osThreadNew(task5_uwbInterruptTrigger, NULL\, &task5_uwbInttruptTrigger_attr);
+    task5_uwbInttruptTrigger_Handle = osThreadNew(task5_uwbInterruptTrigger, NULL, &task5_uwbInttruptTrigger_attr);
 
     /* USER CODE END RTOS_THREADS */
 }
@@ -186,6 +193,13 @@ uint32_t anchorCanExtId1 = 0xAAA1;
 void task0_uwb(void *argument) 
 {
     dw_main();
+
+    // 采用中断触发的方式执行，获取信号量
+    // osStatus_t status = osSemaphoreAcquire(binSem, osWaitForever);
+    // if (status == osOK)
+    // {
+    //     printf_use_dma("task0_uwbtask0_uwbtask0_uwb");
+    // }
 }
 
 int32_t anchorSelfDis  = 2000000;
@@ -201,9 +215,9 @@ void task1_anchorDisHandling(void *argument)
     osStatus status;
     bool status1;
     
-    for(;;)
+    for (;;)
     {
-        distance_type* distance =  get_the_local_structure_of_dis();
+        dwDistance_t* distance =  get_the_local_structure_of_dis();
         status1 = heap_peek_root(&distance->dis_min_heap, &distance->min_dis, &distance->dis_idx);     // 堆更新完毕后，采集一次堆顶，也就是最小值
 
         if (status1 == true)
@@ -222,12 +236,12 @@ void task1_anchorDisHandling(void *argument)
         
         /* 从CAN接收中断中获取对侧基站最小距离 */
         status = osMessageQueueGet(rxDisQueue, &distance->disMsg[1], 0, 100);
-        if((status == osOK) && (distance->disMsg[1].dis_class == OTHER_ANCHOR_DIS))
+        if ((status == osOK) && (distance->disMsg[1].dis_class == OTHER_ANCHOR_DIS))
         {
             anchorRxDis = distance->disMsg[1].dis_value; // 获取接收的距离
         }
         
-        if(anchorSelfDis > anchorRxDis)
+        if (anchorSelfDis > anchorRxDis)
         {
             anchorFinalDis = anchorRxDis;                   /* 最近的标签位于对侧基站*/
             HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_RESET);
@@ -257,9 +271,9 @@ void task2_canRx(void *argument)
     uint32_t tick;
     
     tick = osKernelGetTickCount();
-    for(;;)
+    for (;;)
     {
-        if(voiceOutputDis < 100000)
+        if (voiceOutputDis < 100000)
         {
 
             HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);    // 打开蜂鸣器
@@ -279,21 +293,26 @@ void task3_canSend(void *argument)
 {   
     outDistance_t sendDis;
     osStatus_t status;
-    for(;;)
+    for (;;)
     {
         status = osMessageQueueGet(minDisQueue, &sendDis, 0, portMAX_DELAY);
-        if(status  == osOK)
+        if (status  == osOK)
         {
             split32to8(sendDis.dis_value, canSendBuf);
             canSendMsg(anchorCanExtId, canSendBuf, 8);                                 // CAN 发送基站本测最小距离值
         }
+
+        osStatus_t status = osSemaphoreAcquire(binSem, osWaitForever);
+        if (status == osOK)
+        {
+            printf_use_dma("task0_uwbtask0_uwbtask0_uwb");
+        }
     }
 }
 
-// 定时器任务，可无线扩展
 void task4_timerYield(void *argument)
 {
-    for(;;)
+    for (;;)
     {
         multiTimerYield();
     }
@@ -301,9 +320,12 @@ void task4_timerYield(void *argument)
 
 void task5_uwbInterruptTrigger(void *argument)
 {
-    for(;;)
+    for (;;)
     {
-        osDelay(2000);
+        if (osThreadFlagsWait(0x00000001U, osFlagsWaitAll, osWaitForever))  // 等待定时任务发送的任务通知
+        {
+            tag_distance_handler();
+        }
     }
 }
 
@@ -328,7 +350,6 @@ void pause_key_handler2(void * buttonPause)
     
     MX_UART4_Init();
 }
-
 
 void switch_key_left_handler(void * buttonPause) 
 {
@@ -395,6 +416,24 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
+/* @fn		HAL_GPIO_EXTI_Callback
+ * @brief	IRQ HAL call-back for all EXTI configured lines
+ * 			i.e. DW_RESET_Pin and DW_IRQn_Pin
+ * */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == Dw1000_RSTn_Pin)
+    {
+        port_set_signalReset();
+    }
+    else if (GPIO_Pin == Dw1000_IRQ_Pin)
+    {
+        process_deca_irq();
+        osSemaphoreRelease(binSem);    // 在这里释放信号量
+    }
+}
+
+/*************************************************some static function*************************************************/
 // 将32位整数分解为4个8位整数
 static void split32to8(uint32_t value, uint8_t *bytes) {
     bytes[0] = (value >> 24) & 0xFF; // 高8位
@@ -411,10 +450,4 @@ static uint32_t combine8to32(const uint8_t *bytes) {
            (uint32_t)bytes[3];
 }
 
-void clearReceiveDis(void)
-{
-    anchorSelfDis  = 2000000;
-    anchorRxDis = 2000000;
-    anchorFinalDis = 2000000;
-}
 /* USER CODE END Application */

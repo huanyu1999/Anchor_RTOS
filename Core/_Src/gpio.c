@@ -62,7 +62,7 @@ const static gpio_config_t gpio_config[gpio_num] = {
 };
 
 const static exti_irq_t exti_config[exti_num] = {
-    {.irq_name = Dw1000_IRQ_EXTI_IRQn, .irq_priority = 0}
+    {.irq_name = Dw1000_IRQ_EXTI_IRQn, .irq_priority = 4}
 };
 
 #define KEY_ID_PAUSE  0

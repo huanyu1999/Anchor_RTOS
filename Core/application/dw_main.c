@@ -47,10 +47,12 @@ static int      RX_level_N = 0;     //0x10 RXPACC  接收功率参数
 static float    RX_level_A=0;       //
 uint32_t D17F = 0;
 
-static distance_type distance_data;
+static dwDevice_t dw1000_dev;
+static dwDistance_t distance_data;
 
-min_heap sort_heap = {0};
 MultiTimer sort_timer;
+
+extern osThreadId_t task5_uwbInttruptTrigger_Handle;
 
 /* dw1000 rf 配置  */
 static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
@@ -71,10 +73,27 @@ static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
     }, /* uwb_config5 当前使用的配置，channel 5，baudrate 850K */
 };
 
-/*******************************************************函数声明********************************************************/
-static void distance_init(distance_type* data);
+// Implemented UWB algoritm. The dummy one is at the end of this file.
+static uwbAlgorithm_t dummy_Algorithm;
+static uwbAlgorithm_t *current_Algorithm = &dummy_Algorithm;
+extern uwbAlgorithm_t uwbTwr_AnchorAlgorithm;
+
+struct {
+    uwbAlgorithm_t *algorithm;
+    char *name;
+} availableAlgorithms[] = {
+    {.algorithm = &uwbTwr_AnchorAlgorithm, .name = " TWR ANCHOR "},
+    {NULL, NULL}
+};
+
+/*******************************************************静态函数声明********************************************************/
+static void distance_init(dwDistance_t* data);
 static void sort_timer_callBack(MultiTimer* timer, void* userData);
 static void print_config(void);
+static void txcallback(const dwt_cb_data_t *cb_data);
+static void rxcallback(const dwt_cb_data_t *cb_data);
+static void rxTimeoutCallback(const dwt_cb_data_t *cb_data);
+static void rxfailedcallback(const dwt_cb_data_t *cb_data);
 
 void uwb_init(void)
 {
@@ -82,7 +101,7 @@ void uwb_init(void)
         .PGdly = 0XC2,            /* PG delay */
         .power = TX_POWER         /* TX power */
     };
-    distance_type* distance = get_the_local_structure_of_dis();
+    dwDistance_t* distance = get_the_local_structure_of_dis();
     reset_DW1000();               /* Target specific drive of RSTn line into DW1000 low for a period. */
     port_set_dw1000_slowrate();
     if(DWT_DEVICE_ID != dwt_readdevid())    // 若读取ID失败，先执行唤醒
@@ -152,26 +171,23 @@ void uwb_init(void)
     dwt_setpanid(PAN_ID);                                   //设置PAN ID 组号
     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  //设置帧过滤模式开启
 
-    dwt_setlnapamode(1, 1);//设置外置PA和LNA控制开启
-    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);//设置DW3000控制的收发指示灯开启，低功耗时可注释掉
+    dwt_setlnapamode(1, 1);                                 //设置外置PA和LNA控制开启
+    dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);     //低功耗时可注释掉
     
-    // 配置角色 
-    instance_mode = ANCHOR; //当前角色控制为标签
+    instance_mode = ANCHOR;                                 // 配置当前角色控制为标签
 
-    // 配置设备ID
-    dev_id = read_SwitchValue();
+    dev_id = read_SwitchValue();                            // 配置设备ID
 
     //设置中断标志
     dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO), 1);
 
     if(instance_mode == ANCHOR)
     {
-        //设置基站的中断回调函数
+        //设置基站的中断回调函数, 状态机版本
         dwt_setcallbacks(&anc_tx_conf_cb, &anc_rx_ok_cb, &anc_rx_to_cb, &anc_rx_err_cb);
-    }
-    else 
-    {   //设置标签的中断回调函数
-        // dwt_setcallbacks(&tag_tx_conf_cb, &tag_rx_ok_cb, &tag_rx_to_cb, &tag_rx_err_cb);
+
+        // 设置基站的中断回调函数, 事件驱动版本
+        // dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback);
     }
 
     //按角色初始化设备短地址，设置状态机初始状态
@@ -201,7 +217,9 @@ void uwb_init(void)
     // 因为当前板子引脚分配，dw1000中断脚为PC13，复位引脚为PC14，共用一个中断处理，在setup_DW1000RSTnIRQ中会关闭该中断，因此在这里重新打开。
     HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
-    distance_init(distance);        // 初始化距离结构体
+    current_Algorithm = availableAlgorithms[0].algorithm;
+
+    distance_init(distance);                                        // 初始化距离结构体
 
     multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL);   // 维护一个定时任务，用于堆中更新数据。
 }
@@ -248,7 +266,7 @@ double calculate_RSSI(dwt_rxdiag_t* rx_diag)
 
 void tag_distance_handler(void)
 {
-    distance_type* distance =  get_the_local_structure_of_dis();
+    dwDistance_t* distance =  get_the_local_structure_of_dis();
     int a;
     int rx = 0;
     int cur_size = distance->dis_min_heap.heap_current_size;
@@ -290,14 +308,14 @@ void tag_distance_handler(void)
     }
 }
 
-distance_type* get_the_local_structure_of_dis(void)
+dwDistance_t* get_the_local_structure_of_dis(void)
 {
     return &distance_data;
 }
 
 int get_newrange(void)
 {
-    distance_type* distance = get_the_local_structure_of_dis();
+    dwDistance_t* distance = get_the_local_structure_of_dis();
     int x = distance->newRange;
     distance->newRange = 0x00;
     return x;
@@ -306,14 +324,14 @@ int get_newrange(void)
 // 获取标签的有效位
 uint8_t get_sign(uint8_t tad_idx)
 {
-    distance_type* distance = get_the_local_structure_of_dis();
+    dwDistance_t* distance = get_the_local_structure_of_dis();
 
     uint8_t x = distance->sort_distance1[tad_idx].final_receiveSign;
     distance->sort_distance1[tad_idx].final_receiveSign = 0;
     return x;
 }   
 
-static void distance_init(distance_type* data)
+static void distance_init(dwDistance_t* data)
 {
     data->dis_idx = 0;
     data->disMsg->dis_class = 0; 
@@ -330,7 +348,7 @@ static void distance_init(distance_type* data)
 
 static void sort_timer_callBack(MultiTimer* timer, void* userData)
 {
-    tag_distance_handler();
+    osThreadFlagsSet(task5_uwbInttruptTrigger_Handle, 0x0001U);
     multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL); 
 }
 
@@ -358,4 +376,24 @@ static void print_config(void)
 
     len = sprintf((char*)&UART_TX_DATA[0], "***************************************************\r\n");
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
+}
+
+static uint32_t timeout;
+
+static void txcallback(const dwt_cb_data_t *cb_data)
+{
+    timeout = current_Algorithm->onEvent(&dw1000_dev, eventPacketSent);
+}
+
+static void rxcallback(const dwt_cb_data_t *cb_data)
+{
+    timeout = current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
+}
+
+static void rxTimeoutCallback(const dwt_cb_data_t *cb_data) {
+    timeout = current_Algorithm->onEvent(&dw1000_dev, eventReceiveTimeout);
+}
+
+static void rxfailedcallback(const dwt_cb_data_t *cb_data) {
+    timeout = current_Algorithm->onEvent(&dw1000_dev, eventReceiveFailed);
 }

@@ -1,16 +1,12 @@
 #include "instance.h"
 
-uint8_t switch8 = 0;                                    //拨码开关键值
-uint8_t instance_mode = ANCHOR;                         //设备运行角色
-uint8_t dev_id;                                         //设备ID
+// uint8_t instance_mode = ANCHOR;                         //设备运行角色
 uint8_t group_id;                                       //组ID
 uint8_t anc_id;                                         //如当前角色是基站，则表示当前基站ID
 uint8_t tag_id;                                         //如当前角色是标签，则表示当前标签ID
 uint8_t state = STA_IDLE;                               //状态机状态控制
 int32_t distance_report[8];                             //基站测距值数组，用于打包输出
 int32_t previous_sort_distance[MAX_TAG_LIST_SIZE] = {-1}; // 
-// int32_t sort_distance[MAX_TAG_LIST_SIZE] = {-1};        //用于标签距离排序
-// tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];
 int32_t group_report[8];                                //基站组ID数组，用于打包输出
 uint32_t range_time;                                    //测距产生时间，串口打包发送
 uint8_t frame_seq_nb = 0;                               //每帧数据增加1
@@ -47,8 +43,8 @@ static int      RX_level_N = 0;     //0x10 RXPACC  接收功率参数
 static float    RX_level_A=0;       //
 uint32_t D17F = 0;
 
-static dwDevice_t dw1000_dev;
-static dwDistance_t distance_data;
+static dwDevice_t dw1000_dev;       // 定义dw1000设备，twr使用
+static dwDistance_t distance_data;  // 定义距离管理
 
 MultiTimer sort_timer;
 
@@ -102,6 +98,10 @@ void uwb_init(void)
         .power = TX_POWER         /* TX power */
     };
     dwDistance_t* distance = get_the_local_structure_of_dis();
+    dwDevice_t* dev = get_the_local_structure_of_dev();
+    
+    distance_init(distance);        
+    dw1000Device_init(dev);           
     reset_DW1000();               /* Target specific drive of RSTn line into DW1000 low for a period. */
     port_set_dw1000_slowrate();
     if(DWT_DEVICE_ID != dwt_readdevid())    // 若读取ID失败，先执行唤醒
@@ -174,31 +174,29 @@ void uwb_init(void)
     dwt_setlnapamode(1, 1);                                 //设置外置PA和LNA控制开启
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);     //低功耗时可注释掉
     
-    instance_mode = ANCHOR;                                 // 配置当前角色控制为标签
-
     dev_id = read_SwitchValue();                            // 配置设备ID
 
     //设置中断标志
     dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO), 1);
 
-    if(instance_mode == ANCHOR)
+    if(dev->device_mode == ANCHOR)
     {
         //设置基站的中断回调函数, 状态机版本
-        dwt_setcallbacks(&anc_tx_conf_cb, &anc_rx_ok_cb, &anc_rx_to_cb, &anc_rx_err_cb);
+        // dwt_setcallbacks(&anc_tx_conf_cb, &anc_rx_ok_cb, &anc_rx_to_cb, &anc_rx_err_cb);
 
         // 设置基站的中断回调函数, 事件驱动版本
-        // dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback);
+        dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback);
     }
 
     //按角色初始化设备短地址，设置状态机初始状态
-    if(instance_mode == ANCHOR)
+    if(dev->device_mode == ANCHOR)
     {
         /* 设备短地址为2个字节，为了区分A0和T0短地址，基站的最高位为1
          * 如A1短地址=0x8001，T1短地址=0x0001
          */
-        uint16_t anc_short_add = 0x8000 | dev_id;
+        uint16_t anc_short_add = 0x8000 | dev->device_id;
         dwt_setaddress16(anc_short_add);
-        anc_id = dev_id;
+        anc_id = dev->device_id;
 
         if(anc_id == 0)             // A0的group ID最高bit设置为1，为时序校准基站
         {
@@ -209,8 +207,8 @@ void uwb_init(void)
     }
     else
     {
-        dwt_setaddress16(dev_id);
-        tag_id = dev_id;
+        dwt_setaddress16(dev->device_id);
+        tag_id = dev->device_id;
         dwt_forcetrxoff();
         state = STA_IDLE;
     }
@@ -218,8 +216,6 @@ void uwb_init(void)
     HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
     current_Algorithm = availableAlgorithms[0].algorithm;
-
-    distance_init(distance);                                        // 初始化距离结构体
 
     multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL);   // 维护一个定时任务，用于堆中更新数据。
 }
@@ -249,6 +245,7 @@ void dw_main(void)
     }
 }
 
+/******************************************************Distance Manage************************************************************/
 double calculate_RSSI(dwt_rxdiag_t* rx_diag)
 {
     dwt_readdiagnostics(rx_diag);
@@ -352,6 +349,22 @@ static void sort_timer_callBack(MultiTimer* timer, void* userData)
     multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL); 
 }
 
+/******************************************************Dw1000 Device************************************************************/
+void dw1000Device_init(dwDevice_t* dev)
+{
+    dev->device_mode = ANCHOR;
+    dev->twr_mode  =   LISTENER;
+    dev->device_id = read_SwitchValue();
+    dev->remainingRespToRx = -1;
+    dev->rxResp = 0;
+}
+
+dwDevice_t* get_the_local_structure_of_dev(void)
+{
+    return &dw1000_dev;
+}
+
+/******************************************************Print Config************************************************************/
 static void print_config(void)
 {
     int len;
@@ -378,6 +391,7 @@ static void print_config(void)
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 }
 
+/******************************************************interrupt use callback function************************************************************/
 static uint32_t timeout;
 
 static void txcallback(const dwt_cb_data_t *cb_data)

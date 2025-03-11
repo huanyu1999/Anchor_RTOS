@@ -153,6 +153,9 @@
 #define FUNC_CODE_INIT                  0x38
 #define FUNC_CODE_SYNC                  0x42
 
+#define WAIT4TAGFINAL					2
+#define WAIT4ANCFINAL					1
+
 /* uwb 射频配置枚举 */
 typedef enum {
     CONFIG_BR_110K_1,
@@ -184,18 +187,16 @@ typedef enum {
 } instStatus;
 
 /* TWR测距状态 */
-typedef enum {
-    RANGE_NULL, 
-    RANGE_TWR_OK,
-    RANGE_ERROR
-} twrStatus;
+typedef enum { RANGE_NULL, RANGE_TWR_OK, RANGE_ERROR } twrStatus;
 
 /* 系统运行角色 */
-typedef enum
-{
-    TAG, 
-    ANCHOR
-} instanceModes;
+typedef enum { TAG, ANCHOR, ANCHOR_RNG, NUM_MODES } instanceModes;
+
+// instance sending a poll (starting TWR) is INITIATOR
+// instance which receives a poll (and will be involved in the TWR) is RESPONDER
+// instance which does not receive a poll (default state) will be a LISTENER - will send no responses
+typedef enum { INITIATOR, RESPONDER_A, RESPONDER_B, RESPONDER_T, LISTENER, GREETER, ATWR_MODES } twrModes;
+
 /******************************************************Dw1000 Device************************************************************/
 typedef void (*dwHandler_t)(struct dwDevice_s *dev);
 
@@ -203,7 +204,13 @@ typedef struct dwDevice_s
 {
     /* data */
     void* user_data;
-
+    instanceModes device_mode;
+    twrModes twr_mode;
+    uint8_t device_id;
+    uint8_t rxResp;
+    uint8_t remainingRespToRx;
+    uint8_t wait4final;
+    
     // callback handles
     dwHandler_t handler_sent;
     dwHandler_t handler_error;
@@ -299,29 +306,23 @@ extern uint8_t ancrange_count;
 extern uint8_t target_ancid;
 #endif
 
+/******************************************************dw_main.c************************************************************/
 void uwb_init(void);
-void anchor_app(void);
-void tag_app(void);
+
 double calculate_RSSI(dwt_rxdiag_t* rx_diag);
 void tag_distance_handler(void);
 dwDistance_t* get_the_local_structure_of_dis(void);
 int get_newrange(void);
 uint8_t get_sign(uint8_t tad_idx);
+
+void dw1000Device_init(dwDevice_t* dev);
+dwDevice_t* get_the_local_structure_of_dev(void);
+
 void print_config(void);
 
-void pause_key_handler1(void * buttonPause);
-void pause_key_handler2(void * buttonPause);
-void switch_key_left_handler(void * buttonPause);
-void switch_key_right_handler(void * buttonPause);
+/******************************************************instance_anchor.c************************************************************/
+void anchor_app(void);
+void rxOk_IntHandler(const dwt_cb_data_t *cb_data);
 
-void tag_rx_ok_cb(const dwt_cb_data_t *cb_data);
-void tag_rx_to_cb(const dwt_cb_data_t *cb_data);
-void tag_rx_err_cb(const dwt_cb_data_t *cb_data);
-void tag_tx_conf_cb(const dwt_cb_data_t *cb_data);
-
-void anc_rx_ok_cb(const dwt_cb_data_t *cb_data);
-void anc_rx_to_cb(const dwt_cb_data_t *cb_data);
-void anc_rx_err_cb(const dwt_cb_data_t *cb_data);
-void anc_tx_conf_cb(const dwt_cb_data_t *cb_data);
 
 #endif

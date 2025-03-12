@@ -29,7 +29,7 @@
 /***********************************************************************************************/
 
 
-#define SOFTWARE_VER                   "V1"
+#define SOFTWARE_VER                   "V1.3"
 
 #define MAX_AHCHOR_NUMBER               3       //系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
 #define MAX_TAG_NUMBER                  40     // 设置最大标签个数
@@ -195,9 +195,12 @@ typedef enum { TAG, ANCHOR, ANCHOR_RNG, NUM_MODES } instanceModes;
 // instance sending a poll (starting TWR) is INITIATOR
 // instance which receives a poll (and will be involved in the TWR) is RESPONDER
 // instance which does not receive a poll (default state) will be a LISTENER - will send no responses
+// RESPONDER_B = RESPONDER_Blink
 typedef enum { INITIATOR, RESPONDER_A, RESPONDER_B, RESPONDER_T, LISTENER, GREETER, ATWR_MODES } twrModes;
 
 /******************************************************Dw1000 Device************************************************************/
+struct dwDevice_s;
+
 typedef void (*dwHandler_t)(struct dwDevice_s *dev);
 
 typedef struct dwDevice_s
@@ -208,7 +211,7 @@ typedef struct dwDevice_s
     twrModes twr_mode;
     uint8_t device_id;
     uint8_t rxResp;
-    uint8_t remainingRespToRx;
+    int8_t remainingRespToRx;
     uint8_t wait4final;
     
     // callback handles
@@ -219,7 +222,6 @@ typedef struct dwDevice_s
     dwHandler_t handler_receiveError;
     
 } dwDevice_t;
-
 
 /******************************************************Distance Manage************************************************************/
 #define ANCHOR_SELF_DIS  0
@@ -258,12 +260,12 @@ typedef enum uwbEvent_e {
 
 // Callback for one uwb algorithm
 typedef struct uwbAlgorithm_s {
-    void (*init)(dwDevice_t *dev);
+    int (*init)(dwDevice_t *dev);
     uint32_t (*onEvent)(dwDevice_t *dev, uwbEvent_t event);
 } uwbAlgorithm_t;
 
-extern uint8_t instance_mode;                           //设备运行角色
-extern uint8_t dev_id;                                  //设备ID
+// extern uint8_t instance_mode;                           //设备运行角色
+// extern uint8_t dev_id;                                  //设备ID
 extern uint8_t switch8;
 extern uint8_t anc_id;
 extern uint8_t tag_id;
@@ -308,6 +310,7 @@ extern uint8_t target_ancid;
 
 /******************************************************dw_main.c************************************************************/
 void uwb_init(void);
+void task0_uwb(void *argument);
 
 double calculate_RSSI(dwt_rxdiag_t* rx_diag);
 void tag_distance_handler(void);

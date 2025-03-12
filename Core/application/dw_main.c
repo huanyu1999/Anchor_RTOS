@@ -82,10 +82,12 @@ struct {
     {NULL, NULL}
 };
 
+extern osSemaphoreId_t binSem;
+
 /*******************************************************静态函数声明********************************************************/
 static void distance_init(dwDistance_t* data);
 static void sort_timer_callBack(MultiTimer* timer, void* userData);
-static void print_config(void);
+static void print_dw1000Config(void);
 static void txcallback(const dwt_cb_data_t *cb_data);
 static void rxcallback(const dwt_cb_data_t *cb_data);
 static void rxTimeoutCallback(const dwt_cb_data_t *cb_data);
@@ -97,11 +99,13 @@ void uwb_init(void)
         .PGdly = 0XC2,            /* PG delay */
         .power = TX_POWER         /* TX power */
     };
+
     dwDistance_t* distance = get_the_local_structure_of_dis();
     dwDevice_t* dev = get_the_local_structure_of_dev();
     
     distance_init(distance);        
-    dw1000Device_init(dev);           
+    dw1000Device_init(dev); 
+
     reset_DW1000();               /* Target specific drive of RSTn line into DW1000 low for a period. */
     port_set_dw1000_slowrate();
     if(DWT_DEVICE_ID != dwt_readdevid())    // 若读取ID失败，先执行唤醒
@@ -174,8 +178,6 @@ void uwb_init(void)
     dwt_setlnapamode(1, 1);                                 //设置外置PA和LNA控制开启
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);     //低功耗时可注释掉
     
-    dev_id = read_SwitchValue();                            // 配置设备ID
-
     //设置中断标志
     dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | (DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO), 1);
 
@@ -222,7 +224,6 @@ void uwb_init(void)
 
 void dw_main(void)
 {
-    print_config();                                     // 打印系统参数信息
     while(1)                                            // 测距功能实现，按角色执行基站状态机或标签状态机
     {
         anchor_app();
@@ -240,7 +241,28 @@ void dw_main(void)
                 distance_report[i] = -1; 
                 group_report[i] = -1; 
             }
-            printf_use_dma("RANGE_ERROR, ID = %d, rb = %d, range_time = %d\r\n", dev_id, range_nb, range_time);
+            // printf_use_dma("RANGE_ERROR, ID = %d, rb = %d, range_time = %d\r\n", dev_id, range_nb, range_time);
+            printf_use_dma("RANGE_ERROR, rb = %d, range_time = %d\r\n", range_nb, range_time);
+        }
+    }
+}
+
+/**
+  * @brief 
+  * @param  none 
+  * @retval none
+  */
+void task0_uwb(void *argument) 
+{
+    current_Algorithm->init(&dw1000_dev);
+    print_dw1000Config();
+    for (;;)
+    {
+        osStatus_t status = osSemaphoreAcquire(binSem, osWaitForever);          // 采用中断触发的方式执行，获取信号量
+        if (status == osOK)
+        {
+            // printf_use_dma("task0_uwbtask0_uwbtask0_uwb");
+            process_deca_irq();
         }
     }
 }
@@ -365,14 +387,15 @@ dwDevice_t* get_the_local_structure_of_dev(void)
 }
 
 /******************************************************Print Config************************************************************/
-static void print_config(void)
+static void print_dw1000Config(void)
 {
+    dwDevice_t* dev = get_the_local_structure_of_dev();
     int len;
     uint8_t UART_TX_DATA[512];
-    len = sprintf((char*)&UART_TX_DATA[0], "\r\n***************************************************\r\n");
+    len = sprintf((char*)&UART_TX_DATA[0], "\r\n***********************************************************************\r\n");
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
-    len = sprintf((char*)&UART_TX_DATA[0], "* firmware = %s\r\n* role = %s\r\n* addr = %x\r\n", SOFTWARE_VER, (instance_mode == TAG)?"TAG":"AHCHOR", dev_id);
+    len = sprintf((char*)&UART_TX_DATA[0], "* firmware = %s\r\n* role = %s\r\n* addr = %x\r\n", SOFTWARE_VER, (dev->device_mode == TAG)?"TAG":"AHCHOR", dev->device_id);
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
     len = sprintf((char*)&UART_TX_DATA[0], "* max_anc_num = %d\r\n* max_tag_num = %d\r\n* sync = 0\r\n", MAX_AHCHOR_NUMBER, inst_slot_number);
@@ -387,7 +410,7 @@ static void print_config(void)
     len = sprintf((char*)&UART_TX_DATA[0], "* ant_dly  = %d\r\n* tx_power = %08lx\r\n", ant_dly, tx_power);
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 
-    len = sprintf((char*)&UART_TX_DATA[0], "***************************************************\r\n");
+    len = sprintf((char*)&UART_TX_DATA[0], "\r\n***********************************************************************\r\n");
     HAL_UART_Transmit(&huart1, &UART_TX_DATA[0], len, 1000);
 }
 
@@ -401,6 +424,7 @@ static void txcallback(const dwt_cb_data_t *cb_data)
 
 static void rxcallback(const dwt_cb_data_t *cb_data)
 {
+    rxOk_IntHandler(cb_data);
     timeout = current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
 }
 

@@ -117,19 +117,18 @@ struct Button switch_key_b;
     
 void pause_key_init(void)
 {
-    button_init(&pause_key_b, ReadButtonPin, 0, KEY_ID_PAUSE);
-    button_attach(&pause_key_b, PRESS_DOWN, pause_key_handler1);
-    button_attach(&pause_key_b, LONG_PRESS_START, pause_key_handler2);
-    button_start(&pause_key_b);
+    // button_init(&pause_key_b, ReadButtonPin, 0, KEY_ID_PAUSE);
+    // button_attach(&pause_key_b, PRESS_DOWN, pause_key_handler1);
+    // button_attach(&pause_key_b, LONG_PRESS_START, pause_key_handler2);
+    // button_start(&pause_key_b);
 }
 
 void switch_key_init(void)
 {
-    button_init(&switch_key_b, ReadButtonPin, 0, KEY_ID_SWITCH);
-    button_attach(&switch_key_b, PRESS_DOWN, switch_key_left_handler);
-    button_attach(&switch_key_b, PRESS_UP, switch_key_right_handler);
-    button_start(&switch_key_b);
-
+    // button_init(&switch_key_b, ReadButtonPin, 0, KEY_ID_SWITCH);
+    // button_attach(&switch_key_b, PRESS_DOWN, switch_key_left_handler);
+    // button_attach(&switch_key_b, PRESS_UP, switch_key_right_handler);
+    // button_start(&switch_key_b);
 }
 
 static uint8_t ReadButtonPin(uint8_t buttonID)

@@ -101,28 +101,28 @@ osThreadId_t task1_anchorDisHandling_Handle;                 /* Definitions for 
 const osThreadAttr_t task1_anchorDisHandling_attr = {
     .name = "task1_anchorDisHandling",
     .stack_size = 256 * 4,
-    .priority = (osPriority_t) osPriorityRealtime7,
+    .priority = (osPriority_t) osPriorityRealtime6,
 };
 
 osThreadId_t task2_canRx_Handle;                             /* Definitions for canRxTask_2 */
 const osThreadAttr_t task2_canRx_attr = {
     .name = "task2_canRx",
     .stack_size = 128 * 4,
-    .priority = (osPriority_t) osPriorityRealtime7,
+    .priority = (osPriority_t) osPriorityRealtime5,
 };
 
 osThreadId_t task3_canSend_Handle;
 const osThreadAttr_t task3_canSend_attr = {
     .name = " task3_canSend",
     .stack_size = 128 * 4,
-    .priority = (osPriority_t) osPriorityRealtime7,
+    .priority = (osPriority_t) osPriorityRealtime5,
 };
 
 osThreadId_t task4_Handle;
 const osThreadAttr_t task4_attr = {
     .name = "task4",
     .stack_size = 128 * 4,
-    .priority = (osPriority_t) osPriorityRealtime7,
+    .priority = (osPriority_t) osPriorityRealtime5,
 };
 
 /* USER CODE END Variables */
@@ -137,7 +137,6 @@ const osThreadAttr_t task5_uwbInttruptTrigger_attr = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-
 void task0_uwb(void *argument);
 void task1_anchorDisHandling(void *argument);
 void task2_canRx(void *argument);
@@ -185,22 +184,6 @@ uint32_t anchorCanExtId1 = 0xAAA1;
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 
-/**
-  * @brief 
-  * @param  none 
-  * @retval none
-  */
-void task0_uwb(void *argument) 
-{
-    dw_main();
-
-    // 采用中断触发的方式执行，获取信号量
-    // osStatus_t status = osSemaphoreAcquire(binSem, osWaitForever);
-    // if (status == osOK)
-    // {
-    //     printf_use_dma("task0_uwbtask0_uwbtask0_uwb");
-    // }
-}
 
 int32_t anchorSelfDis  = 2000000;
 int32_t anchorRxDis    = 2000000;
@@ -300,12 +283,6 @@ void task3_canSend(void *argument)
         {
             split32to8(sendDis.dis_value, canSendBuf);
             canSendMsg(anchorCanExtId, canSendBuf, 8);                                 // CAN 发送基站本测最小距离值
-        }
-
-        osStatus_t status = osSemaphoreAcquire(binSem, osWaitForever);
-        if (status == osOK)
-        {
-            printf_use_dma("task0_uwbtask0_uwbtask0_uwb");
         }
     }
 }
@@ -428,7 +405,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
     else if (GPIO_Pin == Dw1000_IRQ_Pin)
     {
-        process_deca_irq();
         osSemaphoreRelease(binSem);    // 在这里释放信号量
     }
 }

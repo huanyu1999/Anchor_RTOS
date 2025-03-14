@@ -265,13 +265,10 @@ typedef struct uwbAlgorithm_s {
     uint32_t (*onEvent)(dwDevice_t *dev, uwbEvent_t event);
 } uwbAlgorithm_t;
 
-// extern uint8_t instance_mode;                           //设备运行角色
-// extern uint8_t dev_id;                                  //设备ID
 extern uint8_t switch8;
 extern uint8_t anc_id;
 extern uint8_t tag_id;
 extern uint8_t group_id;                                //组ID
-extern uint8_t state;
 extern int32_t distance_report[8];
 extern int32_t sort_distance[MAX_TAG_LIST_SIZE];
 extern tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];
@@ -296,10 +293,6 @@ extern uint32_t inst_data_interval;
 extern uint16 ant_dly;
 extern double distance_now_m;  
 extern int32 distance_offset_cm;                        //距离校准，单位cm
-extern uint8_t sos;
-extern uint8_t alarm;
-extern uint8_t battery;
-extern uint8_t USE_IMU;
 extern int user_data[10];
 
 #if defined(ANCRANGE)
@@ -312,17 +305,13 @@ extern uint8_t target_ancid;
 /******************************************************dw_main.c************************************************************/
 void uwb_init(void);
 void task0_uwb(void *argument);
-
 double calculate_RSSI(dwt_rxdiag_t* rx_diag);
 void tag_distance_handler(void);
 dwDistance_t* get_the_local_structure_of_dis(void);
+dwDevice_t* get_the_local_structure_of_dev(void);
 int get_newrange(void);
 uint8_t get_sign(uint8_t tad_idx);
 
-void dw1000Device_init(dwDevice_t* dev);
-dwDevice_t* get_the_local_structure_of_dev(void);
-
-void print_config(void);
 
 /******************************************************instance_anchor.c************************************************************/
 // void anchor_app(void);

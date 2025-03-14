@@ -1,10 +1,8 @@
 #include "instance.h"
 
-// uint8_t instance_mode = ANCHOR;                         //设备运行角色
 uint8_t group_id;                                       //组ID
 uint8_t anc_id;                                         //如当前角色是基站，则表示当前基站ID
-uint8_t tag_id;                                         //如当前角色是标签，则表示当前标签ID
-uint8_t state = STA_IDLE;                               //状态机状态控制
+uint8_t tag_id;                                         //如当前角色是标签，则表示当前标签ID                           //状态机状态控制
 int32_t distance_report[8];                             //基站测距值数组，用于打包输出
 int32_t previous_sort_distance[MAX_TAG_LIST_SIZE] = {-1}; // 
 int32_t group_report[8];                                //基站组ID数组，用于打包输出
@@ -27,13 +25,8 @@ uint64_t inst_poll2final_time;                          //单TWR周期poll起始
 uint32_t inst_data_interval;                            //相邻两条数据的间隔，如poll和第一个resp的间隔，resp1和resp2的间隔，根据通信速率不同而不同，单位us
 uint16 ant_dly = ANT_DLY;                               //天线延时
 uint32 tx_power;                                        //发射增益代码
-uint8_t UART_RX_BUF[200];                               //串口接收BUF
-uint32_t uart_rx_len;                                   //串口接收数据长度
-// vec3d anchorArray[8];                                //基站坐标，用于标签解算自身位置
 double distance_now_m;                                  //基站计算本周期测距结果，单位米
 int32 distance_offset_cm;                               //距离校准，单位cm
-uint8_t sos = 0;
-uint8_t alarm = 0;
 int user_data[10];
 
 /* 計算接收功率 */
@@ -87,6 +80,7 @@ extern osSemaphoreId_t binSem;
 /*******************************************************静态函数声明********************************************************/
 static void distance_init(dwDistance_t* data);
 static void sort_timer_callBack(MultiTimer* timer, void* userData);
+static void dw1000Device_init(dwDevice_t* dev);
 static void print_dw1000Config(void);
 static void txcallback(const dwt_cb_data_t *cb_data);
 static void rxcallback(const dwt_cb_data_t *cb_data);
@@ -205,14 +199,12 @@ void uwb_init(void)
             group_id = group_id | 0x80;
         }
         dwt_forcetrxoff();
-        state = STA_INIT_POLL_SYNC;
     }
     else
     {
         dwt_setaddress16(dev->device_id);
         tag_id = dev->device_id;
         dwt_forcetrxoff();
-        state = STA_IDLE;
     }
     // 因为当前板子引脚分配，dw1000中断脚为PC13，复位引脚为PC14，共用一个中断处理，在setup_DW1000RSTnIRQ中会关闭该中断，因此在这里重新打开。
     HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
@@ -220,31 +212,6 @@ void uwb_init(void)
     current_Algorithm = availableAlgorithms[0].algorithm;
 
     multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL);   // 维护一个定时任务，用于堆中更新数据。
-}
-
-void dw_main(void)
-{
-    while(1)                                            // 测距功能实现，按角色执行基站状态机或标签状态机
-    {
-//        anchor_app();
-
-//        if(range_status == RANGE_TWR_OK)            // TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
-//        {        
-//            range_status = RANGE_NULL;              // 清空标志位
-//            led_toggle(uwb_ok_led);                 // PCB闪烁LED，说明标签同基站本次测距成功
-//        }
-//        else if(range_status == RANGE_ERROR) 
-//        {
-//            range_status = RANGE_NULL;              // 清空标志位
-//            for(uint8_t i = 0; i < 8; i++)          // 清空distance_report数组，设置无效值
-//            {
-//                distance_report[i] = -1; 
-//                group_report[i] = -1; 
-//            }
-//            // printf_use_dma("RANGE_ERROR, ID = %d, rb = %d, range_time = %d\r\n", dev_id, range_nb, range_time);
-//            printf_use_dma("RANGE_ERROR, rb = %d, range_time = %d\r\n", range_nb, range_time);
-//        }
-    }
 }
 
 /**
@@ -267,7 +234,6 @@ void task0_uwb(void *argument)
     }
 }
 
-/******************************************************Distance Manage************************************************************/
 double calculate_RSSI(dwt_rxdiag_t* rx_diag)
 {
     dwt_readdiagnostics(rx_diag);
@@ -283,6 +249,7 @@ double calculate_RSSI(dwt_rxdiag_t* rx_diag)
     return RX_level;
 }
 
+/******************************************************Distance Manage************************************************************/
 void tag_distance_handler(void)
 {
     dwDistance_t* distance =  get_the_local_structure_of_dis();
@@ -332,6 +299,11 @@ dwDistance_t* get_the_local_structure_of_dis(void)
     return &distance_data;
 }
 
+dwDevice_t* get_the_local_structure_of_dev(void)
+{
+    return &dw1000_dev;
+}
+
 int get_newrange(void)
 {
     dwDistance_t* distance = get_the_local_structure_of_dis();
@@ -348,7 +320,7 @@ uint8_t get_sign(uint8_t tad_idx)
     uint8_t x = distance->sort_distance1[tad_idx].final_receiveSign;
     distance->sort_distance1[tad_idx].final_receiveSign = 0;
     return x;
-}   
+} 
 
 static void distance_init(dwDistance_t* data)
 {
@@ -372,7 +344,7 @@ static void sort_timer_callBack(MultiTimer* timer, void* userData)
 }
 
 /******************************************************Dw1000 Device************************************************************/
-void dw1000Device_init(dwDevice_t* dev)
+static void dw1000Device_init(dwDevice_t* dev)
 {
     dev->device_mode = ANCHOR;
     dev->twr_mode  =   LISTENER;
@@ -382,10 +354,6 @@ void dw1000Device_init(dwDevice_t* dev)
     dev->rxEnIndex = 0;
 }
 
-dwDevice_t* get_the_local_structure_of_dev(void)
-{
-    return &dw1000_dev;
-}
 
 /******************************************************Print Config************************************************************/
 static void print_dw1000Config(void)
@@ -425,7 +393,6 @@ static void txcallback(const dwt_cb_data_t *cb_data)
 
 static void rxcallback(const dwt_cb_data_t *cb_data)
 {
-    // rxOk_IntHandler(cb_data);
     timeout = current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
 }
 

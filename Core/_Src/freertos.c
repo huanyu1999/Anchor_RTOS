@@ -125,15 +125,14 @@ const osThreadAttr_t task4_attr = {
     .priority = (osPriority_t) osPriorityRealtime5,
 };
 
-/* USER CODE END Variables */
-
-/* Definitions for defaultTask */
 osThreadId_t task5_uwbInttruptTrigger_Handle;
 const osThreadAttr_t task5_uwbInttruptTrigger_attr = {
     .name = "uwb_interruptTriggerTask",
     .stack_size = 128 * 4,
-    .priority = (osPriority_t) osPriorityRealtime7,
+    .priority = (osPriority_t) osPriorityRealtime6,
 };
+
+/* USER CODE END Variables */
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */

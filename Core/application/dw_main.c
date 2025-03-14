@@ -226,24 +226,24 @@ void dw_main(void)
 {
     while(1)                                            // 测距功能实现，按角色执行基站状态机或标签状态机
     {
-        anchor_app();
+//        anchor_app();
 
-        if(range_status == RANGE_TWR_OK)            // TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
-        {        
-            range_status = RANGE_NULL;              // 清空标志位
-            led_toggle(uwb_ok_led);                 // PCB闪烁LED，说明标签同基站本次测距成功
-        }
-        else if(range_status == RANGE_ERROR) 
-        {
-            range_status = RANGE_NULL;              // 清空标志位
-            for(uint8_t i = 0; i < 8; i++)          // 清空distance_report数组，设置无效值
-            {
-                distance_report[i] = -1; 
-                group_report[i] = -1; 
-            }
-            // printf_use_dma("RANGE_ERROR, ID = %d, rb = %d, range_time = %d\r\n", dev_id, range_nb, range_time);
-            printf_use_dma("RANGE_ERROR, rb = %d, range_time = %d\r\n", range_nb, range_time);
-        }
+//        if(range_status == RANGE_TWR_OK)            // TWR测距有效，进行数据滤波和打包输出、屏显或者其他处理
+//        {        
+//            range_status = RANGE_NULL;              // 清空标志位
+//            led_toggle(uwb_ok_led);                 // PCB闪烁LED，说明标签同基站本次测距成功
+//        }
+//        else if(range_status == RANGE_ERROR) 
+//        {
+//            range_status = RANGE_NULL;              // 清空标志位
+//            for(uint8_t i = 0; i < 8; i++)          // 清空distance_report数组，设置无效值
+//            {
+//                distance_report[i] = -1; 
+//                group_report[i] = -1; 
+//            }
+//            // printf_use_dma("RANGE_ERROR, ID = %d, rb = %d, range_time = %d\r\n", dev_id, range_nb, range_time);
+//            printf_use_dma("RANGE_ERROR, rb = %d, range_time = %d\r\n", range_nb, range_time);
+//        }
     }
 }
 
@@ -379,6 +379,7 @@ void dw1000Device_init(dwDevice_t* dev)
     dev->device_id = read_SwitchValue();
     dev->remainingRespToRx = -1;
     dev->rxResp = 0;
+    dev->rxEnIndex = 0;
 }
 
 dwDevice_t* get_the_local_structure_of_dev(void)
@@ -424,7 +425,7 @@ static void txcallback(const dwt_cb_data_t *cb_data)
 
 static void rxcallback(const dwt_cb_data_t *cb_data)
 {
-    rxOk_IntHandler(cb_data);
+    // rxOk_IntHandler(cb_data);
     timeout = current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
 }
 

@@ -211,6 +211,7 @@ typedef struct dwDevice_s
     twrModes twr_mode;
     uint8_t device_id;
     uint8_t rxResp;
+    uint8_t rxEnIndex;
     int8_t remainingRespToRx;
     uint8_t wait4final;
     
@@ -324,8 +325,7 @@ dwDevice_t* get_the_local_structure_of_dev(void);
 void print_config(void);
 
 /******************************************************instance_anchor.c************************************************************/
-void anchor_app(void);
-void rxOk_IntHandler(const dwt_cb_data_t *cb_data);
+// void anchor_app(void);
 
 
 #endif

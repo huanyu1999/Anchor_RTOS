@@ -33,16 +33,9 @@ static void CAN_FILTER_CONFIG(void);
 CAN_HandleTypeDef hcan1;
 
 /* CAN1 init function */
-void MX_CAN1_Init(void)
+// void MX_CAN1_Init(void)
+void drv_can1Init(void)
 {
-
-    /* USER CODE BEGIN CAN1_Init 0 */
-
-    /* USER CODE END CAN1_Init 0 */
-
-    /* USER CODE BEGIN CAN1_Init 1 */
-
-    /* USER CODE END CAN1_Init 1 */
     hcan1.Instance = CAN1;
     hcan1.Init.Prescaler = 12;
     hcan1.Init.Mode = CAN_MODE_NORMAL;
@@ -67,14 +60,15 @@ void MX_CAN1_Init(void)
     {
         Error_Handler();        /* Start Error */
     }
-    
+    /* USER CODE END CAN1_Init 2 */
+}
+
+void drv_canEnableReceiveInt(void)
+{
     if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
     {
         Error_Handler();        /* Notification Error */
     }
-
-    /* USER CODE END CAN1_Init 2 */
-
 }
 
 void HAL_CAN_MspInit(CAN_HandleTypeDef* canHandle)
@@ -136,65 +130,6 @@ void HAL_CAN_MspDeInit(CAN_HandleTypeDef* canHandle)
 }
 
 /* USER CODE BEGIN 1 */
-
-/**
-  * @brief  
-  * @param  
-  *         
-  * @retval 
-  */
-void canSendMsg(uint32_t extId, uint8_t* data, uint32_t length)
-{
-    CAN_TxHeaderTypeDef *txHeader;
-    uint32_t TxMailbox = 0;
-    
-    txHeader->ExtId = extId;                // 使用扩展ID
-    txHeader->IDE = CAN_ID_EXT;
-    txHeader->RTR = CAN_RTR_DATA;
-    txHeader->DLC = length;
-    txHeader->TransmitGlobalTime = DISABLE;
-    
-    if(HAL_CAN_AddTxMessage(&hcan1, txHeader, data, &TxMailbox) == HAL_OK)
-    {
-        led_toggle(can_tx_led);
-    } 
-    else 
-    {
-        led_off(can_tx_led);
-    }
-}
-
-/**
-  * @brief  
-  * @param  
-  *         
-  * @retval 
-  */
-void canPollingRxMsg(void)
-{
-    uint8_t recv_data[8];
-    
-    CAN_RxHeaderTypeDef *rxHeader;
-    while(HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) != 0)
-    {
-        if(__HAL_CAN_GET_FLAG(&hcan1, CAN_FLAG_FOV0) !=RESET) 
-        {
-            
-        }
-        
-        HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, rxHeader, recv_data);
-
-        printf_use_dma( "ExtId ID:%d\n",rxHeader->ExtId);
-        printf_use_dma( "CAN IDE:0x%x\n",rxHeader->IDE);
-        printf_use_dma( "CAN RTR:0x%x\n",rxHeader->RTR);
-        printf_use_dma( "CAN DLC:0x%x\n",rxHeader->DLC);
-        printf_use_dma( "RECV DATA:");
-        for(int i = 0; i < rxHeader->DLC; i++)
-        {
-            printf_use_dma( "0x%x ",recv_data[i]);
-        }
-    }
-}
 
 /**
   * @brief  can filter config

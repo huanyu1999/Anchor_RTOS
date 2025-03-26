@@ -58,7 +58,7 @@
 #endif /* CMSIS_device_header */
 
 #define configENABLE_FPU                         1
-#define configENABLE_MPU                         1
+#define configENABLE_MPU                         0
 
 #define configUSE_PREEMPTION                     1
 #define configUSE_TIME_SLICING                   1
@@ -80,6 +80,9 @@
 #define configUSE_COUNTING_SEMAPHORES            1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION  0
 #define configUSE_TASK_NOTIFICATIONS             1
+
+/* The following flag must be enabled only when using newlib */
+#define configUSE_NEWLIB_REENTRANT          0
 
 /* USER CODE BEGIN MESSAGE_BUFFER_LENGTH_TYPE */
 /* Defaults to size_t for backward compatibility, but can be changed

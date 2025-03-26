@@ -1,4 +1,7 @@
 #include "instance.h"
+#include "board_dw1000.h"
+#include "dev_led_buzzer_dip.h"
+#include "elog.h"
 
 uint8_t group_id;                                       //组ID
 uint8_t anc_id;                                         //如当前角色是基站，则表示当前基站ID
@@ -76,6 +79,7 @@ struct {
 };
 
 extern osSemaphoreId_t binSem;
+static uint32_t timeout;
 
 /*******************************************************静态函数声明********************************************************/
 static void distance_init(dwDistance_t* data);
@@ -100,14 +104,18 @@ void uwb_init(void)
     distance_init(distance);        
     dw1000Device_init(dev); 
 
-    reset_DW1000();               /* Target specific drive of RSTn line into DW1000 low for a period. */
+    // reset_DW1000();               /* Target specific drive of RSTn line into DW1000 low for a period. */
+    board_dw1000Rst();
+    
     port_set_dw1000_slowrate();
     if(DWT_DEVICE_ID != dwt_readdevid())    // 若读取ID失败，先执行唤醒
     {
-        port_wakeup_IC();                   // 使用SPI-NS管脚唤醒DW1000
+        // port_wakeup_IC();                   // 使用SPI-NS管脚唤醒DW1000
+        board_dw1000SlowWakeup();
         dwt_softreset();                    // 软件复位
     }
-    reset_DW1000();                         // 复位
+    // reset_DW1000();                         // 复位
+    board_dw1000Rst();
 
     if (dwt_initialise(DWT_LOADUCODE) == DWT_ERROR) // dw1000初始化失败
     {
@@ -177,11 +185,7 @@ void uwb_init(void)
 
     if(dev->device_mode == ANCHOR)
     {
-        //设置基站的中断回调函数, 状态机版本
-        // dwt_setcallbacks(&anc_tx_conf_cb, &anc_rx_ok_cb, &anc_rx_to_cb, &anc_rx_err_cb);
-
-        // 设置基站的中断回调函数, 事件驱动版本
-        dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback);
+        dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback);              // 设置基站的中断回调函数, 事件驱动版本
     }
 
     //按角色初始化设备短地址，设置状态机初始状态
@@ -348,10 +352,11 @@ static void dw1000Device_init(dwDevice_t* dev)
 {
     dev->device_mode = ANCHOR;
     dev->twr_mode  =   LISTENER;
-    dev->device_id = read_SwitchValue();
+    dev->device_id = dev_getDipVal();
     dev->remainingRespToRx = -1;
     dev->rxResp = 0;
     dev->rxEnIndex = 0;
+    board_dw1000Init();
 }
 
 
@@ -384,7 +389,7 @@ static void print_dw1000Config(void)
 }
 
 /******************************************************interrupt use callback function************************************************************/
-static uint32_t timeout;
+
 
 static void txcallback(const dwt_cb_data_t *cb_data)
 {

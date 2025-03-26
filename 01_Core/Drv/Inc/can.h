@@ -38,9 +38,9 @@ extern CAN_HandleTypeDef hcan1;
 
 /* USER CODE END Private defines */
 
-void MX_CAN1_Init(void);
-void canSendMsg(uint32_t extId, uint8_t* data, uint32_t length);
-void canPollingRxMsg(void);
+// void MX_CAN1_Init(void);
+void drv_can1Init(void);
+void drv_canEnableReceiveInt(void);
 
 /* USER CODE BEGIN Prototypes */
 

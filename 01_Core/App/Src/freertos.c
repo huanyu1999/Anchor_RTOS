@@ -28,16 +28,18 @@
 #include "instance.h"
 #include "usart.h"
 #include "usart_voice.h"
-#include "can.h"
 #include "timer.h"
-#include "gpio.h"
+#include "board_dw1000.h"
+#include "dev.h"
+#include "elog.h"
+
 #include "com_multiButton.h"
 
-extern void dw_main(void);
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+//由于 CMSIS_OS2 没有封装静态创建task 或者queue需要用到的类型，自己定义，方便代码命名风格统一
 typedef StaticTask_t osStaticThreadDef_t;
 typedef StaticQueue_t osStaticMessageQDef_t;
 /* USER CODE END PTD */
@@ -57,14 +59,38 @@ typedef StaticQueue_t osStaticMessageQDef_t;
 uint32_t anchorCanExtId = 0xAAA0;
 CAN_RxHeaderTypeDef RxHeader;
 uint8_t RxData[8];
-uint8_t canSendBuf[8];
+
 static int32_t voiceOutputDis = 0;
 
-osSemaphoreId_t binSem;
+osSemaphoreId_t binSem;                                         // 用于dw1000中断同步
 StaticSemaphore_t binSemCB;
-osSemaphoreAttr_t binSem_attr = {
+const osSemaphoreAttr_t binSem_attr = {
     .name = "binSem",
     .cb_mem = &binSemCB,
+    .cb_size = sizeof(StaticSemaphore_t)
+};
+
+osSemaphoreId_t elog_lockSem;                                // 用于elog_lock
+StaticSemaphore_t elog_lockSemCB;
+const osSemaphoreAttr_t elog_lockSem_attr = {
+    .name = "elog_lock",
+    .cb_mem = &elog_lockSemCB,
+    .cb_size = sizeof(StaticSemaphore_t)
+};
+
+osSemaphoreId_t elog_asyncSem;                               // 用于elog_async
+StaticSemaphore_t elog_asyncSemCB;
+const osSemaphoreAttr_t elog_asyncSem_attr = {
+    .name = "elog_async",
+    .cb_mem = &elog_asyncSem,
+    .cb_size = sizeof(StaticSemaphore_t)
+};
+
+osSemaphoreId_t elog_dmaLockSem;
+StaticSemaphore_t elog_dmaLockSemCB;
+const osSemaphoreAttr_t elog_dmaLockSem_attr = {
+    .name = "elog_dmaLock",
+    .cb_mem = &elog_dmaLockSem,
     .cb_size = sizeof(StaticSemaphore_t)
 };
 
@@ -93,7 +119,7 @@ const osMessageQueueAttr_t rxDisQueue_attr = {
 osThreadId_t task0_uwb_Handle;                                /* Definitions for dw1000Task_0 */
 const osThreadAttr_t task0_uwb_attr = {
     .name = "task0_uwb", 
-    .stack_size = 128 * 4,
+    .stack_size = 256 * 4,
     .priority = (osPriority_t) osPriorityRealtime7,
 };
 
@@ -112,9 +138,14 @@ const osThreadAttr_t task2_canRx_attr = {
 };
 
 osThreadId_t task3_canSend_Handle;
+uint32_t canSendTask_buffer[512];
+osStaticThreadDef_t canSendTaskCB;
 const osThreadAttr_t task3_canSend_attr = {
     .name = " task3_canSend",
-    .stack_size = 128 * 4,
+    .stack_mem = &canSendTask_buffer[0],
+    .stack_size = sizeof(canSendTask_buffer),
+    .cb_mem = &canSendTaskCB,
+    .cb_size = sizeof(canSendTaskCB),
     .priority = (osPriority_t) osPriorityRealtime5,
 };
 
@@ -130,6 +161,18 @@ const osThreadAttr_t task5_uwbInttruptTrigger_attr = {
     .name = "uwb_interruptTriggerTask",
     .stack_size = 128 * 4,
     .priority = (osPriority_t) osPriorityRealtime6,
+};
+
+osThreadId_t task6_logManage_Handle;
+uint32_t logManageTask_buffer[256];
+osStaticThreadDef_t logManageTaskCB;
+const osThreadAttr_t task6_logManage_attr = {
+    .name = "logManageTask",
+    .stack_mem = &logManageTask_buffer[0],
+    .stack_size = sizeof(logManageTask_buffer),
+    .cb_mem = &logManageTaskCB,
+    .cb_size = sizeof(logManageTaskCB),
+    .priority = (osPriority_t) osPriorityRealtime5
 };
 
 /* USER CODE END Variables */
@@ -161,7 +204,10 @@ void MX_FREERTOS_Init(void)
     /* add queues, ... */
     minDisQueue = osMessageQueueNew(3, sizeof(outDistance_t), &minDisQueue_attr);
     rxDisQueue  = osMessageQueueNew(3, sizeof(outDistance_t), &rxDisQueue_attr);
-    binSem = osSemaphoreNew(1, 0, &binSem_attr);
+    binSem          = osSemaphoreNew(1, 0, &binSem_attr);
+    elog_lockSem    = osSemaphoreNew(1, 1, &elog_lockSem_attr);                 // 该二值信号量初始值必须设置为1
+    // elog_asyncSem   = osSemaphoreNew(1, 0, &elog_asyncSem_attr);             // 这两个信号量创建暂时会出问题，后续解决
+    // elog_dmaLockSem = osSemaphoreNew(1, 0, &elog_dmaLockSem_attr);   
     /* USER CODE END RTOS_QUEUES */
 
     /* USER CODE BEGIN RTOS_THREADS */
@@ -172,6 +218,7 @@ void MX_FREERTOS_Init(void)
     task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
     task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
     task5_uwbInttruptTrigger_Handle = osThreadNew(task5_uwbInterruptTrigger, NULL, &task5_uwbInttruptTrigger_attr);
+    task6_logManage_Handle = osThreadNew(elog_entry, NULL, &task6_logManage_attr);
 
     /* USER CODE END RTOS_THREADS */
 }
@@ -226,19 +273,19 @@ void task1_anchorDisHandling(void *argument)
         if (anchorSelfDis > anchorRxDis)
         {
             anchorFinalDis = anchorRxDis;                   /* 最近的标签位于对侧基站*/
-            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_RESET);
-            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_SET);
+            dev_ledOn(across_led);
+            dev_ledOff(onside_led);
         }
         else
         {
             anchorFinalDis = anchorSelfDis;                 /* 最近的标签位于本侧基站*/
-            HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_SET);
-            HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_RESET);
+            dev_ledOff(across_led);
+            dev_ledOn(onside_led);
         }
         
         voiceOutputDis = anchorFinalDis;
 
-        printf_use_dma("SelfDis %.2f, RxDis %.2f, FinalDis %.2f \n", (float)(anchorSelfDis) / 1000, (float)(anchorRxDis) / 1000, (float)(anchorFinalDis) / 1000);
+        log_d("SelfDis %.2f, RxDis %.2f, FinalDis %.2f \n", (float)(anchorSelfDis) / 1000, (float)(anchorRxDis) / 1000, (float)(anchorFinalDis) / 1000);
         osDelay(400);       /* 定时处理距离数据 */
     }
 }
@@ -251,18 +298,17 @@ void task1_anchorDisHandling(void *argument)
 void task2_canRx(void *argument)
 {
     uint32_t tick;
-    
+
     tick = osKernelGetTickCount();
     for (;;)
     {
         if (voiceOutputDis < 100000)
         {
-
-            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);    // 打开蜂鸣器
+            dev_buzzerOpen(buzzer);
         }
         else 
         {
-            HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_RESET);  // 关闭蜂鸣器 
+            dev_buzzerClose(buzzer);
         }
         
         Report_Dis((float)voiceOutputDis / 1000.0);
@@ -275,13 +321,14 @@ void task3_canSend(void *argument)
 {   
     outDistance_t sendDis;
     osStatus_t status;
+    static uint8_t canSendBuf[4];
     for (;;)
     {
         status = osMessageQueueGet(minDisQueue, &sendDis, 0, portMAX_DELAY);
         if (status  == osOK)
         {
             split32to8(sendDis.dis_value, canSendBuf);
-            canSendMsg(anchorCanExtId, canSendBuf, 8);                                 // CAN 发送基站本测最小距离值
+            dev_canSendMsg(anchorCanExtId, canSendBuf, 4);                                 // CAN 发送基站本测最小距离值(这句有问题)
         }
     }
 }
@@ -305,39 +352,6 @@ void task5_uwbInterruptTrigger(void *argument)
     }
 }
 
-/*************************************************Key function*************************************************/
-void pause_key_handler1(void * buttonPause) 
-{
-    // 按键短按，关闭蜂鸣器，关闭扬声器
-    HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
-    HAL_UART_DeInit(&huart4);
-}
-
-void pause_key_handler2(void * buttonPause)
-{
-    // 按键长按，恢复蜂鸣器以及串口功能
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    
-    GPIO_InitStruct.Pin = BUZZER_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    HAL_GPIO_Init(BUZZER_GPIO_Port, &GPIO_InitStruct);  
-    
-    MX_UART4_Init();
-}
-
-void switch_key_left_handler(void * buttonPause) 
-{
-    canSendMsg(anchorCanExtId1, voice_clear_left, ARRAY_LENGTH(voice_clear_left));
-    printf_use_dma("send sound clear message.\r\n");
-}
-
-void switch_key_right_handler(void * buttonPause)
-{
-    printf_use_dma("switch_key_right_handler\r\n");
-}
-
 /*************************************************some callback function*************************************************/
 
 /**
@@ -351,20 +365,21 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     static int32_t anchorReceiveDis = 2000000;  /* 用于储存基站接收到的距离 */
     outDistance_t rxMsg;
 
+    memset(&RxHeader, 0, sizeof(RxHeader));
+    memset(&RxData, 0, sizeof(RxData));
+
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)      /* Get RX message */
     {
-        
-        if ((RxHeader.ExtId == 0xAAA0) && (RxHeader.IDE == CAN_ID_EXT) && (RxHeader.DLC == 8))
+        if ((RxHeader.ExtId == 0xAAA0) && (RxHeader.IDE == CAN_ID_EXT))
         {
             anchorReceiveDis = combine8to32(RxData);             // CAN正确接收，填充距离
             rxMsg.dis_class = OTHER_ANCHOR_DIS;
             rxMsg.dis_value = anchorReceiveDis;
             osMessageQueuePut(rxDisQueue, &rxMsg, 0, 0);
-            led_toggle(can_rx_led);
+            dev_ledBlink(can_rx_led);
         } 
         else if ((RxHeader.ExtId == 0xAAA1) && (RxHeader.IDE == CAN_ID_EXT))
         {
-            // printf_use_dma("receive sound clear message.\n");
             HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
             HAL_UART_DeInit(&huart4);
         }
@@ -400,7 +415,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == Dw1000_RSTn_Pin)
     {
-        port_set_signalReset();
+        // port_set_signalReset();
+        board_dw1000SetSignalReset();
     }
     else if (GPIO_Pin == Dw1000_IRQ_Pin)
     {

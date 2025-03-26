@@ -152,7 +152,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
         GPIO_InitStruct.Alternate = GPIO_AF7_USART1;
         HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-                /* UART4 DMA Init */
+        /* UART4 DMA Init */
         /* UART4_TX Init */
         hdma_uart1_tx.Instance       = DMA2_Stream7;
         hdma_uart1_tx.Init.Channel   = DMA_CHANNEL_4;
@@ -209,7 +209,7 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef* uartHandle)
     }
 }
 
-/* USER CODE BEGIN 1 */
+/* debug */
 int fputc(int ch, FILE *f)
 {
     HAL_UART_Transmit(&huart1, (uint8_t *)&ch, 1, 0xffff);  

@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F405xx</Define>
               <Undefine></Undefine>
-              <IncludePath>..\01_Core\App\dw1000_application;..\01_Core\App\Inc;..\01_Core\Board\Inc;..\01_Core\Com\compiler;..\01_Core\Com\kalmanfilter;..\01_Core\Com\min_heap;..\01_Core\Com\multi_timer;..\01_Core\Com\multi_button;..\01_Core\Dev\Inc;..\01_Core\Drv\Inc;..\01_Core\DW1000\decadriver;..\01_Core\DW1000\platform;..\02_Vendor_Lib;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc\Legacy;..\02_Vendor_Lib\CMSIS\Core\Include;..\02_Vendor_Lib\CMSIS\Device\ST\STM32F4xx\Include;..\02_Vendor_Lib\CMSIS\Include;..\03_Middlewares\Third_Party\FreeRTOS\Source\portable\RVDS\ARM_CM4F;..\03_Middlewares\Third_Party\FreeRTOS\Source\include;..\03_Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2</IncludePath>
+              <IncludePath>..\01_Core\App\dw1000_application;..\01_Core\App\Inc;..\01_Core\Board\Inc;..\01_Core\Com\compiler;..\01_Core\Com\kalmanfilter;..\01_Core\Com\min_heap;..\01_Core\Com\multi_timer;..\01_Core\Com\multi_button;..\01_Core\Com\easylogger\inc;..\01_Core\Dev\Inc;..\01_Core\Drv\Inc;..\01_Core\DW1000\decadriver;..\01_Core\DW1000\platform;..\02_Vendor_Lib;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc\Legacy;..\02_Vendor_Lib\CMSIS\Core\Include;..\02_Vendor_Lib\CMSIS\Device\ST\STM32F4xx\Include;..\02_Vendor_Lib\CMSIS\Include;..\03_Middlewares\Third_Party\FreeRTOS\Source\portable\RVDS\ARM_CM4F;..\03_Middlewares\Third_Party\FreeRTOS\Source\include;..\03_Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -359,7 +359,7 @@
               <MiscControls></MiscControls>
               <Define></Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc</IncludePath>
+              <IncludePath>..\02_Vendor_Lib</IncludePath>
             </VariousControls>
           </Aads>
           <LDads>
@@ -415,10 +415,32 @@
               <FileType>5</FileType>
               <FilePath>..\01_Core\App\dw1000_application\instance.h</FilePath>
             </File>
+            <File>
+              <FileName>FreeRTOSConfig.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\01_Core\App\Inc\FreeRTOSConfig.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
           <GroupName>Board</GroupName>
+          <Files>
+            <File>
+              <FileName>board_dw1000.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Board\Src\board_dw1000.c</FilePath>
+            </File>
+            <File>
+              <FileName>board_gpio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Board\Src\board_gpio.c</FilePath>
+            </File>
+            <File>
+              <FileName>board_rx8130ce.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Board\Src\board_rx8130ce.c</FilePath>
+            </File>
+          </Files>
         </Group>
         <Group>
           <GroupName>Dev</GroupName>
@@ -428,11 +450,97 @@
               <FileType>1</FileType>
               <FilePath>..\01_Core\Dev\Src\usart_voice.c</FilePath>
             </File>
+            <File>
+              <FileName>dev_can.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_can.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_rx8130ce.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_rx8130ce.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_dw1000.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_dw1000.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>0</IncludeInBuild>
+                  <AlwaysBuild>2</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+            <File>
+              <FileName>dev_led_buzzer_dip.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_led_buzzer_dip.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_button.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_button.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
           <GroupName>Drv</GroupName>
           <Files>
+            <File>
+              <FileName>drv_i2c.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Drv\Src\drv_i2c.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_sdio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Drv\Src\drv_sdio.c</FilePath>
+            </File>
             <File>
               <FileName>can.c</FileName>
               <FileType>1</FileType>
@@ -492,6 +600,31 @@
               <FileName>com_multiTimer.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Com\multi_timer\com_multiTimer.c</FilePath>
+            </File>
+            <File>
+              <FileName>elog.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Com\easylogger\src\elog.c</FilePath>
+            </File>
+            <File>
+              <FileName>elog_utils.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Com\easylogger\src\elog_utils.c</FilePath>
+            </File>
+            <File>
+              <FileName>elog_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Com\easylogger\port\elog_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>elog_async.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Com\easylogger\src\elog_async.c</FilePath>
+            </File>
+            <File>
+              <FileName>elog_buf.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Com\easylogger\src\elog_buf.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -622,6 +755,11 @@
               <FileName>stm32f4xx_hal_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_ll_sdmmc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_ll_sdmmc.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -200,7 +200,8 @@ static void twrAnchor_rxOkHandle(void)
                 distance->sort_distance1[recv_tag_id].tag_distance = prev_range[recv_tag_id].distance;
 
                 range_status = RANGE_TWR_OK;            // 设置TWR成功测距标志，在dw_main.c里判断打包串口输出
-                led_toggle(uwb_ok_led);
+                // led_toggle(uwb_ok_led);
+                dev_ledBlink(uwb_ok_led);
                 distance->newRange = 0x01;
             }
             else

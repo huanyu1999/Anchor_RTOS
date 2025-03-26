@@ -19,6 +19,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "board_dw1000.h"
 #include "stm32f4xx_it.h"
 #include "FreeRTOS.h"
 #include "task.h"

@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dev.h"
 #include "instance.h"
 #include "cmsis_os.h"
 #include "can.h"
@@ -29,43 +30,21 @@
 #include "gpio.h"
 #include "timer.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
+#include "elog.h"
 
-/* USER CODE END Includes */
+/* Private includes ----------------------------------------------------------*/
 
 /* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -73,67 +52,52 @@ void MX_FREERTOS_Init(void);
   */
 int main(void)
 {
-    /* USER CODE BEGIN 1 */
-
-    /* USER CODE END 1 */
-
-    /* MCU Configuration--------------------------------------------------------*/
-
     /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
     HAL_Init();
-
-    /* USER CODE BEGIN Init */
-
-    /* USER CODE END Init */
 
     /* Configure the system clock */
     SystemClock_Config();
 
-    /* USER CODE BEGIN SysInit */
-
-    /* USER CODE END SysInit */
-
     /* Initialize all configured peripherals */
-    // IWDG_Init();
-    MX_GPIO_Init();
-    
     MX_DMA_Init();
     MX_UART4_Init();
     MX_UART1_Init();
     MX_SPI1_Init();
-    MX_SPI2_Init();
+    // MX_SPI2_Init();
     MX_TIM3_Init();
 
-    /* USER CODE BEGIN 2 */
+    /* device init */
+    dev_canInit();
+    dev_rx8130ceInit();
+    dev_rx8130ceSetTimeTest();
+    dev_ledAllInit();
+    dev_buzzerInit(buzzer);
+    dev_dipInit(sw0);
+    dev_dipInit(sw1);
+    dev_dipInit(sw2);
+    dev_buttonInit(switch_key);
+    dev_buttonInit(pause_key);
+    dev_bottonTaskInit();
+    elog_componentInit();
     multiTimer_init();
     uwb_init();                      // dw1000模组初始化
-    pause_key_init();                
-    switch_key_init();     
-
-    // User_VoiceInit(30);               
-    /* USER CODE END 2 */
     
+
     /* Init scheduler */
     osKernelInitialize();
+    dev_canStartRx();               // 打开CAN接收中断
 
     /* Call init function for freertos objects (in freertos.c) */
     MX_FREERTOS_Init();
-    
-    MX_CAN1_Init();
     
     /* Start scheduler */
     osKernelStart();
 
     /* We should never get here as control is now taken by the scheduler */
-    /* Infinite loop */
-    /* USER CODE BEGIN WHILE */
     while (1)
     {
-    /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
     }
-    /* USER CODE END 3 */
 }
 
 /**
@@ -198,6 +162,15 @@ void Error_Handler(void)
     {
     }
     /* USER CODE END Error_Handler_Debug */
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) 
+{
+    if (huart->Instance == huart1.Instance)
+    {
+        extern osSemaphoreId_t elog_dmaLockSem;
+        osSemaphoreRelease(elog_dmaLockSem);
+    }
 }
 
 #ifdef  USE_FULL_ASSERT

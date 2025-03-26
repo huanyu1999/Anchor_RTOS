@@ -44,51 +44,64 @@ extern "C" {
 #define SW_IS_ON(sw_gpio_port, sw_pin)    return ((HAL_GPIO_ReadPin(sw_gpio_port, sw_pin)) ? (0) : (1)
 /* USER CODE END Private defines */
 
-typedef enum gpio_enum_e {
-    dw1000_irq,
-    dw1000_rst,
-    uwb_ok_led,
-    switch_key,
-    pause_key,
-    onside_led,
-    across_led,
-    buzzer,
-    can_tx_led,
-    can_rx_led,
-    sw0,
-    sw1,
-    sw2,    
-    gpio_num
-} gpio_enum_t;
+typedef enum {
+    GPIO_PORT_A,
+    GPIO_PORT_B,
+    GPIO_PORT_C,
+    GPIO_PORT_D,
+    GPIO_PORT_E,
+    GPIO_PORT_F,
+    GPIO_PORT_G,
+    GPIO_PORT_H,
+    GPIO_PORT_I,
+    GPIO_PORT_NUM
+} gpio_clkPort_t;
 
-typedef enum exti_irq_e {
-    dw1000_interrupt,
-    exti_num
-} exti_irq_enum_t;
+typedef enum gpio_pin_e {
+    PIN_0,
+    PIN_1,
+    PIN_2,
+    PIN_3,
+    PIN_4,
+    PIN_5,
+    PIN_6,
+    PIN_7,
+    PIN_8,
+    PIN_9,
+    PIN_10,
+    PIN_11,
+    PIN_12,
+    PIN_13,
+    PIN_14s,
+    PIN_15,
+    PIN_NUM
+} gpio_pin_t;
 
 typedef struct gpio_config_s {
     GPIO_TypeDef* gpio_port;
+    gpio_clkPort_t clk_port;
     uint32_t      gpio_pin;
     uint32_t      gpio_mode;
     uint32_t      gpio_pull;
     uint32_t      gpio_speed;
 } gpio_config_t;
 
-typedef struct exti_irq_s{
+typedef struct {
     IRQn_Type irq_name;
     uint32_t irq_priority;
 } exti_irq_t;
 
-void MX_GPIO_Init(void);
-void gpioAndExti_init(void);
+void drv_gpioInit(gpio_config_t *io_cfg);
+void drv_extiInit(exti_irq_t *exti_cfg);
+void drv_gpioSetLevel(gpio_config_t *io_cfg, uint8_t pin_level);
+uint8_t drv_gpioGetLevel(gpio_config_t *io_cfg);
+void drv_gpioToggleLevel(gpio_config_t *io_cfg);
+void drv_gpioClose(gpio_config_t *io_cfg);
+void drv_gpioClkEn(gpio_clkPort_t io_port);
 
 /* USER CODE BEGIN Prototypes */
 void pause_key_init(void);
 void switch_key_init(void);
-
-void led_toggle (gpio_enum_t led);
-void led_on (gpio_enum_t led);
-void led_off (gpio_enum_t led);
 
 uint8_t read_SwitchValue(void);
 

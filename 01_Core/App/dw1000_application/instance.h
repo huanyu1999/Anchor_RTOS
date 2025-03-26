@@ -12,7 +12,8 @@
 #include "deca_types.h"
 #include "deca_spi.h"
 #include "usart.h"
-#include "gpio.h"
+// #include "gpio.h"
+#include "dev.h"
 #include "iwdg.h"
 #include "kalman.h"
 

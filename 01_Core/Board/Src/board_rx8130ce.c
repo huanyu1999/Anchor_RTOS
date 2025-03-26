@@ -1,0 +1,44 @@
+#include "board_rx8130ce.h"
+#include "drv_i2c.h"
+
+void board_rx8130ceIoInit(void)
+{
+    // GPIO_InitTypeDef GPIO_InitStructure = {0};
+    
+    // 使能RST引脚，INT引脚
+}
+
+void board_rx8130ceI2cInit(void)
+{
+    drv_i2cInit();
+}
+
+void board_rx8130ceInit(void)
+{
+    board_rx8130ceIoInit();
+    board_rx8130ceI2cInit();
+}
+
+void board_rx8130ceBufRead(uint8_t addr, uint8_t reg, uint8_t* buf, uint16_t buf_size)
+{
+    drv_i2cMemRead(addr, reg, buf, buf_size);
+}
+
+void board_rx8130ceBufWrite(uint8_t addr, uint8_t reg, uint8_t* val, uint16_t buf_size)
+{
+    drv_i2cMemWrite(addr, reg, val, buf_size);
+}
+
+// void board_rx8130ceBufRead1(uint8_t addr, uint8_t* buf, uint16_t size)
+// {
+//     drv_i2cRead(addr, buf, size);
+// }
+
+// void board_rx8130ceBufWrite1(uint8_t addr, uint8_t* data, uint16_t size)
+// {
+//     drv_i2cWrite(addr, data, size);
+// }
+
+void board_rx8130ceHardRst(void)
+{
+}

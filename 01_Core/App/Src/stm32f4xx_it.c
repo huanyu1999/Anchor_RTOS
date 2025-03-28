@@ -58,14 +58,16 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern DMA_HandleTypeDef hdma_uart4_tx;
-extern DMA_HandleTypeDef hdma_uart1_tx;
 extern UART_HandleTypeDef huart4;
+// extern DMA_HandleTypeDef hdma_uart4_tx;
 extern UART_HandleTypeDef huart1;
-extern TIM_HandleTypeDef htimer2;
+// extern DMA_HandleTypeDef hdma_uart1_tx;
+extern SD_HandleTypeDef sdCard_Handle;
+
 extern TIM_HandleTypeDef htimer3;
 extern TIM_HandleTypeDef htim6;
 extern CAN_HandleTypeDef hcan1;
+
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -164,24 +166,6 @@ void DebugMon_Handler(void)
 /**
   * @brief This function handles System tick timer.
   */
-//void SysTick_Handler(void)
-//{
-//  /* USER CODE BEGIN SysTick_IRQn 0 */
-
-//  /* USER CODE END SysTick_IRQn 0 */
-//  HAL_IncTick();
-//#if (INCLUDE_xTaskGetSchedulerState == 1 )
-//  if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
-//  {
-//#endif /* INCLUDE_xTaskGetSchedulerState */
-//  xPortSysTickHandler();
-//#if (INCLUDE_xTaskGetSchedulerState == 1 )
-//  }
-//#endif /* INCLUDE_xTaskGetSchedulerState */
-//  /* USER CODE BEGIN SysTick_IRQn 1 */
-
-//  /* USER CODE END SysTick_IRQn 1 */
-//}
 
 /******************************************************************************/
 /* STM32F4xx Peripheral Interrupt Handlers                                    */
@@ -198,7 +182,8 @@ void DMA1_Stream4_IRQHandler(void)
     /* USER CODE BEGIN DMA1_Stream4_IRQn 0 */
 
     /* USER CODE END DMA1_Stream4_IRQn 0 */
-    HAL_DMA_IRQHandler(&hdma_uart4_tx);
+    // HAL_DMA_IRQHandler(&hdma_uart4_tx);
+    HAL_DMA_IRQHandler(huart4.hdmatx);
     /* USER CODE BEGIN DMA1_Stream4_IRQn 1 */
 
     /* USER CODE END DMA1_Stream4_IRQn 1 */
@@ -206,16 +191,9 @@ void DMA1_Stream4_IRQHandler(void)
 
 void DMA2_Stream7_IRQHandler(void)
 {
-    HAL_DMA_IRQHandler(&hdma_uart1_tx);
+    // HAL_DMA_IRQHandler(&hdma_uart1_tx);
+    HAL_DMA_IRQHandler(huart1.hdmatx);
 }
-
-/**
-  * @brief This function handles timer2 global interrupt.
-  */
-// void TIM2_IRQHandler(void)
-// {
-//     HAL_TIM_IRQHandler(&htimer2);
-// }
 
 /**
   * @brief This function handles timer3 global interrupt.
@@ -281,6 +259,21 @@ void TIM6_DAC_IRQHandler(void)
     /* USER CODE BEGIN TIM6_DAC_IRQn 1 */
 
     /* USER CODE END TIM6_DAC_IRQn 1 */
+}
+
+void SDIO_IRQHandler(void)
+{
+    HAL_SD_IRQHandler(&sdCard_Handle);
+}
+
+void DMA2_Stream3_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(sdCard_Handle.hdmatx);
+}
+
+void DMA2_Stream6_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(sdCard_Handle.hdmarx);
 }
 
 /* USER CODE END 1 */

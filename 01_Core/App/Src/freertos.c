@@ -22,6 +22,9 @@
 #include "task.h"
 #include "cmsis_os.h"
 
+#include "ff.h"
+#include "ffconf.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "main.h"
@@ -55,13 +58,22 @@ typedef StaticQueue_t osStaticMessageQDef_t;
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
-/*******************************CAN Communication*******************************/
+/**************************************************************CAN Communication**************************************************************/
 uint32_t anchorCanExtId = 0xAAA0;
 CAN_RxHeaderTypeDef RxHeader;
 uint8_t RxData[8];
 
+/**************************************************************FatFs support**************************************************************/
+FATFS SDFatFs;  /* File system object for SD card logical drive */
+FIL MyFile;     /* File object */
+char SDPath[4]; /* SD card logical drive path */
+static uint8_t workBuffer[FF_MAX_SS]; /* a work buffer for the f_mkfs() */
+
+
+/**************************************************************Voice Output**************************************************************/
 static int32_t voiceOutputDis = 0;
 
+/**************************************************************Semaphore**************************************************************/
 osSemaphoreId_t binSem;                                         // 用于dw1000中断同步
 StaticSemaphore_t binSemCB;
 const osSemaphoreAttr_t binSem_attr = {
@@ -94,6 +106,7 @@ const osSemaphoreAttr_t elog_dmaLockSem_attr = {
     .cb_size = sizeof(StaticSemaphore_t)
 };
 
+/**************************************************************QueueMsg**************************************************************/
 osMessageQueueId_t minDisQueue;                                 /* Definitions for minDisQueue */
 outDistance_t     minDisQueueBuffer[6 * sizeof(outDistance_t)];
 osStaticMessageQDef_t minDisQueueCB;
@@ -116,6 +129,7 @@ const osMessageQueueAttr_t rxDisQueue_attr = {
     .mq_size = sizeof(rxDisQueueBuffer)
 };
 
+/**************************************************************Thread**************************************************************/
 osThreadId_t task0_uwb_Handle;                                /* Definitions for dw1000Task_0 */
 const osThreadAttr_t task0_uwb_attr = {
     .name = "task0_uwb", 
@@ -130,11 +144,11 @@ const osThreadAttr_t task1_anchorDisHandling_attr = {
     .priority = (osPriority_t) osPriorityRealtime6,
 };
 
-osThreadId_t task2_canRx_Handle;                             /* Definitions for canRxTask_2 */
-const osThreadAttr_t task2_canRx_attr = {
-    .name = "task2_canRx",
+osThreadId_t task2_voiceOut_Handle;                             /* Definitions for canRxTask_2 */
+const osThreadAttr_t task2_voiceOut_attr = {
+    .name = "task2_voiceOut",
     .stack_size = 128 * 4,
-    .priority = (osPriority_t) osPriorityRealtime5,
+    .priority = (osPriority_t) osPriorityRealtime4,
 };
 
 osThreadId_t task3_canSend_Handle;
@@ -156,9 +170,9 @@ const osThreadAttr_t task4_attr = {
     .priority = (osPriority_t) osPriorityRealtime5,
 };
 
-osThreadId_t task5_uwbInttruptTrigger_Handle;
-const osThreadAttr_t task5_uwbInttruptTrigger_attr = {
-    .name = "uwb_interruptTriggerTask",
+osThreadId_t task5_findMinDis_Handle;
+const osThreadAttr_t task5_findMinDis_attr = {
+    .name = "task5_findMinDis",
     .stack_size = 128 * 4,
     .priority = (osPriority_t) osPriorityRealtime6,
 };
@@ -175,16 +189,29 @@ const osThreadAttr_t task6_logManage_attr = {
     .priority = (osPriority_t) osPriorityRealtime5
 };
 
+osThreadId_t task7_sdCard_Handle;
+uint32_t sdCardTask_buffer[256];
+osStaticThreadDef_t sdCardTaskCB;
+const osThreadAttr_t task7_sdCard_attr = {
+    .name = " sdCardTask",
+    .stack_mem = & sdCardTask_buffer[0],
+    .stack_size = sizeof(sdCardTask_buffer),
+    .cb_mem = & sdCardTaskCB,
+    .cb_size = sizeof(sdCardTaskCB),
+    .priority = (osPriority_t) osPriorityRealtime5
+};
+
 /* USER CODE END Variables */
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 void task0_uwb(void *argument);
 void task1_anchorDisHandling(void *argument);
-void task2_canRx(void *argument);
+void task2_voiceOut(void *argument);
 void task3_canSend(void *argument);
 void task4_timerYield(void *argument);
-void task5_uwbInterruptTrigger(void *argument);
+void task5_findMinDis(void *argument);
+void task7_sdCard(void *argument);
 
 static void split32to8(uint32_t value, uint8_t *bytes);
 static uint32_t combine8to32(const uint8_t *bytes);
@@ -214,11 +241,12 @@ void MX_FREERTOS_Init(void)
     /* add threads, ... */
     task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
     task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
-    task2_canRx_Handle             = osThreadNew(task2_canRx, NULL, &task2_canRx_attr);
+    task2_voiceOut_Handle          = osThreadNew(task2_voiceOut, NULL, &task2_voiceOut_attr);
     task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
     task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
-    task5_uwbInttruptTrigger_Handle = osThreadNew(task5_uwbInterruptTrigger, NULL, &task5_uwbInttruptTrigger_attr);
+    task5_findMinDis_Handle = osThreadNew(task5_findMinDis, NULL, &task5_findMinDis_attr);
     task6_logManage_Handle = osThreadNew(elog_entry, NULL, &task6_logManage_attr);
+    task7_sdCard_Handle = osThreadNew(task7_sdCard, NULL, &task7_sdCard_attr);
 
     /* USER CODE END RTOS_THREADS */
 }
@@ -295,7 +323,7 @@ void task1_anchorDisHandling(void *argument)
   * @param  none 
   * @retval none
   */
-void task2_canRx(void *argument)
+void task2_voiceOut(void *argument)
 {
     uint32_t tick;
 
@@ -341,7 +369,7 @@ void task4_timerYield(void *argument)
     }
 }
 
-void task5_uwbInterruptTrigger(void *argument)
+void task5_findMinDis(void *argument)
 {
     for (;;)
     {
@@ -349,6 +377,106 @@ void task5_uwbInterruptTrigger(void *argument)
         {
             tag_distance_handler();
         }
+    }
+}
+
+void task7_sdCard(void *argument)
+{
+    FRESULT res;                                          /* FatFs function common result code */
+    uint32_t byteswritten, bytesread;                     /* File write/read counts */
+    uint8_t wtext[] = "This is STM32 working with FatFs"; /* File write buffer */
+    uint8_t rtext[100];                                   /* File read buffer */
+
+    /*##-1- Link the micro SD disk I/O driver ##################################*/
+    if (dev_FATFS_LinkDriver(&SDCard_driver, SDPath) == 0)
+    {
+        /*##-2- Register the file system object to the FatFs module ##############*/
+        if (f_mount(&SDFatFs, (TCHAR const*)SDPath, 0) != FR_OK)
+        {
+            /* FatFs Initialization Error */
+            log_e("f_mount failed.");
+        }
+        else
+        {
+            /*##-3- Create a FAT file system (format) on the logical drive #########*/
+            /* WARNING: Formatting the uSD card will delete all content on the device */
+            if(f_mkfs((TCHAR const*)SDPath, FM_ANY, 0, workBuffer, sizeof(workBuffer)) != FR_OK)
+            {
+                /* FatFs Format Error */
+                // Error_Handler();
+                log_e("f_mkfs failed.");
+            }
+            else
+            {
+                /*##-4- Create and Open a new text file object with write access #####*/
+                if(f_open(&MyFile, "STM32.TXT", FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
+                {       
+                    /* 'STM32.TXT' file Open for write Error */
+                    // Error_Handler();
+                    log_e("f_open failed.");
+                }
+                else
+                {
+                    /*##-5- Write data to the text file ################################*/
+                    res = f_write(&MyFile, wtext, sizeof(wtext), (void *)&byteswritten);
+
+                    if((byteswritten == 0) || (res != FR_OK))
+                    {
+                        /* 'STM32.TXT' file Write or EOF Error */
+                        // Error_Handler();
+                        log_e("'STM32.TXT' file Write or EOF Error.");
+                    }
+                    else
+                    {
+                        /*##-6- Close the open text file #################################*/
+                        f_close(&MyFile);
+            
+                        /*##-7- Open the text file object with read access ###############*/
+                        if(f_open(&MyFile, "STM32.TXT", FA_READ) != FR_OK)
+                        {
+                            /* 'STM32.TXT' file Open for read Error */
+                            log_e("'STM32.TXT' file Open for read Error.");
+                        }
+                        else
+                        {
+                            /*##-8- Read data from the text file ###########################*/
+                            res = f_read(&MyFile, rtext, sizeof(rtext), (UINT*)&bytesread);
+                            
+                            if((bytesread == 0) || (res != FR_OK))
+                            {
+                                /* 'STM32.TXT' file Read or EOF Error */
+                                log_e("'STM32.TXT' file Read or EOF Error.");Error_Handler();
+                            }
+                            else
+                            {
+                                /*##-9- Close the open text file #############################*/
+                                f_close(&MyFile);
+                                
+                                /*##-10- Compare read data with the expected data ############*/
+                                if((bytesread != byteswritten))
+                                {                
+                                    /* Read data is different from the expected data */
+                                    log_e("Read data is different from the expected data.");
+                                }
+                                else
+                                {
+                                    /* Success of the demo: no error occurrence */
+                                    // BSP_LED_On(LED1);
+                                    log_d("Success of the sd card demo.");
+                                }
+                            }       
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /*##-11- Unlink the RAM disk I/O driver ####################################*/
+    dev_FATFS_UnLinkDriver(SDPath);
+
+    for (;;)
+    {
     }
 }
 

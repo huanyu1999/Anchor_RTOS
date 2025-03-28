@@ -44,7 +44,7 @@ static dwDistance_t distance_data;  // 定义距离管理
 
 MultiTimer sort_timer;
 
-extern osThreadId_t task5_uwbInttruptTrigger_Handle;
+extern osThreadId_t task5_findMinDis_Handle;
 
 /* dw1000 rf 配置  */
 static dwt_config_t uwb_config[CONFIG_BR_NUM] = {
@@ -343,7 +343,7 @@ static void distance_init(dwDistance_t* data)
 
 static void sort_timer_callBack(MultiTimer* timer, void* userData)
 {
-    osThreadFlagsSet(task5_uwbInttruptTrigger_Handle, 0x0001U);
+    osThreadFlagsSet(task5_findMinDis_Handle, 0x0001U);
     multiTimerStart(&sort_timer, 400, sort_timer_callBack, NULL); 
 }
 

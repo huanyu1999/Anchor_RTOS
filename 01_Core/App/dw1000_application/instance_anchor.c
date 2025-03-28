@@ -29,7 +29,7 @@ static uint64_t final_rx_ts;
 static prev_range_t prev_range[MAX_TAG_LIST_SIZE];
 static uint8_t resp_valid = 0x00;                    //基站数据有效标志 
 static uint8_t sr;                               //用于控制当前基站处于resp时是发送还是接收,sr用于确认基站发送resp后，
-static dwt_rxdiag_t rx_diag;                         // 計算接收功率
+// static dwt_rxdiag_t rx_diag;                         // 計算接收功率
 
 static int twrAnchor_Init(dwDevice_t *dev);
 static uint32_t twrAnchor_onEvent(dwDevice_t *dev, uwbEvent_t event);

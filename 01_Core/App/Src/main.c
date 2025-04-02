@@ -82,7 +82,6 @@ int main(void)
     multiTimer_init();
     uwb_init();                      // dw1000模组初始化
     
-
     /* Init scheduler */
     osKernelInitialize();
     dev_canStartRx();               // 打开CAN接收中断
@@ -124,7 +123,7 @@ void SystemClock_Config(void)
     RCC_OscInitStruct.PLL.PLLM = 8;
     RCC_OscInitStruct.PLL.PLLN = 336;
     RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-    RCC_OscInitStruct.PLL.PLLQ = 4;
+    RCC_OscInitStruct.PLL.PLLQ = 4;                         // 设置PLL48CK，为48MHz，这里设置为4，168除以4为48                
     if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
     {
         Error_Handler();

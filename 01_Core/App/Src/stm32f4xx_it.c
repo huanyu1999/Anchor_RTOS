@@ -59,11 +59,8 @@
 
 /* External variables --------------------------------------------------------*/
 extern UART_HandleTypeDef huart4;
-// extern DMA_HandleTypeDef hdma_uart4_tx;
 extern UART_HandleTypeDef huart1;
-// extern DMA_HandleTypeDef hdma_uart1_tx;
 extern SD_HandleTypeDef sdCard_Handle;
-
 extern TIM_HandleTypeDef htimer3;
 extern TIM_HandleTypeDef htim6;
 extern CAN_HandleTypeDef hcan1;

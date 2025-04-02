@@ -18,6 +18,7 @@
 #define SDIO_NOT_PRESENT    ((uint8_t)0x00)
 
 #define SD_CardInfo         HAL_SD_CardInfoTypeDef
+#define SD_CardCID          HAL_SD_CardCIDTypedef
 
 #define SDIO_CMD_PORT   GPIOD
 #define SDIO_CMD_PIN    GPIO_PIN_2
@@ -38,11 +39,15 @@ uint8_t drv_sdioInit(void);
 void drv_sdDetectInit(void);
 uint8_t drv_sdIsDetect(void);
 void HAL_SD_MspInit(SD_HandleTypeDef *hsd);
-uint8_t drv_sdioGetCardInfo(HAL_SD_CardInfoTypeDef* cardInfo);
+uint8_t drv_sdioGetCardInfo(HAL_SD_CardInfoTypeDef* cardInfo, HAL_SD_CardCIDTypedef* cardCID);
 uint8_t drv_sdioGetCardState(void);
 uint8_t drv_sdioReadBlocks(uint32_t *pData, uint32_t readAddr, uint32_t numOfBlocks, uint32_t timeOut);
 uint8_t drv_sdioWriteBlocks(uint32_t *pData, uint32_t writeAddr, uint32_t numOfBlocks);
 uint8_t drv_sdioReadBlocks_Dma(uint32_t *pData, uint32_t readAddr, uint32_t numOfBlocks);
 uint8_t drv_sdioWriteBlocks_Dma(uint32_t *pData, uint32_t writeAddr, uint32_t numOfBlocks);
 uint8_t drv_sdioCardErase(uint32_t startAddr, uint32_t endAddr);
+void task7_sdCardReadTest(void *argument);
+
+void dev_SD_WriteCpltCallback(void);
+void dev_SD_ReadCpltCallback(void);
 #endif

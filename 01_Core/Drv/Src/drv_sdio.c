@@ -7,6 +7,9 @@
 #include "stm32f4xx_hal_dma.h"
 #include "stm32f4xx_ll_sdmmc.h"
 #include "drv_sdio.h"
+#include "dev.h"
+#include "usart.h"
+#include "elog.h"
 
 SD_HandleTypeDef sdCard_Handle;
 
@@ -22,7 +25,7 @@ uint8_t drv_sdioInit(void)
     sdCard_Handle.Init.ClockEdge = SDIO_CLOCK_EDGE_RISING;
     sdCard_Handle.Init.ClockBypass = SDIO_CLOCK_BYPASS_DISABLE; 
     sdCard_Handle.Init.ClockPowerSave = SDIO_CLOCK_POWER_SAVE_DISABLE;
-    sdCard_Handle.Init.BusWide = SDIO_BUS_WIDE_4B;                              // use four bit data line
+    sdCard_Handle.Init.BusWide = SDIO_BUS_WIDE_1B;                              // use one bit data line
     sdCard_Handle.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
     sdCard_Handle.Init.ClockDiv = SDIO_TRANSFER_CLK_DIV;                            // 初始化时钟
 
@@ -104,7 +107,7 @@ void HAL_SD_MspInit(SD_HandleTypeDef *hsd)
 
     GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStructure.Pull = GPIO_PULLUP;
-    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+    GPIO_InitStructure.Speed = GPIO_SPEED_HIGH;
     GPIO_InitStructure.Alternate = GPIO_AF12_SDIO;
     GPIO_InitStructure.Pin = SDIO_CLK_PIN | SDIO_D0_PIN | SDIO_D1_PIN | SDIO_D2_PIN | SDIO_D3_PIN;
     HAL_GPIO_Init(SDIO_CLK_PORT, &GPIO_InitStructure);
@@ -122,7 +125,7 @@ void HAL_SD_MspInit(SD_HandleTypeDef *hsd)
     // drv_sdDetectInit();
 
     /* NVIC configuration for SDIO interrupts. */
-    HAL_NVIC_SetPriority(SDIO_IRQn, 0x0e, 0);
+    HAL_NVIC_SetPriority(SDIO_IRQn, 0x05, 0);
     HAL_NVIC_EnableIRQ(SDIO_IRQn);
     
     /* Configure DMA RX parameters. */
@@ -175,9 +178,10 @@ void HAL_SD_MspInit(SD_HandleTypeDef *hsd)
   * @brief  Configures Interrupt mode for SD detection pin.
   * @retval None
   */
-uint8_t drv_sdioGetCardInfo(HAL_SD_CardInfoTypeDef* cardInfo)
+uint8_t drv_sdioGetCardInfo(HAL_SD_CardInfoTypeDef* cardInfo, HAL_SD_CardCIDTypedef* cardCID)
 {
     HAL_SD_GetCardInfo(&sdCard_Handle, cardInfo);
+    HAL_SD_GetCardCID(&sdCard_Handle, cardCID);
     return 0;
 }
 
@@ -267,12 +271,20 @@ uint8_t drv_sdioWriteBlocks_Dma(uint32_t *pData, uint32_t writeAddr, uint32_t nu
     if(HAL_SD_WriteBlocks_DMA(&sdCard_Handle, (uint8_t *)pData, writeAddr, 
         numOfBlocks) != HAL_OK )
     {
+        while (__HAL_SD_GET_FLAG(&sdCard_Handle, SDIO_FLAG_TXUNDERR))
+        {
+            log_d("SDIO FIFO Underrun!");
+        }
         return MSD_ERROR;
     }
     else 
     {
+        while (__HAL_SD_GET_FLAG(&sdCard_Handle, SDIO_FLAG_TXUNDERR))
+        {
+            log_d("SDIO FIFO Underrun!");
+        }
         return MSD_OK;
-    };
+    }
 }
 
 /**
@@ -293,7 +305,6 @@ uint8_t drv_sdioCardErase(uint32_t startAddr, uint32_t endAddr)
     }
 }
 
-
 /**
   * @brief Tx Transfer completed callbacks
   * @param hsd: SD handle
@@ -301,7 +312,7 @@ uint8_t drv_sdioCardErase(uint32_t startAddr, uint32_t endAddr)
   */
 void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsd)
 {
-
+    dev_SD_WriteCpltCallback();
 }
 
 /**
@@ -311,7 +322,7 @@ void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsd)
   */
 void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsd)
 {
-
+    dev_SD_ReadCpltCallback();
 }
 
 __weak void dev_SD_WriteCpltCallback(void)
@@ -322,4 +333,38 @@ __weak void dev_SD_WriteCpltCallback(void)
 __weak void dev_SD_ReadCpltCallback(void)
 {
 
+}
+
+
+// 使用原生HAL库读取函数读取第一个扇区，结果也是一样，原因待排查
+void task7_sdCardReadTest(void *argument)
+{
+    uint8_t buffer[512];  // 读取缓冲区
+    memset(buffer, 0, sizeof(buffer));
+    HAL_StatusTypeDef status;
+
+    // 1. 读取 SD 卡 LBA 0（扇区 0）
+    drv_sdioInit();
+    dev_SD_printfInfo();
+    status = HAL_SD_ReadBlocks(&sdCard_Handle, buffer, 0, 1, 1000);
+    if (status != HAL_OK) {
+        log_d("SD Boot Sector Read Failed! Error: %d\n", status);
+    }
+
+    // 2. 打印前 16 字节（用于检查 MBR/FAT32 结构）
+    // log_d("Boot Sector First 16 Bytes:\n");
+    for (int i = 0; i < 16; i++) {
+        log_d("%02X ", buffer[i]);
+    }
+
+    // 3. 检查引导扇区签名 (0x55AA)
+    if (buffer[510] == 0x55 && buffer[511] == 0xAA) {
+        log_d("Valid Boot Sector Found!");
+    } else {
+        log_d("Invalid Boot Sector (Signature 0x%02X%02X)", buffer[510], buffer[511]);
+    }
+    for(;;)
+    {
+        
+    }
 }

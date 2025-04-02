@@ -34,6 +34,7 @@
 #include "timer.h"
 #include "board_dw1000.h"
 #include "dev.h"
+#include "drv_sdio.h"
 #include "elog.h"
 
 #include "com_multiButton.h"
@@ -400,7 +401,7 @@ void task7_sdCard(void *argument)
         {
             /*##-3- Create a FAT file system (format) on the logical drive #########*/
             /* WARNING: Formatting the uSD card will delete all content on the device */
-            if(f_mkfs((TCHAR const*)SDPath, FM_ANY, 0, workBuffer, sizeof(workBuffer)) != FR_OK)
+            if(f_mkfs((TCHAR const*)SDPath, FM_FAT32, 0, workBuffer, sizeof(workBuffer)) != FR_OK)
             {
                 /* FatFs Format Error */
                 // Error_Handler();
@@ -479,6 +480,8 @@ void task7_sdCard(void *argument)
     {
     }
 }
+
+
 
 /*************************************************some callback function*************************************************/
 

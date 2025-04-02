@@ -157,82 +157,34 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>5534</LineNumber>
+          <LineNumber>318</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134259466</Address>
+          <Address>134259102</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\03_Middlewares\Third_Party\FatFS\Src\ff.c</Filename>
+          <Filename>..\01_Core\Drv\Src\drv_sdio.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\Anchor\../03_Middlewares/Third_Party/FatFS/Src/ff.c\5534</Expression>
+          <Expression>\\Anchor\../01_Core/Drv/Src/drv_sdio.c\318</Expression>
         </Bp>
         <Bp>
           <Number>1</Number>
           <Type>0</Type>
-          <LineNumber>3163</LineNumber>
+          <LineNumber>310</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134239082</Address>
+          <Address>134259130</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_sd.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Anchor\../02_Vendor_Lib/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_sd.c\3163</Expression>
-        </Bp>
-        <Bp>
-          <Number>2</Number>
-          <Type>0</Type>
-          <LineNumber>3144</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>134239072</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_sd.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression>\\Anchor\../02_Vendor_Lib/STM32F4xx_HAL_Driver/Src/stm32f4xx_hal_sd.c\3144</Expression>
-        </Bp>
-        <Bp>
-          <Number>3</Number>
-          <Type>0</Type>
-          <LineNumber>163</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>0</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>0</BreakIfRCount>
           <Filename>..\01_Core\Drv\Src\drv_sdio.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression></Expression>
-        </Bp>
-        <Bp>
-          <Number>4</Number>
-          <Type>0</Type>
-          <LineNumber>5533</LineNumber>
-          <EnabledFlag>1</EnabledFlag>
-          <Address>0</Address>
-          <ByteObject>0</ByteObject>
-          <HtxType>0</HtxType>
-          <ManyObjects>0</ManyObjects>
-          <SizeOfObject>0</SizeOfObject>
-          <BreakByAccess>0</BreakByAccess>
-          <BreakIfRCount>0</BreakIfRCount>
-          <Filename>..\03_Middlewares\Third_Party\FatFS\Src\ff.c</Filename>
-          <ExecCommand></ExecCommand>
-          <Expression></Expression>
+          <Expression>\\Anchor\../01_Core/Drv/Src/drv_sdio.c\310</Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow1>
@@ -290,6 +242,41 @@
           <count>10</count>
           <WinNumber>1</WinNumber>
           <ItemText>hsd</ItemText>
+        </Ww>
+        <Ww>
+          <count>11</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>pxQueue</ItemText>
+        </Ww>
+        <Ww>
+          <count>12</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>vol</ItemText>
+        </Ww>
+        <Ww>
+          <count>13</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>FatFs</ItemText>
+        </Ww>
+        <Ww>
+          <count>14</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>fs</ItemText>
+        </Ww>
+        <Ww>
+          <count>15</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>fs-&gt;win</ItemText>
+        </Ww>
+        <Ww>
+          <count>16</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>buffer</ItemText>
+        </Ww>
+        <Ww>
+          <count>17</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>CardType</ItemText>
         </Ww>
       </WatchWindow1>
       <MemoryWindow1>

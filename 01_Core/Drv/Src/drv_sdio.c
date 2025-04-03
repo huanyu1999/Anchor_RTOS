@@ -344,9 +344,9 @@ void task7_sdCardReadTest(void *argument)
     HAL_StatusTypeDef status;
 
     // 1. 读取 SD 卡 LBA 0（扇区 0）
-    drv_sdioInit();
+    dev_SD_initialize();
     dev_SD_printfInfo();
-    status = HAL_SD_ReadBlocks(&sdCard_Handle, buffer, 0, 1, 1000);
+    status = HAL_SD_ReadBlocks_DMA(&sdCard_Handle, buffer, 0, 1);
     if (status != HAL_OK) {
         log_d("SD Boot Sector Read Failed! Error: %d\n", status);
     }

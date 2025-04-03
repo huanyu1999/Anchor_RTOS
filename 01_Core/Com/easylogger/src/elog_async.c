@@ -270,16 +270,16 @@ void elog_async_output(uint8_t level, const char *log, size_t size) {
     size_t put_size;
 
     if (is_enabled) {
-        if (level >= OUTPUT_LVL) {
+        if (level >= OUTPUT_LVL) {          // 日志等级比设定的输出等级大，将日志压入循环buffer，成功发送异步输出通知
             put_size = async_put_log(log, size);
             /* notify output log thread */
             if (put_size > 0) {
                 elog_async_output_notice();
             }
-        } else {
-            elog_port_output(log, size);
+        } else {                            // 采用正常模式输出
+            elog_port_output(log, size);   
         }
-    } else {
+    } else {                                // 如果异步输出没有使能，采用正常模式输出
         elog_port_output(log, size);
     }
 }

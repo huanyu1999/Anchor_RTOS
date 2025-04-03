@@ -136,7 +136,7 @@ DSTATUS dev_SD_initialize(BYTE lun)
             }
             else 
             { 
-                log_e("osSemaphoreNew success."); 
+                log_d("osSemaphoreNew success."); 
             }
             // dev_SD_printfInfo();
         }
@@ -374,6 +374,6 @@ void dev_SD_ReadCpltCallback(void)
     // if (osMessageQueuePut(SDQueueID, &msg, 0U, osWaitForever) != osOK)
     if (osSemaphoreRelease(SDReadSemaID) != osOK)
     {
-        log_d("read cplt osMessageQueuePut error.");
+        log_d("read cplt osSemaphoreRelease error.");
     }
 }

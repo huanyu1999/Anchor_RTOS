@@ -176,19 +176,11 @@ void DebugMon_Handler(void)
   */
 void DMA1_Stream4_IRQHandler(void)
 {
-    /* USER CODE BEGIN DMA1_Stream4_IRQn 0 */
-
-    /* USER CODE END DMA1_Stream4_IRQn 0 */
-    // HAL_DMA_IRQHandler(&hdma_uart4_tx);
     HAL_DMA_IRQHandler(huart4.hdmatx);
-    /* USER CODE BEGIN DMA1_Stream4_IRQn 1 */
-
-    /* USER CODE END DMA1_Stream4_IRQn 1 */
 }
 
 void DMA2_Stream7_IRQHandler(void)
 {
-    // HAL_DMA_IRQHandler(&hdma_uart1_tx);
     HAL_DMA_IRQHandler(huart1.hdmatx);
 }
 
@@ -213,14 +205,8 @@ void CAN1_RX0_IRQHandler(void)
   */
 void EXTI15_10_IRQHandler(void)
 {
-    /* USER CODE BEGIN EXTI15_10_IRQn 0 */
-
-    /* USER CODE END EXTI15_10_IRQn 0 */
     HAL_GPIO_EXTI_IRQHandler(Dw1000_IRQ_Pin);
     HAL_GPIO_EXTI_IRQHandler(Dw1000_RSTn_Pin);
-    /* USER CODE BEGIN EXTI15_10_IRQn 1 */
-
-    /* USER CODE END EXTI15_10_IRQn 1 */
 }
 
 /**
@@ -228,13 +214,7 @@ void EXTI15_10_IRQHandler(void)
   */
 void UART4_IRQHandler(void)
 {
-    /* USER CODE BEGIN UART4_IRQn 0 */
-
-    /* USER CODE END UART4_IRQn 0 */
     HAL_UART_IRQHandler(&huart4);
-    /* USER CODE BEGIN UART4_IRQn 1 */
-
-    /* USER CODE END UART4_IRQn 1 */
 }
 
 void USART1_IRQHandler(void)
@@ -249,13 +229,7 @@ void USART1_IRQHandler(void)
   */
 void TIM6_DAC_IRQHandler(void)
 {
-    /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
-
-    /* USER CODE END TIM6_DAC_IRQn 0 */
     HAL_TIM_IRQHandler(&htim6);
-    /* USER CODE BEGIN TIM6_DAC_IRQn 1 */
-
-    /* USER CODE END TIM6_DAC_IRQn 1 */
 }
 
 void SDIO_IRQHandler(void)

@@ -70,42 +70,25 @@ FIL MyFile;     /* File object */
 char SDPath[4]; /* SD card logical drive path */
 static uint8_t workBuffer[FF_MAX_SS]; /* a work buffer for the f_mkfs() */
 
-
 /**************************************************************Voice Output**************************************************************/
 static int32_t voiceOutputDis = 0;
 
 /**************************************************************Semaphore**************************************************************/
 osSemaphoreId_t binSem;                                         // 用于dw1000中断同步
 StaticSemaphore_t binSemCB;
-const osSemaphoreAttr_t binSem_attr = {
-    .name = "binSem",
-    .cb_mem = &binSemCB,
-    .cb_size = sizeof(StaticSemaphore_t)
-};
+const osSemaphoreAttr_t binSem_attr = { .name = "binSem", .cb_mem = &binSemCB, .cb_size = sizeof(StaticSemaphore_t) };
 
 osSemaphoreId_t elog_lockSem;                                // 用于elog_lock
 StaticSemaphore_t elog_lockSemCB;
-const osSemaphoreAttr_t elog_lockSem_attr = {
-    .name = "elog_lock",
-    .cb_mem = &elog_lockSemCB,
-    .cb_size = sizeof(StaticSemaphore_t)
-};
+const osSemaphoreAttr_t elog_lockSem_attr = { .name = "elog_lock", .cb_mem = &elog_lockSemCB, .cb_size = sizeof(StaticSemaphore_t) };
 
 osSemaphoreId_t elog_asyncSem;                               // 用于elog_async
 StaticSemaphore_t elog_asyncSemCB;
-const osSemaphoreAttr_t elog_asyncSem_attr = {
-    .name = "elog_async",
-    .cb_mem = &elog_asyncSem,
-    .cb_size = sizeof(StaticSemaphore_t)
-};
+const osSemaphoreAttr_t elog_asyncSem_attr = { .name = "elog_async", .cb_mem = &elog_asyncSemCB, .cb_size = sizeof(StaticSemaphore_t) };
 
-osSemaphoreId_t elog_dmaLockSem;
+osSemaphoreId_t elog_dmaLockSem;                            // 用于elog串口dma发送同步，串口发送完成中断中释放，串口DMA发送前获取
 StaticSemaphore_t elog_dmaLockSemCB;
-const osSemaphoreAttr_t elog_dmaLockSem_attr = {
-    .name = "elog_dmaLock",
-    .cb_mem = &elog_dmaLockSem,
-    .cb_size = sizeof(StaticSemaphore_t)
-};
+const osSemaphoreAttr_t elog_dmaLockSem_attr = { .name = "elog_dmaLock", .cb_mem = &elog_dmaLockSemCB, .cb_size = sizeof(StaticSemaphore_t) };
 
 /**************************************************************QueueMsg**************************************************************/
 osMessageQueueId_t minDisQueue;                                 /* Definitions for minDisQueue */
@@ -187,7 +170,7 @@ const osThreadAttr_t task6_logManage_attr = {
     .stack_size = sizeof(logManageTask_buffer),
     .cb_mem = &logManageTaskCB,
     .cb_size = sizeof(logManageTaskCB),
-    .priority = (osPriority_t) osPriorityRealtime5
+    .priority = (osPriority_t) osPriorityRealtime6
 };
 
 osThreadId_t task7_sdCard_Handle;
@@ -213,6 +196,7 @@ void task3_canSend(void *argument);
 void task4_timerYield(void *argument);
 void task5_findMinDis(void *argument);
 void task7_sdCard(void *argument);
+void task_logTest(void *argument);
 
 static void split32to8(uint32_t value, uint8_t *bytes);
 static uint32_t combine8to32(const uint8_t *bytes);
@@ -234,20 +218,20 @@ void MX_FREERTOS_Init(void)
     rxDisQueue  = osMessageQueueNew(3, sizeof(outDistance_t), &rxDisQueue_attr);
     binSem          = osSemaphoreNew(1, 0, &binSem_attr);
     elog_lockSem    = osSemaphoreNew(1, 1, &elog_lockSem_attr);                 // 该二值信号量初始值必须设置为1
-    // elog_asyncSem   = osSemaphoreNew(1, 0, &elog_asyncSem_attr);             // 这两个信号量创建暂时会出问题，后续解决
-    // elog_dmaLockSem = osSemaphoreNew(1, 0, &elog_dmaLockSem_attr);   
+    elog_asyncSem   = osSemaphoreNew(1, 1, &elog_asyncSem_attr); 
+    elog_dmaLockSem = osSemaphoreNew(1, 1, &elog_dmaLockSem_attr);  
     /* USER CODE END RTOS_QUEUES */
 
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
-    task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
-    task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
-    task2_voiceOut_Handle          = osThreadNew(task2_voiceOut, NULL, &task2_voiceOut_attr);
-    task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
-    task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
-    task5_findMinDis_Handle = osThreadNew(task5_findMinDis, NULL, &task5_findMinDis_attr);
+    // task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
+    // task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
+    // task2_voiceOut_Handle          = osThreadNew(task2_voiceOut, NULL, &task2_voiceOut_attr);
+    // task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
+    // task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
+    // task5_findMinDis_Handle = osThreadNew(task5_findMinDis, NULL, &task5_findMinDis_attr);
     task6_logManage_Handle = osThreadNew(elog_entry, NULL, &task6_logManage_attr);
-    task7_sdCard_Handle = osThreadNew(task7_sdCard, NULL, &task7_sdCard_attr);
+    task7_sdCard_Handle = osThreadNew(task_logTest, NULL, &task7_sdCard_attr);
 
     /* USER CODE END RTOS_THREADS */
 }
@@ -378,6 +362,23 @@ void task5_findMinDis(void *argument)
         {
             tag_distance_handler();
         }
+    }
+}
+
+void task_logTest(void *argument)
+{
+
+    for(;;) 
+    {
+        log_e("startggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggend");
+        log_w("startlllllend");
+        log_i("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
+        // printf_use_dma("startggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggend\r\n");
+        // printf_use_dma("startlllllend\r\n");
+        // printf_use_dma("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\r\n");
+        osDelay(500);
+        
+
     }
 }
 

@@ -22,7 +22,6 @@
 #include "instance.h"
 #include "cmsis_os.h"
 #include "can.h"
-#include "dma.h"
 #include "iwdg.h"
 #include "spi.h"
 #include "usart.h"
@@ -59,7 +58,6 @@ int main(void)
     SystemClock_Config();
 
     /* Initialize all configured peripherals */
-    MX_DMA_Init();
     MX_UART4_Init();
     MX_UART1_Init();
     MX_SPI1_Init();
@@ -78,17 +76,15 @@ int main(void)
     dev_buttonInit(switch_key);
     dev_buttonInit(pause_key);
     dev_bottonTaskInit();
-    elog_componentInit();
     multiTimer_init();
     uwb_init();                      // dw1000模组初始化
-    
     /* Init scheduler */
     osKernelInitialize();
     dev_canStartRx();               // 打开CAN接收中断
 
     /* Call init function for freertos objects (in freertos.c) */
     MX_FREERTOS_Init();
-    
+    // elog_componentInit();
     /* Start scheduler */
     osKernelStart();
 
@@ -165,7 +161,7 @@ void Error_Handler(void)
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) 
 {
-    if (huart->Instance == huart1.Instance)
+    if (huart->Instance == USART1)         // 串口发送完成
     {
         extern osSemaphoreId_t elog_dmaLockSem;
         osSemaphoreRelease(elog_dmaLockSem);

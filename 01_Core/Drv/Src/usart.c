@@ -20,7 +20,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "usart.h"
 #include <stdio.h>
-#include <stdarg.h>
 
 /* USER CODE BEGIN 0 */
 
@@ -70,7 +69,7 @@ void MX_UART1_Init(void)
 
     /* USER CODE END UART4_Init 1 */
     huart1.Instance = USART1;
-    huart1.Init.BaudRate = 460800;
+    huart1.Init.BaudRate = 115200;
     huart1.Init.WordLength = UART_WORDLENGTH_8B;
     huart1.Init.StopBits = UART_STOPBITS_1;
     huart1.Init.Parity = UART_PARITY_NONE;
@@ -89,13 +88,16 @@ void MX_UART1_Init(void)
 void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
-    if(uartHandle->Instance==UART4)
+    if(uartHandle->Instance == UART4)
     {
         /* USER CODE BEGIN UART4_MspInit 0 */
 
         /* USER CODE END UART4_MspInit 0 */
         /* UART4 clock enable */
         __HAL_RCC_UART4_CLK_ENABLE();
+        
+        /* DMA controller clock enable */
+        __HAL_RCC_DMA1_CLK_ENABLE();
 
         __HAL_RCC_GPIOA_CLK_ENABLE();
         /**UART4 GPIO Configuration
@@ -129,17 +131,18 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
         __HAL_LINKDMA(uartHandle,hdmatx,hdma_uart4_tx);
 
         /* UART4 interrupt Init */
-        HAL_NVIC_SetPriority(UART4_IRQn, 5, 0);
+        HAL_NVIC_SetPriority(UART4_IRQn, 7, 0);
         HAL_NVIC_EnableIRQ(UART4_IRQn);
-        /* USER CODE BEGIN UART4_MspInit 1 */
-
-        /* USER CODE END UART4_MspInit 1 */
+        /* DMA interrupt init */
+        /* DMA1_Stream4_IRQn interrupt configuration */
+        HAL_NVIC_SetPriority(DMA1_Stream4_IRQn, 8, 0);
+        HAL_NVIC_EnableIRQ(DMA1_Stream4_IRQn);
     }
     else if (uartHandle->Instance == USART1)
     {
         /* USART1 clock enable */
         __HAL_RCC_USART1_CLK_ENABLE();
-
+        __HAL_RCC_DMA2_CLK_ENABLE();
         __HAL_RCC_GPIOA_CLK_ENABLE();
         /**UART4 GPIO Configuration
         PA9      ------> UART4_TX
@@ -169,8 +172,11 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
             Error_Handler();
         }
         __HAL_LINKDMA(uartHandle, hdmatx, hdma_uart1_tx);
-        HAL_NVIC_SetPriority(USART1_IRQn, 6, 0);
-        HAL_NVIC_EnableIRQ(USART1_IRQn);    
+        HAL_NVIC_SetPriority(USART1_IRQn, 7, 0);
+        HAL_NVIC_EnableIRQ(USART1_IRQn);  
+        
+        HAL_NVIC_SetPriority(DMA2_Stream7_IRQn, 8, 0);
+        HAL_NVIC_EnableIRQ(DMA2_Stream7_IRQn);
     }
 }
 
@@ -216,15 +222,5 @@ int fputc(int ch, FILE *f)
     return (ch);
 }
 
-uint8_t debug_buff[256];
-void printf_use_dma(const char *format, ...) {
-    uint32_t length = 0;
-    va_list args;
-    
-    va_start(args, format);
-    length = vsnprintf((char*) debug_buff, sizeof(debug_buff) + 1, (char*) format, args);
-    va_end(args);
-    
-    HAL_UART_Transmit_DMA(&huart1, debug_buff, length);
-}
+
 /* USER CODE END 1 */

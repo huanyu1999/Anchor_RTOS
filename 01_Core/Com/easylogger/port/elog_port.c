@@ -65,10 +65,10 @@ void elog_port_deinit(void) {
  * @param size log size
  */
 void elog_port_output(const char *log, size_t size) {
-    HAL_UART_Transmit_DMA(&huart1, (uint8_t *)log, size);
-    osSemaphoreAcquire(elog_dmaLockSem, osWaitForever);
     /* add your code here */
-    
+    // HAL_UART_Transmit(&huart1, (uint8_t *)log, size, 1000);
+    osSemaphoreAcquire(elog_dmaLockSem, osWaitForever);
+    HAL_UART_Transmit_DMA(&huart1, (uint8_t *)log, size);
 }
 
 /**
@@ -132,7 +132,7 @@ const char *elog_port_get_t_info(void) {
 }
 
 void elog_async_output_notice(void) {
-    // 通知异步log任务
+    // 通知异步log任务，释放一个信号量
     osSemaphoreRelease(elog_asyncSem);
 }
 
@@ -156,11 +156,11 @@ void elog_entry(void *para) {
 #else
     static char poll_get_buf[ELOG_ASYNC_OUTPUT_BUF_SIZE - 4];
 #endif
-
+    elog_componentInit();
     for(;;)
     {
         /* waiting log */
-        osSemaphoreAcquire(elog_asyncSem, osWaitForever);
+        osSemaphoreAcquire(elog_asyncSem, osWaitForever);       // 异步输出的循环buffer中有数据，接收到elog_async_output_notice函数释放的信号量
         /* polling gets and outputs the log */
         while (1) {
 #ifdef ELOG_ASYNC_LINE_OUTPUT

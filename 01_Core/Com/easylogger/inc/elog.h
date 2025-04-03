@@ -284,7 +284,6 @@ void elog_flush(void);
 /* elog_async.c */
 void elog_async_enabled(bool enabled);
 size_t elog_async_get_log(char *log, size_t size);
-size_t elog_async_get_line_log(char *log, size_t size);
 
 /* elog_utils.c */
 size_t elog_strcpy(size_t cur_len, char *dst, const char *src);

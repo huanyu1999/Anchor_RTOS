@@ -10,6 +10,13 @@ void dev_ledAllInit(void)
     dev_ledInit(across_led);
     dev_ledInit(can_tx_led);
     dev_ledInit(can_rx_led);
+    
+    // 初始化阶段将所有指示灯关闭
+    dev_ledOff(uwb_ok_led);
+    dev_ledOff(onside_led);
+    dev_ledOff(across_led);
+    dev_ledOff(can_tx_led);
+    dev_ledOff(uwb_ok_led);
 }
 
 void dev_ledInit(gpioBoard_enum_t led)
@@ -76,6 +83,7 @@ void dev_buzzerOpen(gpioBoard_enum_t buzzer)
 void dev_buzzerClose(gpioBoard_enum_t buzzer)
 {   
     board_gpioClose(buzzer);
+    // board_gpioSetLevel(buzzer, io_LevelLow);
 }
 
 /*************************************DIP************************************** */

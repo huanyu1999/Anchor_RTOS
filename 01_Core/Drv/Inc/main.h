@@ -63,7 +63,14 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 
+#define SWO_GPIO_PORT   GPIOB
+#define SWO_GPIO_PIN    GPIO_PIN_3   
+
 #define ARRAY_LENGTH(arr) (sizeof(arr) / sizeof((arr)[0]))
+
+void swo_printf(const char *fmt, ...);
+
+void swo_logOutput(const char *data, size_t dataSize);
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

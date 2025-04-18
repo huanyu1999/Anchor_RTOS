@@ -17,6 +17,8 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <stdarg.h>
+
 #include "main.h"
 #include "dev.h"
 #include "instance.h"
@@ -44,6 +46,8 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
+void swo_init(void);
+static void swo_putc(char ch);
 
 /**
   * @brief  The application entry point.
@@ -56,18 +60,20 @@ int main(void)
 
     /* Configure the system clock */
     SystemClock_Config();
+    swo_init();
 
     /* Initialize all configured peripherals */
     MX_UART4_Init();
     MX_UART1_Init();
     MX_SPI1_Init();
-    // MX_SPI2_Init();
     MX_TIM3_Init();
-
     /* device init */
     dev_canInit();
+    dev_canStartRx();               // 打开CAN接收中断
     dev_rx8130ceInit();
     dev_rx8130ceSetTimeTest();
+
+    dev_gnssModInit();
     dev_ledAllInit();
     dev_buzzerInit(buzzer);
     dev_dipInit(sw0);
@@ -75,16 +81,17 @@ int main(void)
     dev_dipInit(sw2);
     dev_buttonInit(switch_key);
     dev_buttonInit(pause_key);
-    dev_bottonTaskInit();
-    multiTimer_init();
+    dev_buttonTaskInit();
+    elog_componentInit();
+    // multiTimer_init();            // multiTimerYield如何执行还需要再次考虑，暂不使用该组件
     uwb_init();                      // dw1000模组初始化
     /* Init scheduler */
     osKernelInitialize();
-    dev_canStartRx();               // 打开CAN接收中断
+    
 
     /* Call init function for freertos objects (in freertos.c) */
     MX_FREERTOS_Init();
-    // elog_componentInit();
+
     /* Start scheduler */
     osKernelStart();
 
@@ -119,7 +126,7 @@ void SystemClock_Config(void)
     RCC_OscInitStruct.PLL.PLLM = 8;
     RCC_OscInitStruct.PLL.PLLN = 336;
     RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
-    RCC_OscInitStruct.PLL.PLLQ = 4;                         // 设置PLL48CK，为48MHz，这里设置为4，168除以4为48                
+    RCC_OscInitStruct.PLL.PLLQ = 7;                         // 设置PLL48CK，为48MHz，这里设置为7，336除以7为48                
     if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
     {
         Error_Handler();
@@ -159,12 +166,50 @@ void Error_Handler(void)
     /* USER CODE END Error_Handler_Debug */
 }
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) 
+void swo_init(void)
 {
-    if (huart->Instance == USART1)         // 串口发送完成
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitTypeDef GPIO_InitStructure = {0};
+    GPIO_InitStructure.Pin = SWO_GPIO_PIN;
+    GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStructure.Pull = GPIO_NOPULL;
+    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
+    GPIO_InitStructure.Alternate = GPIO_AF0_TRACE;
+    HAL_GPIO_Init(SWO_GPIO_PORT, &GPIO_InitStructure);
+
+    // 打开 SWO 功能
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;  // Enable trace
+    ITM->LAR  = 0xC5ACCE55;                          // Unlock ITM
+    ITM->TCR  = ITM_TCR_ITMENA_Msk | ITM_TCR_SYNCENA_Msk | ITM_TCR_TSENA_Msk;
+    ITM->TER  = 0x1;                                  // Enable stimulus port 0
+}
+
+static void swo_putc(char ch) 
+{
+    if (ITM->TCR & ITM_TCR_ITMENA_Msk) {
+        while (!(ITM->PORT[0].u32 & 1));
+        ITM->PORT[0].u8 = ch;
+    }
+}
+
+// SWO 格式化输出（最大支持256字节缓冲）
+void swo_printf(const char *fmt, ...) {
+    char buffer[256];  // 根据需要修改大小
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buffer, sizeof(buffer), fmt, args);
+    va_end(args);
+
+    for (char *p = buffer; *p; p++) {
+        swo_putc(*p);
+    }
+}
+
+void swo_logOutput(const char *data, size_t dataSize)
+{
+    for (int i = 0; i < dataSize; i++)
     {
-        extern osSemaphoreId_t elog_dmaLockSem;
-        osSemaphoreRelease(elog_dmaLockSem);
+        swo_putc(*data++);
     }
 }
 

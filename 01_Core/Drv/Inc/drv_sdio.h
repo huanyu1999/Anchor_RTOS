@@ -46,7 +46,7 @@ uint8_t drv_sdioWriteBlocks(uint32_t *pData, uint32_t writeAddr, uint32_t numOfB
 uint8_t drv_sdioReadBlocks_Dma(uint32_t *pData, uint32_t readAddr, uint32_t numOfBlocks);
 uint8_t drv_sdioWriteBlocks_Dma(uint32_t *pData, uint32_t writeAddr, uint32_t numOfBlocks);
 uint8_t drv_sdioCardErase(uint32_t startAddr, uint32_t endAddr);
-void task7_sdCardReadTest(void *argument);
+void task_sdCardReadTest(void *arg);
 
 void dev_SD_WriteCpltCallback(void);
 void dev_SD_ReadCpltCallback(void);

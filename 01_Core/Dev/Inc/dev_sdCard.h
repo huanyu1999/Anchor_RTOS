@@ -5,6 +5,7 @@
 
 extern const Diskio_drvTypeDef SDCard_driver;
 void dev_SD_printfInfo(void);
+DSTATUS dev_SD_initialize(BYTE lun);
 
 
 #endif

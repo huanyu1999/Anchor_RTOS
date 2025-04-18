@@ -11,8 +11,12 @@
 #include "deca_regs.h"
 #include "deca_types.h"
 #include "deca_spi.h"
+
+#include "board_dw1000.h"
+#include "dev_led_buzzer_dip.h"
+
 #include "usart.h"
-// #include "gpio.h"
+#include "timer.h"
 #include "dev.h"
 #include "iwdg.h"
 #include "kalman.h"
@@ -21,9 +25,12 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
+#include "timers.h"
 
 #include "com_MultiTimer.h"
 #include "com_heap.h"
+
+
 
 /***********************************************************************************************/
 // #define ANCRANGE                         //基站间测距，用于基站自标定
@@ -227,26 +234,25 @@ typedef struct dwDevice_s
 
 /******************************************************Distance Manage************************************************************/
 #define ANCHOR_SELF_DIS  0
-#define OTHER_ANCHOR_DIS 1
+#define ANCHOR_OTHER_DIS 1
 #define FINAL_DIS        2
 #define MIN_DIS_QUEUE_LEN 3
 
 typedef struct {            
     int32_t dis_value;
     uint8_t dis_class;
+    uint8_t dis_index;
 } outDistance_t;
 
 typedef struct {
-    uint8_t poll_receiveSign;
     uint8_t final_receiveSign;
     int32_t tag_distance;
 } tagDistance_t;
 
 typedef struct {
-    tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];        // 标签排序的数组
+    tagDistance_t sort_distance[MAX_TAG_LIST_SIZE];        // 标签排序的数组
     outDistance_t disMsg[MIN_DIS_QUEUE_LEN];                // 输出距离时使用的数组
     int32_t min_dis;                                        // 最小的距离值
-    int newRange;
     uint8_t dis_idx;                                        // 最小距离值对应的索引，也就是对应的标签ID
     min_heap dis_min_heap;                                 // 用于查找最小值距离的最小堆                       
 } dwDistance_t;
@@ -266,13 +272,11 @@ typedef struct uwbAlgorithm_s {
     uint32_t (*onEvent)(dwDevice_t *dev, uwbEvent_t event);
 } uwbAlgorithm_t;
 
-extern uint8_t switch8;
 extern uint8_t anc_id;
 extern uint8_t tag_id;
 extern uint8_t group_id;                                //组ID
 extern int32_t distance_report[8];
-extern int32_t sort_distance[MAX_TAG_LIST_SIZE];
-extern tagDistance_t sort_distance1[MAX_TAG_LIST_SIZE];
+extern tagDistance_t sort_distance[MAX_TAG_LIST_SIZE];
 extern int32_t group_report[8];                         //基站组ID数组，用于打包输出
 extern uint32_t range_time;
 extern uint8_t inst_ch;                                 //信道号Channel number
@@ -305,17 +309,19 @@ extern uint8_t target_ancid;
 
 /******************************************************dw_main.c************************************************************/
 void uwb_init(void);
-void task0_uwb(void *argument);
+void task0_uwb(void *arg);
+void task_tagDistInsertAndUpdate(void *arg);
+void task_tagDistClearInvalid(void *arg);
 double calculate_RSSI(dwt_rxdiag_t* rx_diag);
-void tag_distance_handler(void);
+void tag_distInsertAndUpdate(void);
+void tag_distClearInvalid(void);
 dwDistance_t* get_the_local_structure_of_dis(void);
 dwDevice_t* get_the_local_structure_of_dev(void);
-int get_newrange(void);
-uint8_t get_sign(uint8_t tad_idx);
+uint8_t get_tagFinalRecvFlag(uint8_t tad_idx);
+void setup_tdmaCycleTimer(void);
 
 
 /******************************************************instance_anchor.c************************************************************/
 // void anchor_app(void);
-
 
 #endif

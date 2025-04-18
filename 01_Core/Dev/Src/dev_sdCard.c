@@ -31,7 +31,7 @@
 /* Disk status */
 static volatile DSTATUS Stat = STA_NOINIT;
 
-static osMessageQueueId_t SDQueueID;
+// static osMessageQueueId_t SDQueueID;
 uint32_t SDQueueBuffer[SDQUEUE_SIZE];           // 定义SDQueue的存储空间
 StaticQueue_t SDQueueCB;                        // 定义SDQueue的控制块
 const osMessageQueueAttr_t SDQueue_attr = {     // 定义SDQueue的属性
@@ -138,7 +138,7 @@ DSTATUS dev_SD_initialize(BYTE lun)
             { 
                 log_d("osSemaphoreNew success."); 
             }
-            // dev_SD_printfInfo();
+            dev_SD_printfInfo();
         }
     }
 
@@ -167,7 +167,7 @@ DRESULT dev_SD_read(BYTE lun, BYTE *buff, DWORD sector, UINT count)
 {
     DRESULT res = RES_ERROR;
     uint32_t timer;
-    uint32_t msg;         
+    // uint32_t msg;         
     osStatus status;
 
     if(drv_sdioReadBlocks_Dma((uint32_t*)buff, (uint32_t) (sector), count) == MSD_OK)
@@ -307,31 +307,31 @@ void dev_SD_printfInfo(void)
         case CARD_SDSC :
             if(sd_cardInfo.CardVersion == CARD_V1_X)
             {
-                printf("Card Type:SDSC V1\r\n");
+                log_i("Card Type:SDSC V1\r\n");
             }
             else if(sd_cardInfo.CardVersion == CARD_V2_X)
             {
-                printf("Card Type:SDSC V2\r\n");
+                log_i("Card Type:SDSC V2\r\n");
             }
             break;
         
         case CARD_SDHC_SDXC :
-            printf("Card Type:CARD_SDHC\r\n");
+            log_i("Card Type:CARD_SDHC\r\n");
             break;
 
         default :
             break;
     }
 
-    printf("Card ManufacturerID: %d \r\n",sd_cardCID.ManufacturerID);				//制造商ID	
-    printf("CardVersion:         %d \r\n",(uint32_t)(sd_cardInfo.CardVersion));		//卡版本号
-    printf("Class:               %d \r\n",(uint32_t)(sd_cardInfo.Class));		    //
-    printf("Card RCA(RelCardAdd):%d \r\n",sd_cardInfo.RelCardAdd);					//卡相对地址
-    printf("Card BlockNbr:       %d \r\n",sd_cardInfo.BlockNbr);						//块数量
-    printf("Card BlockSize:      %d \r\n",sd_cardInfo.BlockSize);					//块大小
-    printf("LogBlockNbr:         %d \r\n",(uint32_t)(sd_cardInfo.LogBlockNbr));		//逻辑块数量
-    printf("LogBlockSize:        %d \r\n",(uint32_t)(sd_cardInfo.LogBlockSize));		//逻辑块大小
-    printf("Card Capacity:       %d MB\r\n",(uint32_t)(card_cap>>20));				//卡容量
+    log_i("Card ManufacturerID: %d \r\n",sd_cardCID.ManufacturerID);				//制造商ID	
+    log_i("CardVersion:         %d \r\n",(uint32_t)(sd_cardInfo.CardVersion));		//卡版本号
+    log_i("Class:               %d \r\n",(uint32_t)(sd_cardInfo.Class));		    //
+    log_i("Card RCA(RelCardAdd):%d \r\n",sd_cardInfo.RelCardAdd);					//卡相对地址
+    log_i("Card BlockNbr:       %d \r\n",sd_cardInfo.BlockNbr);						//块数量
+    log_i("Card BlockSize:      %d \r\n",sd_cardInfo.BlockSize);					//块大小
+    log_i("LogBlockNbr:         %d \r\n",(uint32_t)(sd_cardInfo.LogBlockNbr));		//逻辑块数量
+    log_i("LogBlockSize:        %d \r\n",(uint32_t)(sd_cardInfo.LogBlockSize));		//逻辑块大小
+    log_i("Card Capacity:       %d MB\r\n",(uint32_t)(card_cap>>20));				//卡容量
 }
 
 /**
@@ -350,9 +350,9 @@ void dev_SD_WriteCpltCallback(void)
     // osMessageQueuePut(SDQueueID, &msg, 0U, osWaitForever);
     // log_d("write cplt ");
     // if (osMessageQueuePut(SDQueueID, &msg, 0U, osWaitForever) == osOK)
-    if (osSemaphoreRelease(SDSemaID) == osOK)
+    if (osSemaphoreRelease(SDSemaID) != osOK)
     {
-        // log_d("write cplt osSemaphoreRelease ok.");
+        log_d("write cplt osSemaphoreRelease error.");
     }
 }
 
@@ -363,13 +363,12 @@ void dev_SD_WriteCpltCallback(void)
   */
 void dev_SD_ReadCpltCallback(void)
 {
-    uint32_t msg = READ_CPLT_MSG;
+    // uint32_t msg = READ_CPLT_MSG;
     /*
      * No need to add an "osKernelRunning()" check here, as the SD_initialize()
      * is always called before any SD_Read()/SD_Write() call
     */
     // osMessagePut(SDQueueID, READ_CPLT_MSG, osWaitForever);         // SD卡读操作完成，向队列发送写完成消息
-    // osMessageQueuePut(SDQueueID, &msg, 0U, 0);
     // log_d("read cplt ");
     // if (osMessageQueuePut(SDQueueID, &msg, 0U, osWaitForever) != osOK)
     if (osSemaphoreRelease(SDReadSemaID) != osOK)

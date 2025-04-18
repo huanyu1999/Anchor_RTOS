@@ -19,7 +19,7 @@ void printf_use_dma(const char *format, ...) {
     va_start(args, format);
     length = vsnprintf((char*) send_buff, sizeof(debug_buff1) + 1, (char*) format, args);
     va_end(args);
-    extern osSemaphoreId_t elog_dmaLockSem;
-    osSemaphoreAcquire(elog_dmaLockSem, osWaitForever);
+    extern osSemaphoreId_t uart_dmaLockSem;
+    osSemaphoreAcquire(uart_dmaLockSem, osWaitForever);
     HAL_UART_Transmit_DMA(&huart1, send_buff, length);
 }

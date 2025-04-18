@@ -25,26 +25,27 @@
  * Function: Portable interface for each platform.
  * Created on: 2015-04-28
  */
- 
-#include <elog.h>
-#include "cmsis_os2.h"
-#include "usart.h"
-#include "dev_rx8130ce.h"
 
-extern osSemaphoreId_t elog_lockSem;  
+#include "cmsis_os2.h"
+#include "dev_rx8130ce.h"
+#include "usart.h"
+#include <elog.h>
+
+extern osSemaphoreId_t elog_lockSem;
 extern osSemaphoreId_t elog_asyncSem;
-extern osSemaphoreId_t elog_dmaLockSem;
+extern osSemaphoreId_t uart_dmaLockSem;
 
 /**
  * EasyLogger port initialize
  *
  * @return result
  */
-ElogErrCode elog_port_init(void) {
+ElogErrCode elog_port_init(void)
+{
     ElogErrCode result = ELOG_NO_ERR;
 
     /* add your code here */
-    
+
     return result;
 }
 
@@ -52,10 +53,10 @@ ElogErrCode elog_port_init(void) {
  * EasyLogger port deinitialize
  *
  */
-void elog_port_deinit(void) {
+void elog_port_deinit(void)
+{
 
     /* add your code here */
-
 }
 
 /**
@@ -64,18 +65,24 @@ void elog_port_deinit(void) {
  * @param log output of log
  * @param size log size
  */
-void elog_port_output(const char *log, size_t size) {
+void elog_port_output(const char *log, size_t size)
+{
     /* add your code here */
-    // HAL_UART_Transmit(&huart1, (uint8_t *)log, size, 1000);
-    osSemaphoreAcquire(elog_dmaLockSem, osWaitForever);
-    HAL_UART_Transmit_DMA(&huart1, (uint8_t *)log, size);
+    // HAL_UART_Transmit(&huart1, (uint8_t *)log, size, 1000);             // 使用串口阻塞输出
+
+    // osSemaphoreAcquire(uart_dmaLockSem, osWaitForever);              // 使用串口DMA输出,
+    // 存在打印日志时，日志丢失重叠的bug HAL_UART_Transmit_DMA(&huart1, (uint8_t *)log, size);
+
+    // 考虑SWO输出
+    swo_logOutput(log, size);
 }
 
 /**
  * output lock
  */
-void elog_port_output_lock(void) {
-    
+void elog_port_output_lock(void)
+{
+
     /* add your code here */
     osSemaphoreAcquire(elog_lockSem, osWaitForever);
 }
@@ -83,8 +90,9 @@ void elog_port_output_lock(void) {
 /**
  * output unlock
  */
-void elog_port_output_unlock(void) {
-    
+void elog_port_output_unlock(void)
+{
+
     /* add your code here */
     osSemaphoreRelease(elog_lockSem);
 }
@@ -94,18 +102,19 @@ void elog_port_output_unlock(void) {
  *
  * @return current time
  */
-const char *elog_port_get_time(void) {
-    
+const char *elog_port_get_time(void)
+{
+
     /* add your code here */
     // static char cur_system_time[16] = "";
     // snprintf(cur_system_time, 16, "%lu", osKernelGetTickCount());
     // return cur_system_time;
-    
+
     static char cur_system_time[128] = "";
     static rx8130ce_time_t now;
     dev_rx8130ceGetDateTime(&now);
-    snprintf(cur_system_time, 128, "%d-%d-%d %02d:%02d:%02d", 
-                                    now.year+2000, now.month, now.day, now.hours, now.minutes, now.seconds);
+    snprintf(cur_system_time, 128, "%d-%d-%d %02d:%02d:%02d", now.year + 2000, now.month, now.day, now.hours,
+             now.minutes, now.seconds);
     return cur_system_time;
 }
 
@@ -114,8 +123,9 @@ const char *elog_port_get_time(void) {
  *
  * @return current process name
  */
-const char *elog_port_get_p_info(void) {
-    
+const char *elog_port_get_p_info(void)
+{
+
     /* add your code here */
     return "";
 }
@@ -125,13 +135,15 @@ const char *elog_port_get_p_info(void) {
  *
  * @return current thread name
  */
-const char *elog_port_get_t_info(void) {
-    
+const char *elog_port_get_t_info(void)
+{
+
     /* add your code here */
     return "";
 }
 
-void elog_async_output_notice(void) {
+void elog_async_output_notice(void)
+{
     // 通知异步log任务，释放一个信号量
     osSemaphoreRelease(elog_asyncSem);
 }
@@ -149,28 +161,34 @@ void elog_componentInit(void)
     elog_start();
 }
 
-void elog_entry(void *para) {
+void elog_entry(void *para)
+{
     size_t get_log_size = 0;
 #ifdef ELOG_ASYNC_LINE_OUTPUT
     static char poll_get_buf[ELOG_LINE_BUF_SIZE - 4];
 #else
     static char poll_get_buf[ELOG_ASYNC_OUTPUT_BUF_SIZE - 4];
 #endif
-    elog_componentInit();
-    for(;;)
+    for (;;)
     {
         /* waiting log */
-        osSemaphoreAcquire(elog_asyncSem, osWaitForever);       // 异步输出的循环buffer中有数据，接收到elog_async_output_notice函数释放的信号量
+        osSemaphoreAcquire(
+            elog_asyncSem,
+            osWaitForever); // 异步输出的循环buffer中有数据，接收到elog_async_output_notice函数释放的信号量
         /* polling gets and outputs the log */
-        while (1) {
+        while (1)
+        {
 #ifdef ELOG_ASYNC_LINE_OUTPUT
             get_log_size = elog_async_get_line_log(poll_get_buf, sizeof(poll_get_buf));
 #else
             get_log_size = elog_async_get_log(poll_get_buf, sizeof(poll_get_buf));
 #endif
-            if (get_log_size) {
+            if (get_log_size)
+            {
                 elog_port_output(poll_get_buf, get_log_size);
-            } else {
+            }
+            else
+            {
                 break;
             }
         }

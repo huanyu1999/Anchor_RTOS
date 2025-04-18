@@ -8,6 +8,7 @@
 #define BUTTON_ID_SWITCH 1
 
 void dev_buttonInit(gpioBoard_enum_t button);
+void dev_buttonTaskInit(void);
 uint8_t dev_buttonRead(uint8_t button);
 void dev_multiButtonInit( struct Button* button_handler, uint8_t button_id);
 void dev_multiButtonAddAndStart(struct Button* button_handler, PressEvent event, BtnCallback cb);

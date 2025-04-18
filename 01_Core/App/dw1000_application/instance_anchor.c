@@ -37,7 +37,7 @@ static void twrAnchor_rxOkHandle(void);
 static void twrAnchor_sentHandle(void);
 static uint8_t twrAnchor_rxErrorOrTimeoutHandle(void);
 static void anch_txRespOrRxReenale(void);
-static double anch_calcTof(uint8_t *msg, uint64_t anchorRespTxTime, uint64_t tagFinalRxTime, uint64_t tagPollRxTime);
+// static double anch_calcTof(uint8_t *msg, uint64_t anchorRespTxTime, uint64_t tagFinalRxTime, uint64_t tagPollRxTime);
 static void anch_rxRenableImmdiate(dwDevice_t *dev);
 static void anch_perpareAnc2TagResp(void);
 
@@ -113,13 +113,12 @@ static void twrAnchor_rxOkHandle(void)
         
         if(recv_tag_id >= inst_slot_number)                //标签ID如果大于标签总容量则退出
         {
-            anch_rxRenableImmdiate(dev);                      // 直接开启下一轮接收poll
+            anch_rxRenableImmdiate(dev);                   // 直接开启下一轮接收poll
             break;
         }
         
         range_time = portGetTickCnt();          // 取得测距时间
         poll_rx_ts = get_rx_timestamp_u64();    // 获得poll_rx时间戳
-        distance->sort_distance1[recv_tag_id].poll_receiveSign = 0x01; // 获取到该标签的poll帧，设置为有效
         dev->wait4final = 0;
         dev->remainingRespToRx = 2;
         sr = MAX_AHCHOR_NUMBER;
@@ -135,14 +134,14 @@ static void twrAnchor_rxOkHandle(void)
             dev->twr_mode = LISTENER ;              // 接收到final不用答复，故设置为listener模式
             dev->wait4final = 0; 
             resp_valid = rx_buffer[FINAL_MSG_FINAL_VALID_IDX];
-            distance->sort_distance1[recv_tag_id].final_receiveSign = 0x01;           // 获取到该标签的final帧，设置为有效
-            // if(rx_buffer[FINAL_MSG_A0_GROUP_ID_IDX + anc_id * 5] != (group_id & 0x7f)) // 验证标签final内的基站组号和当前组号相同
+            distance->sort_distance[recv_tag_id].final_receiveSign = 0x01;                 // 获取到该标签的final帧，设置为有效
+            // if(rx_buffer[FINAL_MSG_A0_GROUP_ID_IDX + anc_id * 5] != (group_id & 0x7f))   // 验证标签final内的基站组号和当前组号相同
             // {
             //     printf("recv = %x, me = %x\n", rx_buffer[FINAL_MSG_A0_GROUP_ID_IDX + anc_id * 5], group_id & 0x7f);
-            //     resp_valid = resp_valid & (uint8_t)(~(0x01 << anc_id));     //设置该基站无效
+            //     resp_valid = resp_valid & (uint8_t)(~(0x01 << anc_id));                  //设置该基站无效
             // }
 
-            if((resp_valid >> anc_id) & 0x01)                               //final消息中，本基站发送的resp消息是有效的,则进行距离计算
+            if((resp_valid >> anc_id) & 0x01)                                               //final消息中，本基站发送的resp消息是有效的,则进行距离计算
             {
                 uint32_t poll_tx_ts, resp_rx_ts, final_tx_ts;
                 uint32_t poll_rx_ts_32, resp_tx_ts_32, final_rx_ts_32;
@@ -189,20 +188,20 @@ static void twrAnchor_rxOkHandle(void)
                 printf_use_dma("POWER : %.4f dBM\r\n", rx_power);
                 printf("poll_tx_ts %lu resp_rx_ts %lu final_tx_ts %lu\n", poll_tx_ts, resp_rx_ts, final_tx_ts);
                 printf("poll_rx_ts %d resp_tx_ts %d final_rx_ts %d\n", poll_rx_ts_32, resp_tx_ts_32, final_rx_ts_32);
-                ("Ra %.lf Rb %.lf Da %.lf Db %.lf\n", Ra, Rb, Da, Db);
-                printf_use_dma("tag %d dis : %.2f \n", recv_tag_id, (float)(prev_range[recv_tag_id].distance) / 1000.0); */
+                ("Ra %.lf Rb %.lf Da %.lf Db %.lf\n", Ra, Rb, Da, Db);*/
+                // log_d("tag %d dis : %.2f \n", recv_tag_id, (float)(prev_range[recv_tag_id].distance) / 1000.0); 
                 
                 //更新prev_range为本次测距值
                 prev_range[recv_tag_id].distance = distance_now_m * 1000;//单位转换为mm
                 prev_range[recv_tag_id].range_nb = range_nb;
                 
                 /* 将获取到的各标签最新距离存入排序数组 */
-                distance->sort_distance1[recv_tag_id].tag_distance = prev_range[recv_tag_id].distance;
+                distance->sort_distance[recv_tag_id].tag_distance = prev_range[recv_tag_id].distance;
 
                 range_status = RANGE_TWR_OK;            // 设置TWR成功测距标志，在dw_main.c里判断打包串口输出
-                // led_toggle(uwb_ok_led);
+                extern osThreadId_t task4_Handle;
+                osThreadFlagsSet(task4_Handle, 0x0001U);
                 dev_ledBlink(uwb_ok_led);
-                distance->newRange = 0x01;
             }
             else
             {
@@ -361,34 +360,34 @@ static void anch_txRespOrRxReenale(void)
 }
 
 // 该函数计算tof有问题，后续修改
-static double anch_calcTof(uint8_t *msg, uint64_t anchorRespTxTime, uint64_t tagFinalRxTime, uint64_t tagPollRxTime)
-{
-    double Ra, Rb, Da, Db;
-    int64_t tof_dwtTimeUnit;
-    double tof;
-    uint32_t tagFinalTxTime  = 0;          // 标签的final帧发送时间
-    uint32_t tagPollTxTime  = 0;           // 标签的poll帧发送时间
-    uint32_t anchorRespRxTime  = 0;        // 标签接收到基站的resp帧的接收时间
+// static double anch_calcTof(uint8_t *msg, uint64_t anchorRespTxTime, uint64_t tagFinalRxTime, uint64_t tagPollRxTime)
+// {
+//     double Ra, Rb, Da, Db;
+//     int64_t tof_dwtTimeUnit;
+//     double tof;
+//     uint32_t tagFinalTxTime  = 0;          // 标签的final帧发送时间
+//     uint32_t tagPollTxTime  = 0;           // 标签的poll帧发送时间
+//     uint32_t anchorRespRxTime  = 0;        // 标签接收到基站的resp帧的接收时间
 
-    final_msg_get_ts(&msg[FINAL_MSG_POLL_TX_TS_IDX], &tagPollTxTime);
-    final_msg_get_ts(&msg[FINAL_MSG_RESP1_RX_TS_IDX + anc_id * (FINAL_MSG_TS_LEN + 1)], &anchorRespRxTime);
-    final_msg_get_ts(&msg[FINAL_MSG_FINAL_TX_TS_IDX], &tagFinalTxTime);
+//     final_msg_get_ts(&msg[FINAL_MSG_POLL_TX_TS_IDX], &tagPollTxTime);
+//     final_msg_get_ts(&msg[FINAL_MSG_RESP1_RX_TS_IDX + anc_id * (FINAL_MSG_TS_LEN + 1)], &anchorRespRxTime);
+//     final_msg_get_ts(&msg[FINAL_MSG_FINAL_TX_TS_IDX], &tagFinalTxTime);
 
-    Ra = (double)(anchorRespRxTime - tagPollTxTime);
-    Rb = (double)((uint32_t)tagFinalRxTime - (uint32_t)anchorRespTxTime);
-    Da = (double)(tagFinalTxTime - anchorRespRxTime);
-    Db = (double)((uint32_t)anchorRespTxTime - (uint32_t)tagPollRxTime);
-    tof_dwtTimeUnit = (int64_t)((Ra * Rb - Da * Db) / (Ra + Rb + Da + Db));
-    tof = (int32)tof_dwtTimeUnit; 
-    if (tof > 0x7FFFFFFF) 
-    {
-        tof -= 0x80000000;  
-    }
+//     Ra = (double)(anchorRespRxTime - tagPollTxTime);
+//     Rb = (double)((uint32_t)tagFinalRxTime - (uint32_t)anchorRespTxTime);
+//     Da = (double)(tagFinalTxTime - anchorRespRxTime);
+//     Db = (double)((uint32_t)anchorRespTxTime - (uint32_t)tagPollRxTime);
+//     tof_dwtTimeUnit = (int64_t)((Ra * Rb - Da * Db) / (Ra + Rb + Da + Db));
+//     tof = (int32)tof_dwtTimeUnit; 
+//     if (tof > 0x7FFFFFFF) 
+//     {
+//         tof -= 0x80000000;  
+//     }
 
-    tof = tof * DWT_TIME_UNITS;
+//     tof = tof * DWT_TIME_UNITS;
     
-    return tof;
-}
+//     return tof;
+// }
 
 // 使能立即接收，基站TWR处理最开始的阶段
 static void anch_rxRenableImmdiate(dwDevice_t *dev)

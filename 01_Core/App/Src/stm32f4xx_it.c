@@ -19,10 +19,13 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dev.h"
 #include "board_dw1000.h"
 #include "stm32f4xx_it.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "elog.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
@@ -61,6 +64,7 @@
 extern UART_HandleTypeDef huart4;
 extern UART_HandleTypeDef huart1;
 extern SD_HandleTypeDef sdCard_Handle;
+extern TIM_HandleTypeDef htimer2;
 extern TIM_HandleTypeDef htimer3;
 extern TIM_HandleTypeDef htim6;
 extern CAN_HandleTypeDef hcan1;
@@ -184,12 +188,22 @@ void DMA2_Stream7_IRQHandler(void)
     HAL_DMA_IRQHandler(huart1.hdmatx);
 }
 
+void DMA2_Stream2_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(huart1.hdmarx);
+}
+
 /**
   * @brief This function handles timer3 global interrupt.
   */
 void TIM3_IRQHandler(void)
 {
     HAL_TIM_IRQHandler(&htimer3);
+}
+
+void TIM2_IRQHandler(void)
+{
+    HAL_TIM_IRQHandler(&htimer2);
 }
 
 /**
@@ -220,6 +234,13 @@ void UART4_IRQHandler(void)
 void USART1_IRQHandler(void)
 {
     HAL_UART_IRQHandler(&huart1);
+
+    if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_IDLE))
+    {
+        __HAL_UART_CLEAR_IDLEFLAG(&huart1);
+        HAL_UART_IdleCallback(&huart1);
+        log_d("HAL_UART_IdleCallback");
+    }
 }
 
 /* USER CODE BEGIN 1 */

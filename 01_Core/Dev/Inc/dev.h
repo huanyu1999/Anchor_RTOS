@@ -9,6 +9,7 @@
 #include "dev_rx8130ce.h"
 #include "dev_linkFatFs.h"
 #include "dev_sdCard.h"
+#include "dev_gnss.h"
 
 
 #endif

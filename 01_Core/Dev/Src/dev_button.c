@@ -2,6 +2,7 @@
 #include "board_gpio.h"
 #include "dev.h"
 #include "com_multiButton.h"
+#include "cmsis_os2.h"
 
 // 在此定义multibutton结构体变量
 struct Button pause_key_s;
@@ -45,7 +46,7 @@ void dev_multiButtonAddAndStart(struct Button* button_handler, PressEvent event,
 }
 
 /********************************key_task************************************ */
-void dev_bottonTaskInit(void)
+void dev_buttonTaskInit(void)
 {
     dev_multiButtonInit(&pause_key_s, BUTTON_ID_PAUSE);
     dev_multiButtonAddAndStart(&pause_key_s, PRESS_DOWN, pauseButton_pressDownTask);
@@ -56,26 +57,32 @@ void dev_bottonTaskInit(void)
     dev_multiButtonAddAndStart(&switch_key_s, PRESS_DOWN, switchButton_pressDownTask);
     dev_multiButtonAddAndStart(&switch_key_s, PRESS_UP, switchButton_pressUpTask);
     button_start(&switch_key_s);
-
 }
 
 static void pauseButton_pressDownTask(void * btn)
 {
     dev_buzzerClose(buzzer);        // 短暂按下，关闭蜂鸣器
+    log_d("bee close.");
 }
 
 static void pauseButton_longPressTask(void * btn)
 {
     dev_buzzerInit(buzzer);             // 长按重新开启蜂鸣器
+    log_d("bee open.");
 }
-
+extern osThreadId_t task3_canSend_Handle;
 static void switchButton_pressDownTask(void * btn)
 {
-    // 发送对侧播报停止信息
-
+    // uint8_t button_value = dev_buttonRead(BUTTON_ID_SWITCH);
+    // HAL_GPIO_ReadPin();                 // 获取当前键值
+    osThreadFlagsSet(task3_canSend_Handle, 0x01);                 // 发送当前键值
+    log_d("switchButton_pressDownTask 0x01");
 }
 
 static void switchButton_pressUpTask(void * btn)
 {
-    // 功能待开发
+    // uint8_t button_value = dev_buttonRead(BUTTON_ID_SWITCH);
+    // HAL_GPIO_ReadPin();
+    osThreadFlagsSet(task3_canSend_Handle, 0x02);
+    log_d("switchButton_pressUpTask 0x02");
 }

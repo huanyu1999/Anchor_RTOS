@@ -1,7 +1,7 @@
 #ifndef __DEV_RX8130CE_H__
 #define __DEV_RX8130CE_H__
 
-#include "main.h"
+#include <stdint.h>
 
 /* rx8130ce register definitions */
 #define RX8130_REG_SEC		0x10

@@ -22,20 +22,18 @@
 #include "task.h"
 #include "cmsis_os.h"
 
-#include "ff.h"
-#include "ffconf.h"
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "main.h"
 #include "instance.h"
-#include "usart.h"
+#include "app.h"
+#include "elog.h"
+#include "dev.h"
 #include "usart_voice.h"
 #include "timer.h"
 #include "board_dw1000.h"
-#include "dev.h"
+
 #include "drv_sdio.h"
-#include "elog.h"
 
 #include "com_multiButton.h"
 
@@ -62,19 +60,13 @@ typedef StaticQueue_t osStaticMessageQDef_t;
 /**************************************************************CAN Communication**************************************************************/
 uint32_t anchorCanExtId = 0xAAA0;
 CAN_RxHeaderTypeDef RxHeader;
-uint8_t RxData[8];
-
-/**************************************************************FatFs support**************************************************************/
-FATFS SDFatFs;  /* File system object for SD card logical drive */
-FIL MyFile;     /* File object */
-char SDPath[4]; /* SD card logical drive path */
-static uint8_t workBuffer[FF_MAX_SS]; /* a work buffer for the f_mkfs() */
+uint8_t RxData[5];
 
 /**************************************************************Voice Output**************************************************************/
 static int32_t voiceOutputDis = 0;
 
 /**************************************************************Semaphore**************************************************************/
-osSemaphoreId_t binSem;                                         // 用于dw1000中断同步
+osSemaphoreId_t binSem;                                      // 用于dw1000中断同步
 StaticSemaphore_t binSemCB;
 const osSemaphoreAttr_t binSem_attr = { .name = "binSem", .cb_mem = &binSemCB, .cb_size = sizeof(StaticSemaphore_t) };
 
@@ -86,31 +78,31 @@ osSemaphoreId_t elog_asyncSem;                               // 用于elog_async
 StaticSemaphore_t elog_asyncSemCB;
 const osSemaphoreAttr_t elog_asyncSem_attr = { .name = "elog_async", .cb_mem = &elog_asyncSemCB, .cb_size = sizeof(StaticSemaphore_t) };
 
-osSemaphoreId_t elog_dmaLockSem;                            // 用于elog串口dma发送同步，串口发送完成中断中释放，串口DMA发送前获取
-StaticSemaphore_t elog_dmaLockSemCB;
-const osSemaphoreAttr_t elog_dmaLockSem_attr = { .name = "elog_dmaLock", .cb_mem = &elog_dmaLockSemCB, .cb_size = sizeof(StaticSemaphore_t) };
+osSemaphoreId_t uart_dmaLockSem;                             // 用于elog串口dma发送同步，串口发送完成中断中释放，串口DMA发送前获取
+StaticSemaphore_t uart_dmaLockSemCB;
+const osSemaphoreAttr_t uart_dmaLockSem_attr = { .name = "uart_dmaLock", .cb_mem = &uart_dmaLockSemCB, .cb_size = sizeof(StaticSemaphore_t) };
+
+osSemaphoreId_t gnssReceiveSem;
+StaticSemaphore_t gnssReceiveSemCB;
+const osSemaphoreAttr_t gnssReceiveSem_attr = { .name = "gnssReceive", .cb_mem = &gnssReceiveSemCB, .cb_size = sizeof(StaticSemaphore_t) };
 
 /**************************************************************QueueMsg**************************************************************/
 osMessageQueueId_t minDisQueue;                                 /* Definitions for minDisQueue */
-outDistance_t     minDisQueueBuffer[6 * sizeof(outDistance_t)];
+outDistance_t     minDisQueueBuffer[3 * sizeof(outDistance_t)];
 osStaticMessageQDef_t minDisQueueCB;
 const osMessageQueueAttr_t minDisQueue_attr = {
     .name    = "minDisQueue",
-    .cb_mem  = &minDisQueueCB,
-    .cb_size = sizeof(minDisQueueCB),
-    .mq_mem  = &minDisQueueBuffer,
-    .mq_size = sizeof(minDisQueueBuffer)
+    .cb_mem  = &minDisQueueCB, .cb_size = sizeof(minDisQueueCB),
+    .mq_mem  = &minDisQueueBuffer, .mq_size = sizeof(minDisQueueBuffer)
 };
 
-osMessageQueueId_t rxDisQueue;                                 /* Definitions for rxDisQueue */
-outDistance_t     rxDisQueueBuffer[6 * sizeof(outDistance_t)];
-osStaticMessageQDef_t rxDisQueueCB;
-const osMessageQueueAttr_t rxDisQueue_attr = {
-    .name    = "rxDisQueue",
-    .cb_mem  = &rxDisQueueCB,
-    .cb_size = sizeof(rxDisQueueCB),
-    .mq_mem  = &rxDisQueueBuffer,
-    .mq_size = sizeof(rxDisQueueBuffer)
+osMessageQueueId_t canRxDisQueue;                                 /* Definitions for rxDisQueue */
+outDistance_t      canRxDisQueueBuffer[4 * sizeof(outDistance_t)];
+osStaticMessageQDef_t canRxDisQueueCB;
+const osMessageQueueAttr_t canRxDisQueue_attr = {
+    .name    = "canRxDisQueue",
+    .cb_mem  = &canRxDisQueueCB, .cb_size = sizeof(canRxDisQueueCB),
+    .mq_mem  = &canRxDisQueueBuffer, .mq_size = sizeof(canRxDisQueueBuffer)
 };
 
 /**************************************************************Thread**************************************************************/
@@ -128,11 +120,11 @@ const osThreadAttr_t task1_anchorDisHandling_attr = {
     .priority = (osPriority_t) osPriorityRealtime6,
 };
 
-osThreadId_t task2_voiceOut_Handle;                             /* Definitions for canRxTask_2 */
+osThreadId_t task2_voiceOut_Handle;                          /* Definitions for canRxTask_2 */
 const osThreadAttr_t task2_voiceOut_attr = {
     .name = "task2_voiceOut",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t) osPriorityRealtime4,
+    .stack_size = 128 * 2,
+    .priority = (osPriority_t) osPriorityRealtime6,
 };
 
 osThreadId_t task3_canSend_Handle;
@@ -140,24 +132,25 @@ uint32_t canSendTask_buffer[512];
 osStaticThreadDef_t canSendTaskCB;
 const osThreadAttr_t task3_canSend_attr = {
     .name = " task3_canSend",
-    .stack_mem = &canSendTask_buffer[0],
-    .stack_size = sizeof(canSendTask_buffer),
-    .cb_mem = &canSendTaskCB,
-    .cb_size = sizeof(canSendTaskCB),
+    .stack_mem = &canSendTask_buffer[0], .stack_size = sizeof(canSendTask_buffer),
+    .cb_mem = &canSendTaskCB, .cb_size = sizeof(canSendTaskCB),
     .priority = (osPriority_t) osPriorityRealtime5,
 };
 
 osThreadId_t task4_Handle;
+uint32_t task4_buffer[512];
+osStaticThreadDef_t task4CB;
 const osThreadAttr_t task4_attr = {
     .name = "task4",
-    .stack_size = 128 * 4,
-    .priority = (osPriority_t) osPriorityRealtime5,
+    .stack_mem = &task4_buffer[0], .stack_size = sizeof(task4_buffer),
+    .cb_mem = &task4CB, .cb_size = sizeof(task4CB),
+    .priority = (osPriority_t) osPriorityRealtime6,
 };
 
-osThreadId_t task5_findMinDis_Handle;
-const osThreadAttr_t task5_findMinDis_attr = {
-    .name = "task5_findMinDis",
-    .stack_size = 128 * 4,
+osThreadId_t task5_Handle;
+const osThreadAttr_t task5_attr = {
+    .name = "task5",
+    .stack_size = 256 * 2,
     .priority = (osPriority_t) osPriorityRealtime6,
 };
 
@@ -166,22 +159,28 @@ uint32_t logManageTask_buffer[256];
 osStaticThreadDef_t logManageTaskCB;
 const osThreadAttr_t task6_logManage_attr = {
     .name = "logManageTask",
-    .stack_mem = &logManageTask_buffer[0],
-    .stack_size = sizeof(logManageTask_buffer),
-    .cb_mem = &logManageTaskCB,
-    .cb_size = sizeof(logManageTaskCB),
-    .priority = (osPriority_t) osPriorityRealtime6
+    .stack_mem = &logManageTask_buffer[0], .stack_size = sizeof(logManageTask_buffer),
+    .cb_mem = &logManageTaskCB, .cb_size = sizeof(logManageTaskCB),
+    .priority = (osPriority_t) osPriorityRealtime5
 };
 
-osThreadId_t task7_sdCard_Handle;
-uint32_t sdCardTask_buffer[256];
-osStaticThreadDef_t sdCardTaskCB;
-const osThreadAttr_t task7_sdCard_attr = {
-    .name = " sdCardTask",
-    .stack_mem = & sdCardTask_buffer[0],
-    .stack_size = sizeof(sdCardTask_buffer),
-    .cb_mem = & sdCardTaskCB,
-    .cb_size = sizeof(sdCardTaskCB),
+osThreadId_t task7_Handle;
+uint32_t  task7_buffer[256];
+osStaticThreadDef_t task7CB;
+const osThreadAttr_t task7_attr = {
+    .name = " task7",
+    .stack_mem = &task7_buffer[0], .stack_size = sizeof(task7_buffer),
+    .cb_mem = &task7CB, .cb_size = sizeof(task7CB),
+    .priority = (osPriority_t) osPriorityRealtime5
+};
+
+osThreadId_t task8_Handle;
+uint32_t  task8_buffer[256];
+osStaticThreadDef_t task8CB;
+const osThreadAttr_t task8_attr = {
+    .name = " task8",
+    .stack_mem = &task8_buffer[0], .stack_size = sizeof(task8_buffer),
+    .cb_mem = &task8CB, .cb_size = sizeof(task8CB),
     .priority = (osPriority_t) osPriorityRealtime5
 };
 
@@ -189,16 +188,13 @@ const osThreadAttr_t task7_sdCard_attr = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-void task0_uwb(void *argument);
-void task1_anchorDisHandling(void *argument);
-void task2_voiceOut(void *argument);
-void task3_canSend(void *argument);
-void task4_timerYield(void *argument);
-void task5_findMinDis(void *argument);
-void task7_sdCard(void *argument);
-void task_logTest(void *argument);
+void task1_anchorDisHandling(void *arg);
+void task2_voiceOut(void *arg);
+void task3_canSend(void *arg);
+void task_Test(void *arg); 
+void task_canReceiveHandle(void *arg);
 
-static void split32to8(uint32_t value, uint8_t *bytes);
+static void split32to8(int32_t value, uint8_t *bytes); 
 static uint32_t combine8to32(const uint8_t *bytes);
 
 /* USER CODE END FunctionPrototypes */
@@ -214,92 +210,92 @@ void MX_FREERTOS_Init(void)
 {
     /* USER CODE BEGIN RTOS_QUEUES */
     /* add queues, ... */
-    minDisQueue = osMessageQueueNew(3, sizeof(outDistance_t), &minDisQueue_attr);
-    rxDisQueue  = osMessageQueueNew(3, sizeof(outDistance_t), &rxDisQueue_attr);
+    minDisQueue     = osMessageQueueNew(3, sizeof(outDistance_t), &minDisQueue_attr);
+    canRxDisQueue   = osMessageQueueNew(3, sizeof(outDistance_t), &canRxDisQueue_attr);
     binSem          = osSemaphoreNew(1, 0, &binSem_attr);
     elog_lockSem    = osSemaphoreNew(1, 1, &elog_lockSem_attr);                 // 该二值信号量初始值必须设置为1
     elog_asyncSem   = osSemaphoreNew(1, 1, &elog_asyncSem_attr); 
-    elog_dmaLockSem = osSemaphoreNew(1, 1, &elog_dmaLockSem_attr);  
+    uart_dmaLockSem = osSemaphoreNew(1, 0, &uart_dmaLockSem_attr);  
+    gnssReceiveSem  = osSemaphoreNew(1, 0, &gnssReceiveSem_attr);
     /* USER CODE END RTOS_QUEUES */
 
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
-    // task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
-    // task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
-    // task2_voiceOut_Handle          = osThreadNew(task2_voiceOut, NULL, &task2_voiceOut_attr);
-    // task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
-    // task4_Handle                   = osThreadNew(task4_timerYield, NULL, &task4_attr);
-    // task5_findMinDis_Handle = osThreadNew(task5_findMinDis, NULL, &task5_findMinDis_attr);
-    task6_logManage_Handle = osThreadNew(elog_entry, NULL, &task6_logManage_attr);
-    task7_sdCard_Handle = osThreadNew(task_logTest, NULL, &task7_sdCard_attr);
+    task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
+    task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
+    task2_voiceOut_Handle          = osThreadNew(task2_voiceOut, NULL, &task2_voiceOut_attr);
+    task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
+    task4_Handle                   = osThreadNew(task_tagDistInsertAndUpdate, NULL, &task4_attr);
+    task5_Handle                   = osThreadNew(task_tagDistClearInvalid, NULL, &task5_attr);
+    task6_logManage_Handle         = osThreadNew(elog_entry, NULL, &task6_logManage_attr);
+    task7_Handle                   = osThreadNew(task_gnssModule, NULL, &task7_attr);
+    task8_Handle                   = osThreadNew(task_canReceiveHandle, NULL, &task8_attr);
 
     /* USER CODE END RTOS_THREADS */
 }
 
 uint32_t flag;
 uint8_t voice_clear_left[] = "clear voice L";
-uint32_t anchorCanExtId1 = 0xAAA1;
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 
-
-int32_t anchorSelfDis  = 2000000;
-int32_t anchorRxDis    = 2000000;
-int32_t anchorFinalDis = 2000000;
 /**
   * @brief  距离输出处理，此任务需要跟堆更新任务进行同步
   * @param  none 
   * @retval none
   */
-void task1_anchorDisHandling(void *argument) 
+void task1_anchorDisHandling(void *arg) 
 {
     osStatus status;
-    bool status1;
-    
+    int32_t anchorSelfDis  = 2000000;
+    uint8_t anchorSelfIdx = 0xFF;
+    int32_t anchorRxDis    = 2000000;
+    uint8_t anchorRxIdx = 0xFF;
+    int32_t anchorFinalDis = 2000000;
+    uint8_t anchorFinalIdx = 0xFF;
+    static uint8_t canSendBuf[5];           // CAN 发送缓存设置为5位，前面4位存储距离，最后1位存储ID
     for (;;)
     {
-        dwDistance_t* distance =  get_the_local_structure_of_dis();
-        status1 = heap_peek_root(&distance->dis_min_heap, &distance->min_dis, &distance->dis_idx);     // 堆更新完毕后，采集一次堆顶，也就是最小值
-
-        if (status1 == true)
-        {
-            anchorSelfDis = distance->min_dis;      // 获取最小距离
-        }
-        else                                        // 堆为空的时候，说明没有有效距离，将该距离设置为无效值
-        {
-            anchorSelfDis = 2000000;
-        }
-        
+        dwDistance_t *distance = get_the_local_structure_of_dis();
         /* 存储最小距离，通过队列发送出去 */ 
-        distance->disMsg[0].dis_class = ANCHOR_SELF_DIS;
-        distance->disMsg[0].dis_value = anchorSelfDis;
-        status = osMessageQueuePut(minDisQueue, &distance->disMsg[0], 0, 100);
-        
+        status = osMessageQueueGet(minDisQueue, &distance->disMsg[0], 0, 100);
+        if ((status == osOK) && (distance->disMsg[0].dis_class == ANCHOR_SELF_DIS))
+        {
+            anchorSelfDis = distance->disMsg[0].dis_value;
+            anchorSelfIdx = distance->disMsg[0].dis_index;
+            split32to8(anchorSelfDis, canSendBuf);
+            canSendBuf[4] = anchorSelfIdx;
+            dev_canSendMsg(anchorCanExtId, canSendBuf, ARRAY_LENGTH(canSendBuf));
+        }
+
         /* 从CAN接收中断中获取对侧基站最小距离 */
-        status = osMessageQueueGet(rxDisQueue, &distance->disMsg[1], 0, 100);
-        if ((status == osOK) && (distance->disMsg[1].dis_class == OTHER_ANCHOR_DIS))
+        status = osMessageQueueGet(canRxDisQueue, &distance->disMsg[1], 0, 100);
+        if ((status == osOK) && (distance->disMsg[1].dis_class == ANCHOR_OTHER_DIS))
         {
             anchorRxDis = distance->disMsg[1].dis_value; // 获取接收的距离
+            anchorRxIdx = distance->disMsg[1].dis_index;
         }
         
         if (anchorSelfDis > anchorRxDis)
         {
-            anchorFinalDis = anchorRxDis;                   /* 最近的标签位于对侧基站*/
             dev_ledOn(across_led);
             dev_ledOff(onside_led);
+            anchorFinalDis = anchorRxDis;                   /* 最近的标签位于对侧基站*/
+            anchorFinalIdx = anchorRxIdx; 
         }
         else
         {
-            anchorFinalDis = anchorSelfDis;                 /* 最近的标签位于本侧基站*/
             dev_ledOff(across_led);
             dev_ledOn(onside_led);
+            anchorFinalDis = anchorSelfDis;                 /* 最近的标签位于本侧基站*/
+            anchorFinalIdx = anchorSelfIdx;
         }
         
         voiceOutputDis = anchorFinalDis;
 
-        log_d("SelfDis %.2f, RxDis %.2f, FinalDis %.2f \n", (float)(anchorSelfDis) / 1000, (float)(anchorRxDis) / 1000, (float)(anchorFinalDis) / 1000);
-        osDelay(400);       /* 定时处理距离数据 */
+        log_d("SelfDis ID %d %.2f, RxDis ID %d %.2f, FinalDis ID %d %.2f \n", anchorSelfIdx, (float)(anchorSelfDis) / 1000,                                                              anchorRxIdx, (float)(anchorRxDis) / 1000,                                                                  anchorFinalIdx, (float)(anchorFinalDis) / 1000);
+        osDelay(450);       /* 定时处理距离数据 */
     }
 }
 
@@ -308,11 +304,11 @@ void task1_anchorDisHandling(void *argument)
   * @param  none 
   * @retval none
   */
-void task2_voiceOut(void *argument)
+void task2_voiceOut(void *arg)
 {
     uint32_t tick;
-
     tick = osKernelGetTickCount();
+
     for (;;)
     {
         if (voiceOutputDis < 100000)
@@ -324,167 +320,77 @@ void task2_voiceOut(void *argument)
             dev_buzzerClose(buzzer);
         }
         
-        Report_Dis((float)voiceOutputDis / 1000.0);
+        Report_Dis((float)voiceOutputDis / 1000.0); // 在此处直接输出最终的距离，后续调试看情况是否需要加上互斥量保护
+
         tick += 1100;
         osDelayUntil(tick);
     }
 }
 
-void task3_canSend(void *argument)
+void task3_canSend(void *arg)
 {   
-    outDistance_t sendDis;
-    osStatus_t status;
-    static uint8_t canSendBuf[4];
+    uint32_t CanExtId4Button = 0xAAA1;
     for (;;)
     {
-        status = osMessageQueueGet(minDisQueue, &sendDis, 0, portMAX_DELAY);
-        if (status  == osOK)
-        {
-            split32to8(sendDis.dis_value, canSendBuf);
-            dev_canSendMsg(anchorCanExtId, canSendBuf, 4);                                 // CAN 发送基站本测最小距离值(这句有问题)
-        }
+        osThreadFlagsWait(0x03, osFlagsWaitAny, osWaitForever);
+        uint8_t buttonVal = dev_buttonRead(BUTTON_ID_SWITCH);
+        dev_canSendMsg(CanExtId4Button, &buttonVal, 1);
+        log_d("switch button value sent.");
     }
 }
 
-void task4_timerYield(void *argument)
+void task_Test(void *arg)
 {
-    for (;;)
-    {
-        multiTimerYield();
-    }
-}
-
-void task5_findMinDis(void *argument)
-{
-    for (;;)
-    {
-        if (osThreadFlagsWait(0x00000001U, osFlagsWaitAll, osWaitForever))  // 等待定时任务发送的任务通知
-        {
-            tag_distance_handler();
-        }
-    }
-}
-
-void task_logTest(void *argument)
-{
-
+    char taskListBuffer[512];
+    vTaskList(taskListBuffer);
+    log_i("Task list:\n%s", taskListBuffer);
     for(;;) 
     {
-        log_e("startggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggend");
-        log_w("startlllllend");
-        log_i("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk");
-        // printf_use_dma("startggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggend\r\n");
-        // printf_use_dma("startlllllend\r\n");
-        // printf_use_dma("kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\r\n");
         osDelay(500);
-        
-
     }
 }
 
-void task7_sdCard(void *argument)
+void task_canReceiveHandle(void *arg)
 {
-    FRESULT res;                                          /* FatFs function common result code */
-    uint32_t byteswritten, bytesread;                     /* File write/read counts */
-    uint8_t wtext[] = "This is STM32 working with FatFs"; /* File write buffer */
-    uint8_t rtext[100];                                   /* File read buffer */
-
-    /*##-1- Link the micro SD disk I/O driver ##################################*/
-    if (dev_FATFS_LinkDriver(&SDCard_driver, SDPath) == 0)
+    outDistance_t rxMsg;
+    static int32_t anchorReceiveDis = 2000000;  /* 用于储存基站接收到的距离 */
+    for (;;)
     {
-        /*##-2- Register the file system object to the FatFs module ##############*/
-        if (f_mount(&SDFatFs, (TCHAR const*)SDPath, 0) != FR_OK)
+        osThreadFlagsWait(0x01, osFlagsWaitAny, osWaitForever);
+
+        if ((RxHeader.ExtId == 0xAAA0) && (RxHeader.IDE == CAN_ID_EXT))
         {
-            /* FatFs Initialization Error */
-            log_e("f_mount failed.");
-        }
-        else
+            anchorReceiveDis = combine8to32(RxData);             // CAN正确接收，填充距离
+            rxMsg.dis_class = ANCHOR_OTHER_DIS;
+            rxMsg.dis_value = anchorReceiveDis;
+            rxMsg.dis_index = RxData[4];                        // 获取存储的标签ID
+            osMessageQueuePut(canRxDisQueue, &rxMsg, 0, 0);
+            dev_ledBlink(can_rx_led);
+        } 
+        else if ((RxHeader.ExtId == 0xAAA1) && (RxHeader.IDE == CAN_ID_EXT))        
         {
-            /*##-3- Create a FAT file system (format) on the logical drive #########*/
-            /* WARNING: Formatting the uSD card will delete all content on the device */
-            if(f_mkfs((TCHAR const*)SDPath, FM_FAT32, 0, workBuffer, sizeof(workBuffer)) != FR_OK)
+            // 接收到的为旋钮控制信息，校验两侧旋钮键值，播报还是静音
+            uint8_t rxbutton_val = RxData[0];
+            uint8_t selfButton_val =  dev_buttonRead(BUTTON_ID_SWITCH);
+            log_d("receive button_val : %d", rxbutton_val);
+
+            if (rxbutton_val == selfButton_val)
             {
-                /* FatFs Format Error */
-                // Error_Handler();
-                log_e("f_mkfs failed.");
+                // 两侧键值相同，打开播报
+                log_d("receive button_val same, open voice");
+                dev_buzzerInit(buzzer);
             }
             else
             {
-                /*##-4- Create and Open a new text file object with write access #####*/
-                if(f_open(&MyFile, "STM32.TXT", FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
-                {       
-                    /* 'STM32.TXT' file Open for write Error */
-                    // Error_Handler();
-                    log_e("f_open failed.");
-                }
-                else
-                {
-                    /*##-5- Write data to the text file ################################*/
-                    res = f_write(&MyFile, wtext, sizeof(wtext), (void *)&byteswritten);
-
-                    if((byteswritten == 0) || (res != FR_OK))
-                    {
-                        /* 'STM32.TXT' file Write or EOF Error */
-                        // Error_Handler();
-                        log_e("'STM32.TXT' file Write or EOF Error.");
-                    }
-                    else
-                    {
-                        /*##-6- Close the open text file #################################*/
-                        f_close(&MyFile);
-            
-                        /*##-7- Open the text file object with read access ###############*/
-                        if(f_open(&MyFile, "STM32.TXT", FA_READ) != FR_OK)
-                        {
-                            /* 'STM32.TXT' file Open for read Error */
-                            log_e("'STM32.TXT' file Open for read Error.");
-                        }
-                        else
-                        {
-                            /*##-8- Read data from the text file ###########################*/
-                            res = f_read(&MyFile, rtext, sizeof(rtext), (UINT*)&bytesread);
-                            
-                            if((bytesread == 0) || (res != FR_OK))
-                            {
-                                /* 'STM32.TXT' file Read or EOF Error */
-                                log_e("'STM32.TXT' file Read or EOF Error.");Error_Handler();
-                            }
-                            else
-                            {
-                                /*##-9- Close the open text file #############################*/
-                                f_close(&MyFile);
-                                
-                                /*##-10- Compare read data with the expected data ############*/
-                                if((bytesread != byteswritten))
-                                {                
-                                    /* Read data is different from the expected data */
-                                    log_e("Read data is different from the expected data.");
-                                }
-                                else
-                                {
-                                    /* Success of the demo: no error occurrence */
-                                    // BSP_LED_On(LED1);
-                                    log_d("Success of the sd card demo.");
-                                }
-                            }       
-                        }
-                    }
-                }
+                // 两侧键值不相同，关闭播报
+                log_d("receive button_val not same, close voice");
+                dev_buzzerClose(buzzer);
             }
         }
     }
-
-    /*##-11- Unlink the RAM disk I/O driver ####################################*/
-    dev_FATFS_UnLinkDriver(SDPath);
-
-    for (;;)
-    {
-    }
 }
 
-
-
-/*************************************************some callback function*************************************************/
+/*************************************************some interrupt callback function*************************************************/
 
 /**
   * @brief  Rx Fifo 0 message pending callback
@@ -494,27 +400,9 @@ void task7_sdCard(void *argument)
   */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-    static int32_t anchorReceiveDis = 2000000;  /* 用于储存基站接收到的距离 */
-    outDistance_t rxMsg;
-
-    memset(&RxHeader, 0, sizeof(RxHeader));
-    memset(&RxData, 0, sizeof(RxData));
-
     if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)      /* Get RX message */
     {
-        if ((RxHeader.ExtId == 0xAAA0) && (RxHeader.IDE == CAN_ID_EXT))
-        {
-            anchorReceiveDis = combine8to32(RxData);             // CAN正确接收，填充距离
-            rxMsg.dis_class = OTHER_ANCHOR_DIS;
-            rxMsg.dis_value = anchorReceiveDis;
-            osMessageQueuePut(rxDisQueue, &rxMsg, 0, 0);
-            dev_ledBlink(can_rx_led);
-        } 
-        else if ((RxHeader.ExtId == 0xAAA1) && (RxHeader.IDE == CAN_ID_EXT))
-        {
-            HAL_GPIO_DeInit(BUZZER_GPIO_Port, BUZZER_Pin);
-            HAL_UART_DeInit(&huart4);
-        }
+        osThreadFlagsSet(task8_Handle, 0x01);
     } 
     else
     {
@@ -537,6 +425,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
         HAL_IncTick();  // HAL延时所使用的时基
     }
+    else if (htim->Instance == TIM2)
+    {
+        extern osSemaphoreId_t tagDistClearSem;
+        if (osSemaphoreRelease(tagDistClearSem) == osOK)
+        {
+            // log_d("tdmaCycleTimer_CallBack");
+        }
+    }
 }
 
 /* @fn		HAL_GPIO_EXTI_Callback
@@ -547,7 +443,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == Dw1000_RSTn_Pin)
     {
-        // port_set_signalReset();
         board_dw1000SetSignalReset();
     }
     else if (GPIO_Pin == Dw1000_IRQ_Pin)
@@ -556,9 +451,26 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
 }
 
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) 
+{
+    if (huart->Instance == USART1)                     
+    {
+        osSemaphoreRelease(uart_dmaLockSem);
+    }
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == USART1) 
+    {
+        osSemaphoreRelease(uart_dmaLockSem);
+    }
+}
+
 /*************************************************some static function*************************************************/
 // 将32位整数分解为4个8位整数
-static void split32to8(uint32_t value, uint8_t *bytes) {
+static void split32to8(int32_t value, uint8_t *bytes) 
+{
     bytes[0] = (value >> 24) & 0xFF; // 高8位
     bytes[1] = (value >> 16) & 0xFF; // 次高8位
     bytes[2] = (value >> 8) & 0xFF;  // 次低8位
@@ -566,7 +478,8 @@ static void split32to8(uint32_t value, uint8_t *bytes) {
 }
 
 // 将4个8位整数组合成1个32位整数
-static uint32_t combine8to32(const uint8_t *bytes) {
+static uint32_t combine8to32(const uint8_t *bytes) 
+{
     return ((uint32_t)bytes[0] << 24) | 
            ((uint32_t)bytes[1] << 16) | 
            ((uint32_t)bytes[2] << 8)  | 

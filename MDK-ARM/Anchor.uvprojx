@@ -420,6 +420,11 @@
               <FileType>5</FileType>
               <FilePath>..\01_Core\App\Inc\FreeRTOSConfig.h</FilePath>
             </File>
+            <File>
+              <FileName>app_gnss.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\App\Src\app_gnss.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -540,6 +545,11 @@
               <FileName>dev_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Dev\Src\dev_uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_gnss.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_gnss.c</FilePath>
             </File>
           </Files>
         </Group>

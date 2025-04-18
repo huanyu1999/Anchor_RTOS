@@ -6,29 +6,20 @@
 TIM_HandleTypeDef htimer2;
 TIM_HandleTypeDef htimer3;
 
-uint32_t uwPrescalerValue = 0;
-
-void timer_test_callBack(MultiTimer* timer, void* userData);
-
-/* TIM2 init function period 600ms */
-void MX_TIM2_Init(void)
+void MX_TIM2_Init(uint32_t period_ms)
 {
     TIM_ClockConfigTypeDef sClockSourceConfig = {0};
     TIM_MasterConfigTypeDef sMasterConfig = {0};
-    
+
+    uint32_t period_value = (period_ms * 10000 / 1000) - 1;
+
     /* Compute the prescaler value to have TIM2 counter clock equal to 1 KHz */
-    uwPrescalerValue = (uint32_t) ((SystemCoreClock / 2) / 10000) - 1;
+    uint32_t uwPrescalerValue = (uint32_t) ((SystemCoreClock / 2) / 10000) - 1;
     
     /* Set TIMx instance */
     htimer2.Instance = TIM2;
     
-    /* Initialize TIM3 peripheral as follow:
-       + Period = 1000 - 1
-       + Prescaler = ((SystemCoreClock/2)/1000) - 1
-       + ClockDivision = 0
-       + Counter direction = Up
-    */
-    htimer2.Init.Period = 50000 - 1;                 // 500ms 中断一次
+    htimer2.Init.Period = period_value;                 // 500ms 中断一次
     htimer2.Init.Prescaler = uwPrescalerValue;
     htimer2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htimer2.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -65,7 +56,7 @@ void MX_TIM3_Init(void)
     TIM_MasterConfigTypeDef sMasterConfig = {0};
     
     /* Compute the prescaler value to have TIM2 counter clock equal to 1 KHz */
-    uwPrescalerValue = (uint32_t) ((SystemCoreClock / 2) / 10000) - 1;
+    uint32_t uwPrescalerValue = (uint32_t) ((SystemCoreClock / 2) / 10000) - 1;
     
     /* Set TIMx instance */
     htimer3.Instance = TIM3;
@@ -123,31 +114,31 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
 
     /*##-2- Configure the NVIC for TIMx ########################################*/
     /* Set Interrupt Group Priority */ 
-    // HAL_NVIC_SetPriority(TIM2_IRQn, 3, 0);
+    HAL_NVIC_SetPriority(TIM2_IRQn, 5, 0);
     HAL_NVIC_SetPriority(TIM3_IRQn, 6, 0);
 
     /* Enable the TIMx global Interrupt */
-    // HAL_NVIC_EnableIRQ(TIM2_IRQn);
+    HAL_NVIC_EnableIRQ(TIM2_IRQn);
     HAL_NVIC_EnableIRQ(TIM3_IRQn);
 }
 
 /**********************************************multi timer init**************************************************** */
-MultiTimer timer_test;
+// MultiTimer timer_test;
 
-void multiTimer_init(void)
-{
-    multiTimerInstall(platform_Ticks_Get);
-    // multiTimerStart(&timer_test, 400, timer_test_callBack, NULL);
-}
+// void multiTimer_init(void)
+// {
+//     multiTimerInstall(platform_Ticks_Get);
+//     // multiTimerStart(&timer_test, 400, timer_test_callBack, NULL);
+// }
 
-uint64_t platform_Ticks_Get(void)
-{
-    return (uint64_t)HAL_GetTick();
-}
+// uint64_t platform_Ticks_Get(void)
+// {
+//     return (uint64_t)HAL_GetTick();
+// }
 
-void timer_test_callBack(MultiTimer* timer, void* userData)
-{
+// void timer_test_callBack(MultiTimer* timer, void* userData)
+// {
 
-    printf_use_dma("timer_test_callBack\r\n");
-    multiTimerStart(&timer_test, 400, timer_test_callBack, NULL);
-}
+//     printf_use_dma("timer_test_callBack\r\n");
+//     multiTimerStart(&timer_test, 400, timer_test_callBack, NULL);
+// }

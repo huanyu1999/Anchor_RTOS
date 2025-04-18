@@ -217,17 +217,17 @@ int dwt_initialise(uint16 config)
     // Read system register / store local copy
     pdw1000local->sysCFGreg = dwt_read32bitreg(SYS_CFG_ID); // Read sysconfig register
     
-    // {
-    //     uint32 reg;
-    //     // Set up MFIO
-    //     reg = dwt_read32bitreg(GPIO_CTRL_ID);
-    //     reg |= 0x00014000 ; //7 and 8 to mode - to be used with PA
-    //     reg |= 0x00050000 ; //8 and 9 to mode - RX/TX testing
-    //     dwt_write32bitreg(GPIO_CTRL_ID,reg);
+    {
+         uint32 reg;
+         // Set up MFIO
+         reg = dwt_read32bitreg(GPIO_CTRL_ID);
+         reg |= 0x00014000 ; //7 and 8 to mode - to be used with PA
+         reg |= 0x00050000 ; //8 and 9 to mode - RX/TX testing
+         dwt_write32bitreg(GPIO_CTRL_ID,reg);
 
-    //     //disable fine grain sequencing - this is needed when using PA on the TX
-    //     dwt_write16bitoffsetreg(PMSC_ID, PMSC_TXFINESEQ_OFFSET, PMSC_TXFINESEQ_DISABLE);
-    // }
+         //disable fine grain sequencing - this is needed when using PA on the TX
+         dwt_write16bitoffsetreg(PMSC_ID, PMSC_TXFINESEQ_OFFSET, PMSC_TXFINESEQ_DISABLE);
+    }
 
     return DWT_SUCCESS;
 

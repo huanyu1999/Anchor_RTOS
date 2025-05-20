@@ -8,7 +8,13 @@ CAN_TxHeaderTypeDef tx_header;
 
 void dev_canInit(void)
 {
+#if USE_CAN1
     drv_can1Init();
+#elif USE_CAN2
+    drv_can2Init();
+#else
+    #error "No CAN interface defined! Define USE_CAN1 or USE_CAN2."
+#endif
 }
 
 void dev_canStartRx(void)
@@ -31,14 +37,15 @@ void dev_canSendMsg(uint32_t extId, uint8_t* data, uint32_t length)
     tx_header.RTR = CAN_RTR_DATA;
     tx_header.DLC = length;
     tx_header.TransmitGlobalTime = DISABLE;
-    
-    if(HAL_CAN_AddTxMessage(&hcan1, &tx_header, data, &TxMailbox) == HAL_OK)
+
+    if(HAL_CAN_AddTxMessage(&hcan2, &tx_header, data, &TxMailbox) == HAL_OK)
     {
-        dev_ledBlink(can_tx_led);
+        // log_i("HAL_CAN_AddTxMessage Ok.");
+        // 后续加入log写入，CAN发送成功
     } 
     else 
     {
-        dev_ledOn(can_tx_led);
+        // log_i("");
     }
 }
 
@@ -53,14 +60,14 @@ void dev_canPollingRxMsg(void)
     uint8_t recv_data[8];
     
     CAN_RxHeaderTypeDef *rxHeader;
-    while(HAL_CAN_GetRxFifoFillLevel(&hcan1, CAN_RX_FIFO0) != 0)
+    while(HAL_CAN_GetRxFifoFillLevel(&hcan2, CAN_RX_FIFO0) != 0)
     {
-        if(__HAL_CAN_GET_FLAG(&hcan1, CAN_FLAG_FOV0) !=RESET) 
+        if(__HAL_CAN_GET_FLAG(&hcan2, CAN_FLAG_FOV0) !=RESET) 
         {
             
         }
         
-        HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, rxHeader, recv_data);
+        HAL_CAN_GetRxMessage(&hcan2, CAN_RX_FIFO0, rxHeader, recv_data);
 
         printf_use_dma( "ExtId ID:%d\n",rxHeader->ExtId);
         printf_use_dma( "CAN IDE:0x%x\n",rxHeader->IDE);

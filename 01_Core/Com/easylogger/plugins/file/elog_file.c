@@ -25,15 +25,14 @@
  * Function: Save log to file.
  * Created on: 2019-01-05
  */
-
- #define LOG_TAG    "elog.file"
-
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "elog_file.h"
+
+#define LOG_TAG    "elog.file"
 
 #ifdef ELOG_FILE_ENABLE
 
@@ -116,7 +115,7 @@ void elog_file_write(const char *log, size_t size)
     ELOG_ASSERT(init_ok);
     ELOG_ASSERT(log);
     if(fp == NULL) {
-    	return;
+        return;
     }
 
     elog_file_port_lock();

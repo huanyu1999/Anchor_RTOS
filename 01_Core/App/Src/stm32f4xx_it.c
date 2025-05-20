@@ -67,7 +67,7 @@ extern SD_HandleTypeDef sdCard_Handle;
 extern TIM_HandleTypeDef htimer2;
 extern TIM_HandleTypeDef htimer3;
 extern TIM_HandleTypeDef htim6;
-extern CAN_HandleTypeDef hcan1;
+extern CAN_HandleTypeDef hcan2;
 
 /* USER CODE BEGIN EV */
 
@@ -175,14 +175,6 @@ void DebugMon_Handler(void)
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
 
-/**
-  * @brief This function handles DMA1 stream4 global interrupt.
-  */
-void DMA1_Stream4_IRQHandler(void)
-{
-    HAL_DMA_IRQHandler(huart4.hdmatx);
-}
-
 void DMA2_Stream7_IRQHandler(void)
 {
     HAL_DMA_IRQHandler(huart1.hdmatx);
@@ -206,13 +198,23 @@ void TIM2_IRQHandler(void)
     HAL_TIM_IRQHandler(&htimer2);
 }
 
+#if TASK_INFO
+extern TIM_HandleTypeDef timer50usHandle;
+void TIM4_IRQHandler(void)
+{
+    HAL_TIM_IRQHandler(&timer50usHandle);
+}
+#endif
+
 /**
   * @brief This function handles CAN1 RX0 interrupt request.
   */
-void CAN1_RX0_IRQHandler(void)
+void CAN2_RX0_IRQHandler(void)
 {
-    HAL_CAN_IRQHandler(&hcan1);
+    HAL_CAN_IRQHandler(&hcan2);
 }
+
+
 
 /**
   * @brief This function handles EXTI line[15:10] interrupts.
@@ -226,10 +228,10 @@ void EXTI15_10_IRQHandler(void)
 /**
   * @brief This function handles UART4 global interrupt.
   */
-void UART4_IRQHandler(void)
-{
-    HAL_UART_IRQHandler(&huart4);
-}
+//void UART4_IRQHandler(void)
+//{
+//    HAL_UART_IRQHandler(&huart4);
+//}
 
 void USART1_IRQHandler(void)
 {
@@ -239,7 +241,7 @@ void USART1_IRQHandler(void)
     {
         __HAL_UART_CLEAR_IDLEFLAG(&huart1);
         HAL_UART_IdleCallback(&huart1);
-        log_d("HAL_UART_IdleCallback");
+        // log_d("HAL_UART_IdleCallback");
     }
 }
 

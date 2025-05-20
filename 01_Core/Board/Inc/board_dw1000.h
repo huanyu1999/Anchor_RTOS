@@ -5,7 +5,7 @@
 #define Dw1000_IRQ_GPIO_Port    GPIOC
 #define Dw1000_IRQ_EXTI_IRQn    EXTI15_10_IRQn
 
-#define Dw1000_RSTn_Pin         GPIO_PIN_14
+#define Dw1000_RSTn_Pin         GPIO_PIN_4
 #define Dw1000_RSTn_GPIO_Port   GPIOC
 
 typedef enum {

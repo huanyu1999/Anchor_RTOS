@@ -29,13 +29,15 @@
 #ifndef _ELOG_FILE_CFG_H_
 #define _ELOG_FILE_CFG_H_
 
+#define ELOG_FILE_ENABLE
+
 /* EasyLogger file log plugin's using file name */
-#define ELOG_FILE_NAME                 /* @note you must define it for a value */
+#define ELOG_FILE_NAME       0         /* @note you must define it for a value */
 
 /* EasyLogger file log plugin's using file max size */
-#define ELOG_FILE_MAX_SIZE             /* @note you must define it for a value */
+#define ELOG_FILE_MAX_SIZE    256         /* @note you must define it for a value */
 
 /* EasyLogger file log plugin's using max rotate file count */
-#define ELOG_FILE_MAX_ROTATE           /* @note you must define it for a value */
+#define ELOG_FILE_MAX_ROTATE  1024         /* @note you must define it for a value */
 
 #endif /* _ELOG_FILE_CFG_H_ */

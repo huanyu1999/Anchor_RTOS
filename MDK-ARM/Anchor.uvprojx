@@ -116,7 +116,7 @@
           <SimDlgDllArguments>-pCM4</SimDlgDllArguments>
           <TargetDllName>SARMCM3.DLL</TargetDllName>
           <TargetDllArguments>-MPU</TargetDllArguments>
-          <TargetDlgDll>TCM.DLL</TargetDlgDll>
+          <TargetDlgDll>DCM.DLL</TargetDlgDll>
           <TargetDlgDllArguments>-pCM4</TargetDlgDllArguments>
         </DllOption>
         <DebugOption>
@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F405xx</Define>
               <Undefine></Undefine>
-              <IncludePath>..\01_Core\App\dw1000_application;..\01_Core\App\Inc;..\01_Core\Board\Inc;..\01_Core\Com\compiler;..\01_Core\Com\kalmanfilter;..\01_Core\Com\min_heap;..\01_Core\Com\multi_timer;..\01_Core\Com\multi_button;..\01_Core\Com\easylogger\inc;..\01_Core\Dev\Inc;..\01_Core\Drv\Inc;..\01_Core\DW1000\decadriver;..\01_Core\DW1000\platform;..\02_Vendor_Lib;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc\Legacy;..\02_Vendor_Lib\CMSIS\Core\Include;..\02_Vendor_Lib\CMSIS\Device\ST\STM32F4xx\Include;..\02_Vendor_Lib\CMSIS\Include;..\03_Middlewares\Third_Party\FreeRTOS\Source\portable\RVDS\ARM_CM4F;..\03_Middlewares\Third_Party\FreeRTOS\Source\include;..\03_Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2;..\03_Middlewares\Third_Party\FatFS\Src</IncludePath>
+              <IncludePath>..\01_Core\App\dw1000_application;..\01_Core\App\Inc;..\01_Core\Board\Inc;..\01_Core\Com\compiler;..\01_Core\Com\kalmanfilter;..\01_Core\Com\min_heap;..\01_Core\Com\multi_timer;..\01_Core\Com\multi_button;..\01_Core\Com\easylogger\inc;..\01_Core\Com\easylogger\plugins\file;..\01_Core\Dev\Inc;..\01_Core\Drv\Inc;..\01_Core\DW1000\decadriver;..\01_Core\DW1000\platform;..\02_Vendor_Lib;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc;..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Inc\Legacy;..\02_Vendor_Lib\CMSIS\Core\Include;..\02_Vendor_Lib\CMSIS\Device\ST\STM32F4xx\Include;..\02_Vendor_Lib\CMSIS\Include;..\03_Middlewares\Third_Party\FreeRTOS\Source\portable\RVDS\ARM_CM4F;..\03_Middlewares\Third_Party\FreeRTOS\Source\include;..\03_Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS_V2;..\03_Middlewares\Third_Party\FatFS\Src</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -386,9 +386,24 @@
           <GroupName>App</GroupName>
           <Files>
             <File>
+              <FileName>FreeRTOSConfig.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\01_Core\App\Inc\FreeRTOSConfig.h</FilePath>
+            </File>
+            <File>
+              <FileName>instance.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\01_Core\App\dw1000_application\instance.h</FilePath>
+            </File>
+            <File>
               <FileName>main.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\App\Src\main.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_it.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\App\Src\stm32f4xx_it.c</FilePath>
             </File>
             <File>
               <FileName>freertos.c</FileName>
@@ -406,24 +421,14 @@
               <FilePath>..\01_Core\App\dw1000_application\instance_anchor.c</FilePath>
             </File>
             <File>
-              <FileName>stm32f4xx_it.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\App\Src\stm32f4xx_it.c</FilePath>
-            </File>
-            <File>
-              <FileName>instance.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\01_Core\App\dw1000_application\instance.h</FilePath>
-            </File>
-            <File>
-              <FileName>FreeRTOSConfig.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\01_Core\App\Inc\FreeRTOSConfig.h</FilePath>
-            </File>
-            <File>
               <FileName>app_gnss.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\App\Src\app_gnss.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_sdCard.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\App\Src\app_sdCard.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -640,62 +645,6 @@
               <FileName>elog_async.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Com\easylogger\src\elog_async.c</FilePath>
-            </File>
-            <File>
-              <FileName>elog_buf.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\Com\easylogger\src\elog_buf.c</FilePath>
-              <FileOption>
-                <CommonProperty>
-                  <UseCPPCompiler>2</UseCPPCompiler>
-                  <RVCTCodeConst>0</RVCTCodeConst>
-                  <RVCTZI>0</RVCTZI>
-                  <RVCTOtherData>0</RVCTOtherData>
-                  <ModuleSelection>0</ModuleSelection>
-                  <IncludeInBuild>0</IncludeInBuild>
-                  <AlwaysBuild>2</AlwaysBuild>
-                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
-                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
-                  <PublicsOnly>2</PublicsOnly>
-                  <StopOnExitCode>11</StopOnExitCode>
-                  <CustomArgument></CustomArgument>
-                  <IncludeLibraryModules></IncludeLibraryModules>
-                  <ComprImg>1</ComprImg>
-                </CommonProperty>
-                <FileArmAds>
-                  <Cads>
-                    <interw>2</interw>
-                    <Optim>0</Optim>
-                    <oTime>2</oTime>
-                    <SplitLS>2</SplitLS>
-                    <OneElfS>2</OneElfS>
-                    <Strict>2</Strict>
-                    <EnumInt>2</EnumInt>
-                    <PlainCh>2</PlainCh>
-                    <Ropi>2</Ropi>
-                    <Rwpi>2</Rwpi>
-                    <wLevel>0</wLevel>
-                    <uThumb>2</uThumb>
-                    <uSurpInc>2</uSurpInc>
-                    <uC99>2</uC99>
-                    <uGnu>2</uGnu>
-                    <useXO>2</useXO>
-                    <v6Lang>0</v6Lang>
-                    <v6LangP>0</v6LangP>
-                    <vShortEn>2</vShortEn>
-                    <vShortWch>2</vShortWch>
-                    <v6Lto>2</v6Lto>
-                    <v6WtE>2</v6WtE>
-                    <v6Rtti>2</v6Rtti>
-                    <VariousControls>
-                      <MiscControls></MiscControls>
-                      <Define></Define>
-                      <Undefine></Undefine>
-                      <IncludePath></IncludePath>
-                    </VariousControls>
-                  </Cads>
-                </FileArmAds>
-              </FileOption>
             </File>
           </Files>
         </Group>
@@ -953,6 +902,9 @@
               <FilePath>..\01_Core\DW1000\decadriver\deca_params_init.c</FilePath>
             </File>
           </Files>
+        </Group>
+        <Group>
+          <GroupName>W5500</GroupName>
         </Group>
         <Group>
           <GroupName>MDK-ARM</GroupName>

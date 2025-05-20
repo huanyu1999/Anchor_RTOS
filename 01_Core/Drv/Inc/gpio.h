@@ -100,11 +100,6 @@ void drv_gpioClose(gpio_config_t *io_cfg);
 void drv_gpioClkEn(gpio_clkPort_t io_port);
 
 /* USER CODE BEGIN Prototypes */
-void pause_key_init(void);
-void switch_key_init(void);
-
-uint8_t read_SwitchValue(void);
-
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

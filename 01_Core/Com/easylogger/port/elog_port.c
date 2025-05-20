@@ -26,7 +26,7 @@
  * Created on: 2015-04-28
  */
 
-#include "cmsis_os2.h"
+#include "cmsis_os.h"
 #include "dev_rx8130ce.h"
 #include "usart.h"
 #include <elog.h>

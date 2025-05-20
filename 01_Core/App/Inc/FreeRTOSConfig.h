@@ -72,7 +72,6 @@
 #define configMINIMAL_STACK_SIZE                 ( (uint16_t) 128 )
 #define configTOTAL_HEAP_SIZE                    ( (size_t) 32 * 1024 )
 #define configMAX_TASK_NAME_LEN                  ( 16 )
-#define configUSE_TRACE_FACILITY                 1
 #define configUSE_16_BIT_TICKS                   0
 #define configUSE_MUTEXES                        1
 #define configQUEUE_REGISTRY_SIZE                8
@@ -80,7 +79,13 @@
 #define configUSE_COUNTING_SEMAPHORES            1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION  0
 #define configUSE_TASK_NOTIFICATIONS             1
-#define configUSE_STATS_FORMATTING_FUNCTIONS    1
+#define configUSE_TRACE_FACILITY                 1
+#define configGENERATE_RUN_TIME_STATS            0
+#define configUSE_STATS_FORMATTING_FUNCTIONS     0
+
+// extern volatile uint32_t ulHighFrequencyTimerTicks;
+// #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()    (ulHighFrequencyTimerTicks = 0ul)
+// #define portGET_RUN_TIME_COUNTER_VALUE()            ulHighFrequencyTimerTicks
 
 /* The following flag must be enabled only when using newlib */
 #define configUSE_NEWLIB_REENTRANT          0

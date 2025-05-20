@@ -1,8 +1,7 @@
-#include "elog.h"
 #include "dev_gnss.h"
 #include "usart.h"
-#include "cmsis_os2.h"
-#include "FreeRTOS.h"
+#include "cmsis_os.h"
+#include "elog.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -11,8 +10,6 @@
 /***********************************GNSS模块控制命令***********************************/
 #define GNSSMOD_FIRMWARE_VER    $PCAS06,0*1B
 #define GNSSMOD_SET_BAUDRATE_19200  $PCAS01,2*1E
-
-
 
 char outputCtrl_cmd[] = "$PCAS03,0GGA,0GLL,0GSA,0GSV,1RMC,0VTG,0ZDA,0ANT,0DHV,0LPS,res1,res2,0UTC,0GST,res3,res4,res5,0TIM*CS\r\n";
 
@@ -55,7 +52,6 @@ void dev_gnssModSetOnlyOutRMC(void)
 void dev_gnssModStartRx(void)
 {
     HAL_UART_Receive_DMA(&huart1, gnss_dmaRxBuf, GNSS_DMA_RX_BUF_SIZE);
-    // HAL_UART_Receive(&huart1, gnss_dmaRxBuf, GNSS_DMA_RX_BUF_SIZE, 0xFFFF);
 }
 
 void dev_gnssModReceiveAndParse(void)
@@ -63,10 +59,10 @@ void dev_gnssModReceiveAndParse(void)
     __HAL_DMA_DISABLE(huart1.hdmarx);                                       // 手动停止DMA
     gnssRxLen = GNSS_DMA_RX_BUF_SIZE - __HAL_DMA_GET_COUNTER(huart1.hdmarx);
     memcpy(gnss_lineBuf, gnss_dmaRxBuf, gnssRxLen);
-//    for (int i = 0; i < gnssRxLen; i++)
-//    {
-//        log_d("%c", gnss_dmaRxBuf[i]);
-//    }
+    for (int i = 0; i < gnssRxLen; i++)
+    {
+        log_d("%c", gnss_dmaRxBuf[i]);
+    }
     gnss_lineBuf[gnssRxLen] = '\0';
 
     char *line = strtok((char*)gnss_lineBuf, "\r\n");

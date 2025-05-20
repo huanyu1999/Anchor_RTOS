@@ -11,9 +11,7 @@
   */
 
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
 #include "cmsis_os.h"
-#include "cmsis_os2.h"
 
 #include "dev_linkFatFs.h"
 #include "dev_sdCard.h"
@@ -86,7 +84,6 @@ const Diskio_drvTypeDef SDCard_driver =
     dev_SD_write,
 #endif /* _USE_WRITE == 1 */
 #if _USE_IOCTL == 1
-    dev_SD_ioctl,
 #endif /* _USE_IOCTL == 1 */
 };
 
@@ -104,7 +101,8 @@ static DSTATUS dev_SD_CheckStatus(BYTE lun)
 
 /**
   * @brief  Initializes a Drive
-  * @param  lun : not used
+  * @
+    dev_SD_ioctl,param  lun : not used
   * @retval DSTATUS: Operation status
   */
 DSTATUS dev_SD_initialize(BYTE lun)
@@ -144,7 +142,6 @@ DSTATUS dev_SD_initialize(BYTE lun)
 
     return Stat;
 }
-
 /**
   * @brief  Gets Disk Status
   * @param  lun : not used
@@ -219,19 +216,15 @@ DRESULT dev_SD_write(BYTE lun, const BYTE *buff, DWORD sector, UINT count)
         status = osSemaphoreAcquire(SDSemaID ,SD_TIMEOUT);
         if (status == osOK)
         {
-            // if (msg == WRITE_CPLT_MSG)
-            // {
-                timer = osKernelGetTickCount() + SD_TIMEOUT;
-                while(timer > osKernelGetTickCount())                        /* block until SDIO IP is ready or a timeout occur */
+            timer = osKernelGetTickCount() + SD_TIMEOUT;
+            while(timer > osKernelGetTickCount())                        /* block until SDIO IP is ready or a timeout occur */
+            {
+                if (drv_sdioGetCardState() == SD_TRANSFER_OK)
                 {
-                    if (drv_sdioGetCardState() == SD_TRANSFER_OK)
-                    {
-                        res = RES_OK;
-                        break;
-                    }
+                    res = RES_OK;
+                    break;
                 }
-            // }
-            // log_d("drv_sdioWriteBlocks_Dma cplt");
+            }
         }
         else
         {

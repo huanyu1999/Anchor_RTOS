@@ -18,36 +18,35 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include "FreeRTOS.h"
-#include "task.h"
 #include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "main.h"
 #include "instance.h"
-#include "app.h"
-#include "elog.h"
+#include "app_sdCard.h"
+#include "app_gnss.h"
 #include "dev.h"
 #include "usart_voice.h"
-#include "timer.h"
 #include "board_dw1000.h"
-
 #include "drv_sdio.h"
+#include "timer.h"
 
 #include "com_multiButton.h"
+#include "elog.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-//由于 CMSIS_OS2 没有封装静态创建task 或者queue需要用到的类型，自己定义，方便代码命名风格统一
+// 由于 CMSIS_OS2 没有封装静态创建task 或者queue需要用到的类型，自己定义，方便代码命名风格统一
 typedef StaticTask_t osStaticThreadDef_t;
 typedef StaticQueue_t osStaticMessageQDef_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -56,6 +55,10 @@ typedef StaticQueue_t osStaticMessageQDef_t;
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+#if TASK_INFO
+TIM_HandleTypeDef timer50usHandle;
+volatile uint32_t ulHighFrequencyTimerTicks = 0UL;
+#endif
 
 /**************************************************************CAN Communication**************************************************************/
 uint32_t anchorCanExtId = 0xAAA0;
@@ -63,7 +66,7 @@ CAN_RxHeaderTypeDef RxHeader;
 uint8_t RxData[5];
 
 /**************************************************************Voice Output**************************************************************/
-static int32_t voiceOutputDis = 0;
+static int32_t voiceOutputDis = -1;
 
 /**************************************************************Semaphore**************************************************************/
 osSemaphoreId_t binSem;                                      // 用于dw1000中断同步
@@ -228,8 +231,12 @@ void MX_FREERTOS_Init(void)
     task4_Handle                   = osThreadNew(task_tagDistInsertAndUpdate, NULL, &task4_attr);
     task5_Handle                   = osThreadNew(task_tagDistClearInvalid, NULL, &task5_attr);
     task6_logManage_Handle         = osThreadNew(elog_entry, NULL, &task6_logManage_attr);
-    task7_Handle                   = osThreadNew(task_gnssModule, NULL, &task7_attr);
+    // task7_Handle                   = osThreadNew(task_Test, NULL, &task7_attr);               // 定为GNSS 模组同步时间用，暂用为测试任务
     task8_Handle                   = osThreadNew(task_canReceiveHandle, NULL, &task8_attr);
+
+#if TASK_INFO
+    drv_setTimerForInt(&timer50usHandle, TIM4, 20000, 6);
+#endif
 
     /* USER CODE END RTOS_THREADS */
 }
@@ -294,7 +301,10 @@ void task1_anchorDisHandling(void *arg)
         
         voiceOutputDis = anchorFinalDis;
 
-        log_d("SelfDis ID %d %.2f, RxDis ID %d %.2f, FinalDis ID %d %.2f \n", anchorSelfIdx, (float)(anchorSelfDis) / 1000,                                                              anchorRxIdx, (float)(anchorRxDis) / 1000,                                                                  anchorFinalIdx, (float)(anchorFinalDis) / 1000);
+        log_d("SelfDis ID %d %.2f, RxDis ID %d %.2f, FinalDis ID %d %.2f \n", 
+                anchorSelfIdx, (float)(anchorSelfDis) / 1000,
+                anchorRxIdx, (float)(anchorRxDis) / 1000, 
+                anchorFinalIdx, (float)(anchorFinalDis) / 1000);
         osDelay(450);       /* 定时处理距离数据 */
     }
 }
@@ -313,7 +323,8 @@ void task2_voiceOut(void *arg)
     {
         if (voiceOutputDis < 100000)
         {
-            dev_buzzerOpen(buzzer);
+            // dev_buzzerOpen(buzzer);
+            // 这里也应该采用开关外设的方法来控制
         }
         else 
         {
@@ -341,12 +352,18 @@ void task3_canSend(void *arg)
 
 void task_Test(void *arg)
 {
-    char taskListBuffer[512];
-    vTaskList(taskListBuffer);
-    log_i("Task list:\n%s", taskListBuffer);
+    // char taskListBuffer[512];
+    // vTaskList(taskListBuffer);
+    // log_i("Task list:\n%s", taskListBuffer);
+    // sdCard_readWriteDemo();
     for(;;) 
     {
-        osDelay(500);
+        // 闪烁两个LED
+        dev_ledBlink(across_led);
+        dev_ledBlink(onside_led);
+        // dev_ledOn(onside_led);
+        // dev_ledOn(across_led);
+        osDelay(200);
     }
 }
 
@@ -432,6 +449,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         {
             // log_d("tdmaCycleTimer_CallBack");
         }
+    }
+
+    else if (htim->Instance == TIM4)
+    {
+#if TASK_INFO
+        ulHighFrequencyTimerTicks++;
+#endif
     }
 }
 

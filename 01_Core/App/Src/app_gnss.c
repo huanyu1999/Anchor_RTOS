@@ -1,7 +1,7 @@
-#include "app.h"
-#include "dev.h"
+#include "app_gnss.h"
+#include "dev_gnss.h"
 
-#include "cmsis_os2.h"
+#include "cmsis_os.h"
 
 void task_gnssModule(void* arg)
 {
@@ -13,4 +13,3 @@ void task_gnssModule(void* arg)
         dev_gnssModStartRx();
     }
 }
-

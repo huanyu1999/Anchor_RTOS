@@ -1,8 +1,6 @@
+#include "dev_button.h"
 #include "elog.h"
-#include "board_gpio.h"
-#include "dev.h"
-#include "com_multiButton.h"
-#include "cmsis_os2.h"
+#include "cmsis_os.h"
 
 // 在此定义multibutton结构体变量
 struct Button pause_key_s;
@@ -73,16 +71,25 @@ static void pauseButton_longPressTask(void * btn)
 extern osThreadId_t task3_canSend_Handle;
 static void switchButton_pressDownTask(void * btn)
 {
-    // uint8_t button_value = dev_buttonRead(BUTTON_ID_SWITCH);
-    // HAL_GPIO_ReadPin();                 // 获取当前键值
     osThreadFlagsSet(task3_canSend_Handle, 0x01);                 // 发送当前键值
     log_d("switchButton_pressDownTask 0x01");
 }
 
 static void switchButton_pressUpTask(void * btn)
 {
-    // uint8_t button_value = dev_buttonRead(BUTTON_ID_SWITCH);
-    // HAL_GPIO_ReadPin();
     osThreadFlagsSet(task3_canSend_Handle, 0x02);
     log_d("switchButton_pressUpTask 0x02");
 }
+
+//uint8_t pcWriteBuffer[500];
+//void printf_taskState(void)
+//{
+//    log_d("=================================================");
+//    log_d("taskName      taskStatue prioity   remainStack taskIndex");
+//    vTaskList((char *)&pcWriteBuffer);
+//    log_d("%s", pcWriteBuffer);
+
+//    log_d("\r\ntaskName       runCount         usage");
+//    vTaskGetRunTimeStats((char *)&pcWriteBuffer);
+//    log_d("%s", pcWriteBuffer);
+//}

@@ -29,16 +29,6 @@ void board_rx8130ceBufWrite(uint8_t addr, uint8_t reg, uint8_t* val, uint16_t bu
     drv_i2cMemWrite(addr, reg, val, buf_size);
 }
 
-// void board_rx8130ceBufRead1(uint8_t addr, uint8_t* buf, uint16_t size)
-// {
-//     drv_i2cRead(addr, buf, size);
-// }
-
-// void board_rx8130ceBufWrite1(uint8_t addr, uint8_t* data, uint16_t size)
-// {
-//     drv_i2cWrite(addr, data, size);
-// }
-
 void board_rx8130ceHardRst(void)
 {
 }

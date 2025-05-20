@@ -4,6 +4,7 @@
 #include "stm32f405xx.h"
 #include "stm32f4xx_hal_cortex.h"
 #include "stm32f4xx_hal_def.h"
+#include "stm32f4xx_hal_sd.h"
 #include "stm32f4xx_hal_dma.h"
 #include "stm32f4xx_ll_sdmmc.h"
 #include "drv_sdio.h"
@@ -61,6 +62,8 @@ uint8_t drv_sdioInit(void)
 void drv_sdDetectInit(void)
 {
     GPIO_InitTypeDef GPIO_Init_Structure;
+    
+    // 对应的GPIO时钟已经在board_gpio初始化中完成，这里就不执行了
 
     /* Configure Interrupt mode for SD detection pin */ 
     GPIO_Init_Structure.Mode      = GPIO_MODE_IT_RISING_FALLING;
@@ -70,8 +73,8 @@ void drv_sdDetectInit(void)
     HAL_GPIO_Init(SDIO_DECT_PORT, &GPIO_Init_Structure);
 
     /* NVIC configuration for SDIO interrupts */
-    HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0xE, 0);
-    HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+    HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0xE, 0);
+    HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
 /**

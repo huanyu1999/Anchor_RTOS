@@ -1,8 +1,7 @@
 #ifndef __BOARD_RX8130CE_H__
 #define __BOARD_RX8130CE_H__
 
-#include "stm32f4xx.h"
-#include "stm32f4xx_hal_gpio.h"
+#include "drv_i2c.h"
 
 #define RX8130CE_RST_PORT       GPIOB
 #define RX8130CE_RST_PIN        GPIO_PIN_8

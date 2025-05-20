@@ -1,4 +1,3 @@
-#include "dev.h"
 #include "usart.h"
 #include "cmsis_os.h"
 

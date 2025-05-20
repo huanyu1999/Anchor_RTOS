@@ -75,10 +75,10 @@ uint8_t dev_FATFS_UnLinkDriverEx(char *path, uint8_t lun)
         DiskNum = path[0] - '0';
         if(disk.drv[DiskNum] != 0)
         {
-        disk.drv[DiskNum] = 0;
-        disk.lun[DiskNum] = 0;
-        disk.nbr--;
-        ret = 0;
+            disk.drv[DiskNum] = 0;
+            disk.lun[DiskNum] = 0;
+            disk.nbr--;
+            ret = 0;
         }
     }
 

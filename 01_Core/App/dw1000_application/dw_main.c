@@ -1,5 +1,6 @@
-#include "elog.h"
+
 #include "instance.h"
+#include "elog.h"
 
 uint8_t group_id;           // 组ID
 uint8_t anc_id;             // 如当前角色是基站，则表示当前基站ID
@@ -146,17 +147,15 @@ void uwb_init(void)
     port_set_dw1000_slowrate();
     if (DWT_DEVICE_ID != dwt_readdevid()) // 若读取ID失败，先执行唤醒
     {
-        // port_wakeup_IC();                   // 使用SPI-NS管脚唤醒DW1000
         board_dw1000SlowWakeup();
-        dwt_softreset(); // 软件复位
+        dwt_softreset();                 // 软件复位
     }
-    // reset_DW1000();                         // 复位
     board_dw1000Rst();
 
     if (dwt_initialise(DWT_LOADUCODE) == DWT_ERROR) // dw1000初始化失败
     {
         while (1)
-            ;
+        ;
     }
     port_set_dw1000_fastrate();
 
@@ -218,10 +217,8 @@ void uwb_init(void)
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK); // 低功耗时可注释掉
 
     // 设置中断标志
-    dwt_setinterrupt(
-        DWT_INT_TFRS | DWT_INT_RFCG |
-            (DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO),
-        1);
+    dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG |DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT | 
+                        DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO, 1);
 
     if (dev->device_mode == ANCHOR)
     {
@@ -253,9 +250,7 @@ void uwb_init(void)
     }
 
     uint32_t time = inst_one_slot_time * inst_slot_number;
-    MX_TIM2_Init(time); // 设置定时器周期为1个TDMA周期，
-    // 因为当前板子引脚分配，dw1000中断脚为PC13，复位引脚为PC14，共用一个中断处理，在setup_DW1000RSTnIRQ中会关闭该中断，因此在这里重新打开。
-    HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+    MX_TIM2_Init(time);                                 // 设置定时器周期为1个TDMA周期，
 
     current_Algorithm = availableAlgorithms[0].algorithm;
     heap_accessMutex = osMutexNew(&heap_mutex_attr);

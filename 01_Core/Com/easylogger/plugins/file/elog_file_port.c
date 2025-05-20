@@ -27,6 +27,7 @@
  */
 
 #include "elog_file.h"
+#include "app_sdCard.h"
 
 /**
  * EasyLogger flile log pulgin port initialize
@@ -38,7 +39,11 @@ ElogErrCode elog_file_port_init(void)
     ElogErrCode result = ELOG_NO_ERR;
 
     /* add your code here */
-
+    /* 
+        1. 创建一个逻辑驱动号，链接IO操作，然后f_mount，然后f_mkfs
+        2. 进行异常情况处理，SD卡插拔，系统突然断电，系统突然重启
+    */
+    result = app_sdFileSystemInit();
     return result;
 }
 
@@ -48,7 +53,7 @@ ElogErrCode elog_file_port_init(void)
 void elog_file_port_lock(void) {
 
     /* add your code here */
-
+    // log 写入时不允许被打断
 }
 
 /**

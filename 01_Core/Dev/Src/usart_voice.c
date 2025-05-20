@@ -2,7 +2,7 @@
 #include "usart.h"
 #include "usart_voice.h"
 
-
+// 对应语音指令
 uint8_t voice_buf_0[14]  = {0xAA, 0x08, 0x09, 0x02, 0x2F, 0x30, 0x30, 0x30, 0x2A, 0x3F, 0x3F, 0x3F, 0x63};
 uint8_t voice_buf_1[14]  = {0xAA, 0x08, 0x09, 0x02, 0x2F, 0x30, 0x30, 0x31, 0x2A, 0x3F, 0x3F, 0x3F, 0x64};
 uint8_t voice_buf_2[14]  = {0xAA, 0x08, 0x09, 0x02, 0x2F, 0x30, 0x30, 0x32, 0x2A, 0x3F, 0x3F, 0x3F, 0x65};
@@ -65,8 +65,6 @@ uint8_t voice_up[4] = {0xAA, 0x14, 0x00, 0xBE};                 // 音量增加�
 
 void Report_Dis(float dis)
 {
-    //float dis = distance;
-    // printf("voice dis: %.2f\n", dis);
 	if      ( (dis >= 0) && (dis < 1) ) { Voice(voice_buf_0, 14); }
 	else if ( (dis >= 1) && (dis < 2) ) { Voice(voice_buf_1, 14); }
 	else if ( (dis >= 2) && (dis < 3) ) { Voice(voice_buf_2, 14); }
@@ -119,39 +117,39 @@ void Report_Dis(float dis)
 
 void Voice(uint8_t *pVoiceBuf, int len)
 {
-    HAL_UART_Transmit_DMA(&huart4, pVoiceBuf, len);
+    // HAL_UART_Transmit_DMA(&huart4, pVoiceBuf, len);
+    HAL_UART_Transmit(&huart4, pVoiceBuf, len, 10000);
 }
-
-void User_VoiceInit(int volume) 
-{
-    Voice(voice_shezhi, 5);
-    /* 音量设置  */
-    for ( int i = 0; i < (volume - 1); i++) 
-    {
-        Voice(voice_up, 4);
-    }
-}
-
-void User_DistanceOut(void) {
-    // Report_Dis([2]);
-}
-
-//void User_FinalDisTask(void *pvParameters) {
-//    const TickType_t xDelayMs = pdMS_TO_TICKS(200);
-//    while (1) {
-//        vTaskDelay(xDelayMs);
-//    }
-//}
 
 /**  
-  * @brief  RTOS任务-语音输出任务
+  * @brief  
   * @param  None
   * @retval None
   */
-//void User_VoiceTask(void *pvParameters) {
-//    const TickType_t xDelayMs = pdMS_TO_TICKS(1200);
-//    while (1) {
-//        User_DistanceOut();
-//        vTaskDelay(xDelayMs);
-//    }
-//}
+void JQ8x00_Command_Data(UartCommandData Command, uint8_t DATA)
+{
+    uint8_t Buffer[6] ={0xaa};
+    uint8_t DataLen = 0;
+    Buffer[1] = Command;       // 指令类型
+    if((Command != AppointTrack) && (Command != SetCycleCount) && (Command != SelectTrackNoPlay) && (Command != AppointTimeBack) && (Command != AppointTimeFast))        //Ö»º¬Ò»¸öÊý¾ÝÖ¸Áî    
+    {
+        Buffer[2] = 1;          // 数据长度
+        Buffer[3] = DATA;       // 数据
+        Buffer[4] = Buffer[0] +  Buffer[1] +  Buffer[2] + Buffer[3];            // 校验和
+        DataLen = 5;
+    }
+    else                                                                                        // 含两个数据指令
+    {
+        Buffer[2] = 2;          // 数据长度
+        Buffer[3] = DATA/256;       // 数据
+        Buffer[4] = DATA%256;       // 数据
+        Buffer[5] = Buffer[0] +  Buffer[1] +  Buffer[2] + Buffer[3] + Buffer[4];  
+        DataLen = 6;
+    }
+    
+    #if JQ8x00_BusyCheck
+    while(JQ8x00_BUSY_Read);				// JQ8400 忙检测
+    #endif
+    Voice(Buffer, DataLen);
+}
+

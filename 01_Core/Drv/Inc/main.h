@@ -46,7 +46,7 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-
+#define TASK_INFO             0                 // 通过该宏定义控制task信息打印调试
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/

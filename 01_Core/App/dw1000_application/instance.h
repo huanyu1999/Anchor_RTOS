@@ -12,25 +12,17 @@
 #include "deca_types.h"
 #include "deca_spi.h"
 
-#include "board_dw1000.h"
 #include "dev_led_buzzer_dip.h"
-
-#include "usart.h"
+#include "board_dw1000.h"
 #include "timer.h"
-#include "dev.h"
+// #include "dev.h"
 #include "iwdg.h"
 #include "kalman.h"
 
 #include "cmsis_os.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "queue.h"
-#include "timers.h"
 
 #include "com_MultiTimer.h"
 #include "com_heap.h"
-
-
 
 /***********************************************************************************************/
 // #define ANCRANGE                         //基站间测距，用于基站自标定
@@ -272,6 +264,7 @@ typedef struct uwbAlgorithm_s {
     uint32_t (*onEvent)(dwDevice_t *dev, uwbEvent_t event);
 } uwbAlgorithm_t;
 
+// 待后续优化测距模块代码再处理
 extern uint8_t anc_id;
 extern uint8_t tag_id;
 extern uint8_t group_id;                                //组ID

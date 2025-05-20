@@ -3,11 +3,6 @@
 
 #include "main.h"
 
-#include "stm32f4xx_hal_sd.h"
-
-// #define SDIO_ERROR 0x00
-// #define SDIO_OK    0x01
-
 #define   MSD_OK        ((uint8_t)0x00)
 #define   MSD_ERROR     ((uint8_t)0x01)
 
@@ -32,8 +27,8 @@
 #define SDIO_D3_PIN     GPIO_PIN_11
 #define SDIO_CLK_PORT   GPIOC
 #define SDIO_CLK_PIN    GPIO_PIN_12
-#define SDIO_DECT_PORT  GPIOA
-#define SDIO_DECT_PIN   GPIO_PIN_15
+#define SDIO_DECT_PORT  GPIOC
+#define SDIO_DECT_PIN   GPIO_PIN_7
 
 uint8_t drv_sdioInit(void);
 void drv_sdDetectInit(void);

@@ -20,17 +20,17 @@
 #include <stdarg.h>
 
 #include "main.h"
-#include "dev.h"
+#include "app_sdCard.h"
 #include "instance.h"
-#include "cmsis_os.h"
+#include "dev.h"
+#include "usart_voice.h"
 #include "can.h"
 #include "iwdg.h"
 #include "spi.h"
 #include "usart.h"
-#include "usart_voice.h"
-#include "gpio.h"
 #include "timer.h"
 
+#include "cmsis_os.h"
 #include "elog.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -67,27 +67,29 @@ int main(void)
     MX_UART1_Init();
     MX_SPI1_Init();
     MX_TIM3_Init();
+    
     /* device init */
     dev_canInit();
     dev_canStartRx();               // 打开CAN接收中断
     dev_rx8130ceInit();
-    dev_rx8130ceSetTimeTest();
+    dev_rx8130ceSetTimeTest(); 
 
     dev_gnssModInit();
     dev_ledAllInit();
     dev_buzzerInit(buzzer);
     dev_dipInit(sw0);
     dev_dipInit(sw1);
-    dev_dipInit(sw2);
     dev_buttonInit(switch_key);
     dev_buttonInit(pause_key);
     dev_buttonTaskInit();
+    JQ8x00_Command_Data(SetVolume, 23);
     elog_componentInit();
-    // multiTimer_init();            // multiTimerYield如何执行还需要再次考虑，暂不使用该组件
+    app_sdFileSystemInit();
     uwb_init();                      // dw1000模组初始化
     /* Init scheduler */
     osKernelInitialize();
     
+    log_i("Anchor power up.");
 
     /* Call init function for freertos objects (in freertos.c) */
     MX_FREERTOS_Init();

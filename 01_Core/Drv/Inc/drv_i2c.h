@@ -4,10 +4,10 @@
 #include "gpio.h"
 
 #define I2C2_SDA_PORT      GPIOB
-#define I2C2_SDA_PIN       GPIO_PIN_11
+#define I2C2_SDA_PIN       GPIO_PIN_9
 
 #define I2C2_SCL_PORT      GPIOB
-#define I2C2_SCL_PIN       GPIO_PIN_10
+#define I2C2_SCL_PIN       GPIO_PIN_8
 
 typedef enum {
     STANDARD_MODE,

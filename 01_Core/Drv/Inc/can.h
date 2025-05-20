@@ -28,23 +28,22 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-extern CAN_HandleTypeDef hcan1;
-
 /* USER CODE BEGIN Private defines */
-
+#define USE_CAN1 0
+#define USE_CAN2 1
 /* USER CODE END Private defines */
 
-// void MX_CAN1_Init(void);
+#if USE_CAN1
+extern CAN_HandleTypeDef hcan1;
 void drv_can1Init(void);
+#endif
+
+#if USE_CAN2
+extern CAN_HandleTypeDef hcan2;
+void drv_can2Init(void);
+#endif
+
 void drv_canEnableReceiveInt(void);
-
-/* USER CODE BEGIN Prototypes */
-
-/* USER CODE END Prototypes */
 
 #ifdef __cplusplus
 }

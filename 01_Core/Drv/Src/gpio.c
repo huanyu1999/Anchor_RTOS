@@ -20,30 +20,10 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "gpio.h"
-#include "instance.h"
 /* USER CODE BEGIN 0 */
-#include "com_multiButton.h"
-#include "usart.h"
 /* USER CODE END 0 */
 
 /*----------------------------------------------------------------------------*/
-/* Configure GPIO                                                             */
-/*
-    dw1000_irq  PC13
-    dw1000_rst  PC14
-    uwb_ok_led  PB9
-
-    onside_led  PC6
-    across_led  PC7
-    buzzer      PA8
-    can_tx_led  PA12 
-    can_rx_led  PA2
-    sw0         PC0
-    sw1         PC1
-    sw2         PC2
-*/
-/*----------------------------------------------------------------------------*/
-
 void drv_gpioInit(gpio_config_t *io_cfg)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -138,37 +118,4 @@ void drv_gpioClkEn(gpio_clkPort_t io_port)
     }
 
 }
-
-/************************************************Button************************************************/
-void pause_key_init(void)
-{
-    // button_init(&pause_key_b, ReadButtonPin, 0, KEY_ID_PAUSE);
-    // button_attach(&pause_key_b, PRESS_DOWN, pause_key_handler1);
-    // button_attach(&pause_key_b, LONG_PRESS_START, pause_key_handler2);
-    // button_start(&pause_key_b);
-}
-
-void switch_key_init(void)
-{
-    // button_init(&switch_key_b, ReadButtonPin, 0, KEY_ID_SWITCH);
-    // button_attach(&switch_key_b, PRESS_DOWN, switch_key_left_handler);
-    // button_attach(&switch_key_b, PRESS_UP, switch_key_right_handler);
-    // button_start(&switch_key_b);
-}
-
-/****************************************DIP Switch************************************************/
-// uint8_t read_SwitchValue(void)
-// {
-//     uint8_t switch_value = 0;
-//     switch_value =  switch_is_on(SW2_GPIO_Port, SW2_Pin) << 2
-//                     | switch_is_on(SW1_GPIO_Port, SW1_Pin) << 1
-//                     | switch_is_on(SW0_GPIO_Port, SW0_Pin);
-//     return switch_value;
-// }
-
-// static int switch_is_on(GPIO_TypeDef* sw_port, uint16_t sw_pin)
-// {
-// 	return ((HAL_GPIO_ReadPin(sw_port, sw_pin)) ? (0) : (1));
-// }
-
 /* USER CODE END 2 */

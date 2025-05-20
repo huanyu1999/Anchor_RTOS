@@ -10,7 +10,7 @@ const i2c_config_t i2c1_config = {
 
 void drv_i2cInit(void)
 {
-    i2c_handle.Instance = I2C2;
+    i2c_handle.Instance = I2C1;
     i2c_handle.Init.AddressingMode  = I2C_ADDRESSINGMODE_7BIT;
     i2c_handle.Init.ClockSpeed      = 400000;
     i2c_handle.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -76,16 +76,16 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
 
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
-    GPIO_InitStructure.Alternate = GPIO_AF4_I2C2;
+    GPIO_InitStructure.Alternate = GPIO_AF4_I2C1;
     GPIO_InitStructure.Mode = GPIO_MODE_AF_OD;
     GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStructure.Pull = GPIO_NOPULL;
     GPIO_InitStructure.Pin = I2C2_SDA_PIN | I2C2_SCL_PIN;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
 
-    __HAL_RCC_I2C2_CLK_ENABLE();
-    __HAL_RCC_I2C2_FORCE_RESET();
-    __HAL_RCC_I2C2_RELEASE_RESET();
+    __HAL_RCC_I2C1_CLK_ENABLE();
+    __HAL_RCC_I2C1_FORCE_RESET();
+    __HAL_RCC_I2C1_RELEASE_RESET();
 
     /* 是否需要使能中断 */
 }

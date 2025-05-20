@@ -113,12 +113,12 @@ static void setup_DW1000RSTnIRQ(int enable)
         GPIO_InitStruct.Pull = GPIO_NOPULL;
         HAL_GPIO_Init(Dw1000_RSTn_GPIO_Port, &GPIO_InitStruct);
 
-        HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);             //pin #13 -> EXTI #13
-        HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1, 0);
+        HAL_NVIC_EnableIRQ(EXTI4_IRQn);             //pin #4 -> EXTI #4
+        HAL_NVIC_SetPriority(EXTI4_IRQn, 1, 0);
     }
     else
     {
-        HAL_NVIC_DisableIRQ(EXTI15_10_IRQn);            //pin #13 -> EXTI #13
+        HAL_NVIC_DisableIRQ(EXTI4_IRQn);            //pin #4 -> EXTI #4
 
         // put the pin back to tri-state ... as 
         // output open-drain (not active)

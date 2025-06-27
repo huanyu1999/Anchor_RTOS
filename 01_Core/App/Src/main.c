@@ -82,6 +82,7 @@ int main(void)
     dev_buttonInit(switch_key);
     dev_buttonInit(pause_key);
     dev_buttonTaskInit();
+    dev_w5500Initialize();
     JQ8x00_Command_Data(SetVolume, 23);
     elog_componentInit();
     app_sdFileSystemInit();

@@ -206,6 +206,12 @@ void TIM4_IRQHandler(void)
 }
 #endif
 
+extern TIM_HandleTypeDef dhcp_oneSecondHandle;
+void TIM4_IRQHandler(void)
+{
+    HAL_TIM_IRQHandler(&dhcp_oneSecondHandle);
+}
+
 /**
   * @brief This function handles CAN1 RX0 interrupt request.
   */

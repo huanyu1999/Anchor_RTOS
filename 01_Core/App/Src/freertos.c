@@ -26,6 +26,7 @@
 #include "instance.h"
 #include "app_sdCard.h"
 #include "app_gnss.h"
+#include "app_ethernet.h"
 #include "dev.h"
 #include "usart_voice.h"
 #include "board_dw1000.h"
@@ -34,6 +35,7 @@
 
 #include "com_multiButton.h"
 #include "elog.h"
+#include "dhcp.h"
 
 /* USER CODE END Includes */
 
@@ -224,15 +226,15 @@ void MX_FREERTOS_Init(void)
 
     /* USER CODE BEGIN RTOS_THREADS */
     /* add threads, ... */
-    task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
-    task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
-    task2_voiceOut_Handle          = osThreadNew(task2_voiceOut, NULL, &task2_voiceOut_attr);
-    task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
-    task4_Handle                   = osThreadNew(task_tagDistInsertAndUpdate, NULL, &task4_attr);
-    task5_Handle                   = osThreadNew(task_tagDistClearInvalid, NULL, &task5_attr);
+//    task0_uwb_Handle               = osThreadNew(task0_uwb, NULL, &task0_uwb_attr);
+//    task1_anchorDisHandling_Handle = osThreadNew(task1_anchorDisHandling, NULL, &task1_anchorDisHandling_attr);
+//    task2_voiceOut_Handle          = osThreadNew(task2_voiceOut, NULL, &task2_voiceOut_attr);
+//    task3_canSend_Handle           = osThreadNew(task3_canSend, NULL, &task3_canSend_attr);
+//    task4_Handle                   = osThreadNew(task_tagDistInsertAndUpdate, NULL, &task4_attr);
+//    task5_Handle                   = osThreadNew(task_tagDistClearInvalid, NULL, &task5_attr);
     task6_logManage_Handle         = osThreadNew(elog_entry, NULL, &task6_logManage_attr);
-    // task7_Handle                   = osThreadNew(task_Test, NULL, &task7_attr);               // 定为GNSS 模组同步时间用，暂用为测试任务
-    task8_Handle                   = osThreadNew(task_canReceiveHandle, NULL, &task8_attr);
+    task7_Handle                   = osThreadNew(task_eth, NULL, &task7_attr);               // 定为GNSS 模组同步时间用，暂用为测试任务
+//    task8_Handle                   = osThreadNew(task_canReceiveHandle, NULL, &task8_attr);
 
 #if TASK_INFO
     drv_setTimerForInt(&timer50usHandle, TIM4, 20000, 6);
@@ -359,11 +361,11 @@ void task_Test(void *arg)
     for(;;) 
     {
         // 闪烁两个LED
-        dev_ledBlink(across_led);
-        dev_ledBlink(onside_led);
+        dev_ledBlink(uwb_ok_led);
+        // dev_ledBlink(onside_led);
         // dev_ledOn(onside_led);
         // dev_ledOn(across_led);
-        osDelay(200);
+        osDelay(1000);
     }
 }
 
@@ -456,6 +458,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 #if TASK_INFO
         ulHighFrequencyTimerTicks++;
 #endif
+        // log_d("dhcp 1 second test.");
+        DHCP_time_handler();
     }
 }
 

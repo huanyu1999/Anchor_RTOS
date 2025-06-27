@@ -10,6 +10,7 @@
 #include "dev_linkFatFs.h"
 #include "dev_sdCard.h"
 #include "dev_gnss.h"
+#include "dev_w5500.h"
 
 
 #endif

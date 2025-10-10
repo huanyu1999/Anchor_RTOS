@@ -1,12 +1,13 @@
 #ifndef __BOARD_DW1000_H__
 #define __BOARD_DW1000_H__
 
-#define Dw1000_IRQ_Pin          GPIO_PIN_13
-#define Dw1000_IRQ_GPIO_Port    GPIOC
-#define Dw1000_IRQ_EXTI_IRQn    EXTI15_10_IRQn
+#define Dw1000_IRQ_Pin          GPIO_PIN_2
+#define Dw1000_IRQ_GPIO_Port    GPIOA
+#define Dw1000_IRQ_EXTI_IRQn    EXTI2_IRQn
 
 #define Dw1000_RSTn_Pin         GPIO_PIN_4
 #define Dw1000_RSTn_GPIO_Port   GPIOC
+#define DW1000_RSTn_EXTI_IRQn   EXTI4_IRQn
 
 typedef enum {
     dw1000_reset = 0,

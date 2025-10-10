@@ -7,14 +7,17 @@
  * @attention
  ******************************************************************************
  */
-#include "dev.h"
+#include <stdio.h>
+
+#include "app_sdCard.h"
+#include "dev_linkFatFs.h"
+#include "dev_rx8130ce.h"
+#include "dev_emmc.h"
+
+#include "cmsis_os2.h"
 #include "elog.h"
 #include "ff.h"
 #include "ffconf.h"
-#include "cmsis_os2.h"
-#include "app_sdCard.h"
-
-#include <stdio.h>
 
 #define LOG_SIZE        512 * 1024
 #define LOG_MAX_NUM     5
@@ -39,7 +42,8 @@ FATFS logSaveFatFs; /* File system object for SD card logical drive */
 
 uint8_t app_sdFileSystemInit(void)
 {
-    if (dev_FATFS_LinkDriver(&SDCard_driver, SDPath) == 0)
+    dev_emmcInitialize();
+    if (dev_FATFS_LinkDriver(&emmc_driver, SDPath) == 1) // 链接EMMC驱动到fatfs
     {
         // Error_Handler();
         log_e("FATFS link driver failed.");
@@ -146,9 +150,9 @@ void sdCard_readWriteDemo(void)
     uint32_t byteswritten, bytesread;                     /* File write/read counts */
     uint8_t wtext[] = "This is STM32 working with FatFs"; /* File write buffer */
     uint8_t rtext[100];                                   /* File read buffer */
-
+    // dev_emmcInitialize(0);
     /*##-1- Link the micro SD disk I/O driver ##################################*/
-    if (dev_FATFS_LinkDriver(&SDCard_driver, SDPath) == 0)
+    if (dev_FATFS_LinkDriver(&emmc_driver, SDTestPath) == 0)
     {
         /*##-2- Register the file system object to the FatFs module ##############*/
         if (f_mount(&SDFatFsTest, (TCHAR const *)SDTestPath, 0) != FR_OK)
@@ -226,6 +230,7 @@ void sdCard_readWriteDemo(void)
                 }
             }
         }
+        log_d("Success of the emmc demo.");
     }
 
     /*##-11- Unlink the RAM disk I/O driver ####################################*/

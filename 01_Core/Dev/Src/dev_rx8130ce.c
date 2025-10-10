@@ -25,18 +25,17 @@ void dev_rx8130ceSoftInit(void)
 	// ctrl[0] |= 0x02;						//set TSEL for 1Hz 
 }
 
-void dev_rx8130ceSetTimeTest(void)
+void dev_rx8130ceSetDefaultTime(void)
 {
     rx8130ce_time_t now = {
-        .year = 25,
-        .month = 3,
-        .day = 26,
-        .hours = 15,
-        .minutes = 51,
-        .seconds = 10,
-        .week = 10,
+        .year = 99,
+        .month = 1,
+        .day = 1,
+        .hours = 1, 
+        .minutes = 0,
+        .seconds = 0,
+        .week = 1,
     };
-    
     dev_rx8130ceSetDateTime(&now);
 }
 

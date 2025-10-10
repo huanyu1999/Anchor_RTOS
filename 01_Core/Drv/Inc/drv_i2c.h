@@ -3,11 +3,11 @@
 
 #include "gpio.h"
 
-#define I2C2_SDA_PORT      GPIOB
-#define I2C2_SDA_PIN       GPIO_PIN_9
+#define I2C1_SDA_PORT      GPIOB
+#define I2C1_SDA_PIN       GPIO_PIN_7
 
-#define I2C2_SCL_PORT      GPIOB
-#define I2C2_SCL_PIN       GPIO_PIN_8
+#define I2C1_SCL_PORT      GPIOB
+#define I2C1_SCL_PIN       GPIO_PIN_6
 
 typedef enum {
     STANDARD_MODE,
@@ -18,8 +18,8 @@ typedef enum {
 
 typedef struct {
     uint8_t bus_mode;         // I2C总线模式
-    uint32_t master_id;                 // 主机地址
-    uint32_t clk_speed;                 // I2C时钟速率
+    uint32_t master_id;       // 主机地址
+    uint32_t clk_speed;       // I2C时钟速率
 } i2c_config_t ;
 
 void drv_i2cInit(void);

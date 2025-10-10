@@ -12,7 +12,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "diskio.h"
-#include "dev_sdCard.h"
+#include "dev_emmc.h"
 #include "dev_linkFatFs.h"         
 
 #if defined ( __GNUC__ )

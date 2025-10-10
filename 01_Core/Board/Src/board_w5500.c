@@ -10,7 +10,7 @@ extern SPI_HandleTypeDef hspi2;
 static gpio_config_t w5500_boardParam[] = {
     { .gpio_port = W5500_RST_PORT, .gpio_pin = W5500_RST_PIN, .gpio_mode = GPIO_MODE_OUTPUT_PP, .gpio_pull = GPIO_NOPULL, .gpio_speed = GPIO_SPEED_FAST },
 
-    { .gpio_port = W5500_INT_PORT, .gpio_pin = W5500_INT_PIN, .gpio_mode = GPIO_MODE_IT_RISING, .gpio_pull = GPIO_NOPULL, .gpio_speed = GPIO_SPEED_FAST },
+    { .gpio_port = W5500_INT_PORT, .gpio_pin = W5500_INT_PIN, .gpio_mode = GPIO_MODE_IT_FALLING, .gpio_pull = GPIO_PULLUP, .gpio_speed = GPIO_SPEED_FAST },
 };
 
 static exti_irq_t w5500_interruptConfig[] = {
@@ -33,6 +33,8 @@ void board_w5500RstIntInit(void)
 {
     drv_gpioInit(&w5500_boardParam[W5500_RST]);
     drv_gpioInit(&w5500_boardParam[W5500_INT]);
+
+    drv_extiInit(w5500_interruptConfig);
 }
 
 void board_w5500Reset(void)

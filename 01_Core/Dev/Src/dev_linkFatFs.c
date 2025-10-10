@@ -12,7 +12,7 @@
 
 #include "dev_linkFatFs.h"
 
-Disk_drvTypeDef disk = {{0},{0},{0},0};
+Disk_drvTypeDef disk = { {0}, {0}, {0}, 0 };
 
 /**
   * @brief  Links a compatible diskio driver/lun id and increments the number of active

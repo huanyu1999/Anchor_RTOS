@@ -1,18 +1,18 @@
 #include <stdint.h>
 
 #include "main.h"
-#include "stm32f405xx.h"
+#include "stm32f4xx.h"
 #include "stm32f4xx_hal_cortex.h"
 #include "stm32f4xx_hal_def.h"
 #include "stm32f4xx_hal_sd.h"
 #include "stm32f4xx_hal_dma.h"
 #include "stm32f4xx_ll_sdmmc.h"
 #include "drv_sdio.h"
-#include "dev.h"
 #include "usart.h"
 #include "elog.h"
 
 SD_HandleTypeDef sdCard_Handle;
+
 
 /**
   * @brief  Initializes the SD card device.
@@ -336,66 +336,4 @@ __weak void dev_SD_WriteCpltCallback(void)
 __weak void dev_SD_ReadCpltCallback(void)
 {
 
-}
-
-
-// 使用原生HAL库读取函数读取第一个扇区，结果也是一样，原因待排查
-// 使用原生HAL库读取函数读取第一个扇区，结果也是一样，原因待排查，原因就是发送DMA通道配置中MemInc 参数设置为DISABLE，导致读取异常
-void task_sdCardReadTest(void *arg)
-{
-    uint8_t buffer_write[8] = { 0x00, 0xaa, 0xa2, 0x03, 0x04, 0xd5, 0x06, 0x07, };
-
-    uint8_t buffer_read[512];
-    HAL_StatusTypeDef status;
-    BYTE lun;
-
-    dev_SD_initialize(lun);
-    
-    status = HAL_SD_WriteBlocks_DMA(&sdCard_Handle, buffer_write, 55, 1);
-    if (status != HAL_OK)
-    {
-        log_e("Read Block 0 Failed! Error: %lu\r\n", HAL_SD_GetError(&sdCard_Handle));
-    }
-    else
-    {
-        for (int i = 0; i < 8; i++) 
-        {
-            log_d("%02X ", buffer_write[i]);
-        }
-    }
-
-    // osDelay(3);
-
-    status = HAL_SD_ReadBlocks_DMA(&sdCard_Handle, buffer_read, 0, 1);
-    if (status != HAL_OK) 
-    {
-        log_e("Read Block 0 Failed! Error: %lu\r\n", HAL_SD_GetError(&sdCard_Handle));
-    }
-    else 
-    {
-        log_e("read success.");
-    }
-
-    // while (HAL_SD_GetCardState(&sdCard_Handle) != HAL_SD_CARD_TRANSFER);
-    // 打印前 16 字节（用于检查 MBR/FAT32 结构）
-    log_d("Boot Sector First 16 Bytes:\n");
-    for (int i = 0; i < 16; i++) {
-
-        log_d("%02X ", buffer_read[i]);
-    }
-
-    // 检查引导扇区签名 (0x55AA)
-    if (buffer_read[510] == 0x55 && buffer_read[511] == 0xAA) 
-    {
-        log_d("Valid Boot Sector Found! (Signature 0x%02X%02X)", buffer_read[510], buffer_read[511]);
-    }
-    else 
-    {
-        log_d("Invalid Boot Sector (Signature 0x%02X%02X)", buffer_read[510], buffer_read[511]);
-    }
-
-    for(;;)
-    {
-        // osDelay(1000);
-    }
 }

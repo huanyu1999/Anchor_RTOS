@@ -3,43 +3,55 @@
 
 #include "gpio.h"
 
-#define UwbOK_LED_Pin           GPIO_PIN_2
-#define UwbOK_LED_GPIO_Port     GPIOC
+#define RT9013_EN_PIN           GPIO_PIN_8
+#define RT9013_GPIO_PORT        GPIOE
 
-#define Onside_LED_Pin          GPIO_PIN_5
-#define Onside_LED_GPIO_Port    GPIOC
+#define UWBOK_LED_PIN           GPIO_PIN_0
+#define UWBOK_LED_GPIO_PORT     GPIOE
 
-#define Across_LED_Pin          GPIO_PIN_0
-#define Across_LED_GPIO_Port    GPIOB
+#define CAN_RX_LED_PIN          GPIO_PIN_1
+#define CAN_RX_LED_GPIO_PORT    GPIOE
 
-#define CAN_RX_LED_Pin          GPIO_PIN_1
-#define CAN_RX_LED_GPIO_Port    GPIOB
+#define ONSIDE_LED_PIN          GPIO_PIN_1
+#define ONSIDE_LED_GPIO_PORT    GPIOB
 
-#define S_KEY_Pin               GPIO_PIN_1
-#define S_KEY_GPIO_Port         GPIOC
+#define ACROSS_LED_PIN          GPIO_PIN_7
+#define ACROSS_LED_GPIO_PORT    GPIOE
 
-#define P_KEY_Pin               GPIO_PIN_0
-#define P_KEY_GPIO_Port         GPIOC
+#define S_KEY_PIN               GPIO_PIN_0
+#define S_KEY_GPIO_PORT         GPIOB
 
-#define BUZZER_Pin              GPIO_PIN_6
-#define BUZZER_GPIO_Port        GPIOC
+#define P_KEY_PIN               GPIO_PIN_5
+#define P_KEY_GPIO_PORT         GPIOC
 
-#define SW0_Pin                 GPIO_PIN_14
-#define SW0_GPIO_Port           GPIOC
-#define SW1_Pin                 GPIO_PIN_15
-#define SW1_GPIO_Port           GPIOC
+#define BUZZER_PIN              GPIO_PIN_10
+#define BUZZER_GPIO_PORT        GPIOE
 
+#define ANCHORID0_PIN           GPIO_PIN_5
+#define ANCHORID0_GPIO_PORT     GPIOE
+
+#define ANCHORID1_PIN           GPIO_PIN_4
+#define ANCHORID1_GPIO_PORT     GPIOE
+
+#define ANCHORID2_PIN           GPIO_PIN_3
+#define ANCHORID2_GPIO_PORT     GPIOE
+
+#define ANCHORID3_PIN           GPIO_PIN_2
+#define ANCHORID3_GPIO_PORT     GPIOE
 
 typedef enum {
-    uwb_ok_led,
-    onside_led,
-    across_led,
-    can_rx_led,   
-    switch_key,
-    pause_key,
-    buzzer,
-    sw0,
-    sw1,
+    RT9013_EN,
+    UWB_OK_LED,
+    CAN_RX_LED, 
+    ONSIDE_LED,
+    ACROSS_LED,
+    SWITCH_KEY,
+    PAUSE_KEY,
+    BUZZER,
+    ANCHOR_ID0,
+    ANCHOR_ID1,
+    ANCHOR_ID2,
+    ANCHOR_ID3,
     IO_NUM
 } gpioBoard_enum_t;
 

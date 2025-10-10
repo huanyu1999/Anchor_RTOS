@@ -38,14 +38,17 @@ unsigned long portGetTickCnt(void)
 /* @fn	  usleep
  * @brief precise usleep() delay
  * */
+
+#ifdef __GNUC__
 #pragma GCC optimize ("O0")
+#endif
 int usleep(unsigned long usec)
 {
     int i,j;
-#pragma GCC ivdep
+// #pragma GCC ivdep
     for(i=0;i<usec;i++)
     {
-#pragma GCC ivdep
+// #pragma GCC ivdep
         for(j=0;j<2;j++)
         {
             __NOP();

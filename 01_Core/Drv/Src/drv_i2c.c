@@ -19,7 +19,6 @@ void drv_i2cInit(void)
     i2c_handle.Init.NoStretchMode   = I2C_NOSTRETCH_DISABLE;
     i2c_handle.Init.OwnAddress1     = I2C_MASTER_ADDRESS;           // 作为从设备时的值，不会影响作为主设备的读写
     i2c_handle.Init.OwnAddress2     = 0xFE;
-    
 
     HAL_I2C_Init(&i2c_handle);
 }
@@ -80,7 +79,7 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
     GPIO_InitStructure.Mode = GPIO_MODE_AF_OD;
     GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStructure.Pull = GPIO_NOPULL;
-    GPIO_InitStructure.Pin = I2C2_SDA_PIN | I2C2_SCL_PIN;
+    GPIO_InitStructure.Pin = I2C1_SDA_PIN | I2C1_SCL_PIN;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStructure);
 
     __HAL_RCC_I2C1_CLK_ENABLE();

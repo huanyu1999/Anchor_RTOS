@@ -8,7 +8,7 @@
 
 #define SWITCH_IS_ON(dip) ((dev_dipRead(dip)) ? (0) : (1))
 
-void dev_ledAllInit(void);
+void dev_ledAndRT9013Init(void);
 void dev_ledInit(gpioBoard_enum_t led);
 void dev_ledBlink(gpioBoard_enum_t led);
 void dev_ledOn(gpioBoard_enum_t led);

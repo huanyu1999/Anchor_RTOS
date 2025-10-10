@@ -2,33 +2,32 @@
 #include "instance.h"
 #include "elog.h"
 
-uint8_t group_id;           // 组ID
-uint8_t anc_id;             // 如当前角色是基站，则表示当前基站ID
-uint8_t tag_id;             // 如当前角色是标签，则表示当前标签ID
-int32_t distance_report[8]; // 基站测距值数组，用于打包输出
-int32_t group_report[8];    // 基站组ID数组，用于打包输出
-uint32_t range_time;        // 测距产生时间，串口打包发送
-uint8_t frame_seq_nb = 0;   // 每帧数据增加1
-uint8_t range_nb = 0;       // 每次range增加1(poll resp1~4 fianl维护一套range_nb)
-uint8_t recv_tag_id;        // 如当前角色是基站，则表示当前基站收到标签发送过来数据的标签ID
-uint8_t recv_anc_id;        // 如当前角色是标签，则表示当前标签收到基站发送过来数据的基站ID
-uint8_t range_status = RANGE_NULL; // 测距成功标志位，用于打包输出
-float rx_power;                    // 接收RSSI
-uint16_t inst_slot_number;         // 系统内最大标签容量
-uint8_t inst_dataRate; // 通信速率，用于根据当前110K还是6.8M确定数据超时等通信过程相关参数
-uint8_t inst_ch;       // 信道号Channel number
-uint8_t inst_prf;      // PRF
-uint8_t inst_one_slot_time;     // 一个slot的时间，根据通信速率不同而不同，单位ms
-uint32_t inst_final_rx_timeout; // 基站final接收超时时间，根据通信速率不同而不同，单位us
-uint32_t inst_resp_rx_timeout; // 标签发送poll后接收resp超时时间，根据通信速率不同而不同，单位us
-// uint32_t inst_init_rx_timeout; //标签发送blink后接收init超时时间，根据通信速率不同而不同，单位us
-uint64_t inst_poll2final_time; // 单TWR周期poll起始到final结束的总时间
-uint32_t
-    inst_data_interval; // 相邻两条数据的间隔，如poll和第一个resp的间隔，resp1和resp2的间隔，根据通信速率不同而不同，单位us
-uint16 ant_dly = ANT_DLY; // 天线延时
-uint32 tx_power;          // 发射增益代码
-double distance_now_m;    // 基站计算本周期测距结果，单位米
-int32 distance_offset_cm; // 距离校准，单位cm
+uint8_t group_id;                   // 组ID，后续会有用处，不同车务段的人员共同施工，各自跟各自的基站通信？？？？
+uint8_t anc_id;                     // 如当前角色是基站，则表示当前基站ID
+uint8_t tag_id;                     // 如当前角色是标签，则表示当前标签ID
+int32_t distance_report[8];         // 基站测距值数组，用于打包输出
+int32_t group_report[8];            // 基站组ID数组，用于打包输出
+uint32_t range_time;                // 测距产生时间，串口打包发送
+uint8_t frame_seq_nb = 0;           // 每帧数据增加1
+uint8_t range_nb = 0;               // 每次range增加1(poll resp1~4 fianl维护一套range_nb)
+uint8_t recv_tag_id;                // 如当前角色是基站，则表示当前基站收到标签发送过来数据的标签ID
+uint8_t recv_anc_id;                // 如当前角色是标签，则表示当前标签收到基站发送过来数据的基站ID
+uint8_t range_status = RANGE_NULL;  // 测距成功标志位，用于打包输出
+float rx_power;                     // 接收RSSI
+uint16_t inst_slot_number;          // 系统内最大标签容量
+uint8_t inst_dataRate;              // 通信速率，用于根据当前110K还是6.8M确定数据超时等通信过程相关参数
+uint8_t inst_ch;                    // 信道号Channel number
+uint8_t inst_prf;                   // PRF
+uint8_t inst_one_slot_time;         // 一个slot的时间，根据通信速率不同而不同，单位ms
+uint32_t inst_final_rx_timeout;     // 基站final接收超时时间，根据通信速率不同而不同，单位us
+uint32_t inst_resp_rx_timeout;      // 标签发送poll后接收resp超时时间，根据通信速率不同而不同，单位us
+// uint32_t inst_init_rx_timeout;   //标签发送blink后接收init超时时间，根据通信速率不同而不同，单位us
+uint64_t inst_poll2final_time;      // 单TWR周期poll起始到final结束的总时间
+uint32_t inst_data_interval;        // 相邻两条数据的间隔，如poll和第一个resp的间隔，resp1和resp2的间隔，根据通信速率不同而不同，单位us
+uint16 ant_dly = ANT_DLY;           // 天线延时
+uint32 tx_power;                    // 发射增益代码
+double distance_now_m;              // 基站计算本周期测距结果，单位米
+int32 distance_offset_cm;           // 距离校准，单位cm
 int user_data[10];
 
 /* 計算接收功率 */
@@ -108,15 +107,17 @@ static dwDistance_t distance_data; // 定义距离管理
 
 static osMutexId_t heap_accessMutex;
 const osMutexAttr_t heap_mutex_attr = {
-    .name = "heapMutex", .attr_bits = osMutexRecursive | osMutexPrioInherit, .cb_mem = NULL, .cb_size = 0};
+    .name = "heapMutex", .attr_bits = osMutexRecursive | osMutexPrioInherit, .cb_mem = NULL, .cb_size = 0
+};
 
 osSemaphoreId_t tagDistClearSem;
 StaticSemaphore_t tagDistClearSemCB;
 const osSemaphoreAttr_t tagDistClearSem_attr = {
-    .name = "tagDistClear", .cb_mem = &tagDistClearSemCB, .cb_size = sizeof(tagDistClearSemCB)};
+    .name = "tagDistClear", .cb_mem = &tagDistClearSemCB, .cb_size = sizeof(tagDistClearSemCB)
+};
 
 extern osMessageQueueId_t minDisQueue;
-extern osSemaphoreId_t binSem;
+extern osSemaphoreId_t uwbIntSem;
 static uint32_t timeout;
 
 /*******************************************************静态函数声明********************************************************/
@@ -145,7 +146,7 @@ void uwb_init(void)
     board_dw1000Rst();
 
     port_set_dw1000_slowrate();
-    if (DWT_DEVICE_ID != dwt_readdevid()) // 若读取ID失败，先执行唤醒
+    if (0xDECA0130 != dwt_readdevid()) // 若读取ID失败，先执行唤醒
     {
         board_dw1000SlowWakeup();
         dwt_softreset();                 // 软件复位
@@ -154,8 +155,7 @@ void uwb_init(void)
 
     if (dwt_initialise(DWT_LOADUCODE) == DWT_ERROR) // dw1000初始化失败
     {
-        while (1)
-        ;
+        while (1);
     }
     port_set_dw1000_fastrate();
 
@@ -258,7 +258,7 @@ void uwb_init(void)
 }
 
 /**
- * @brief uwb 核心任务，使用中断触发
+ * @brief uwb核心任务，使用中断触发
  * @param  void *arg RTOS要求参数为空指针类型
  * @retval none
  */
@@ -268,7 +268,7 @@ void task0_uwb(void *arg)
     print_dw1000Config();
     for (;;)
     {
-        osStatus_t status = osSemaphoreAcquire(binSem, osWaitForever); // 采用中断触发的方式执行，获取信号量
+        osStatus_t status = osSemaphoreAcquire(uwbIntSem, osWaitForever); // 采用中断触发的方式执行，获取信号量
         if (status == osOK)
         {
             process_deca_irq();
@@ -330,9 +330,8 @@ void tag_distInsertAndUpdate(void)
     }
     else // 当前有效的标签距离之前已经入堆，更新
     {
-        heap_update(
-            &distance->dis_min_heap, recv_tag_id,
-            distance->sort_distance[recv_tag_id].tag_distance); // 有效距离，将对应的索引存储的数据，更新到堆里面
+        heap_update(&distance->dis_min_heap, recv_tag_id,
+        distance->sort_distance[recv_tag_id].tag_distance); // 有效距离，将对应的索引存储的数据，更新到堆里面
     }
     osMutexRelease(heap_accessMutex);
 }
@@ -428,8 +427,7 @@ static void print_dw1000Config(void)
     dwDevice_t *dev = get_the_local_structure_of_dev();
 
     log_i("***********************************************************************");
-    log_i("* firmware = %s\r\n* role = %s\r\n* addr = %x", SOFTWARE_VER, (dev->device_mode == TAG) ? "TAG" : "AHCHOR",
-          dev->device_id);
+    log_i("* firmware = %s\r\n* role = %s\r\n* addr = %x", SOFTWARE_VER, (dev->device_mode == TAG) ? "TAG" : "AHCHOR",dev->device_id);
     log_i("* max_anc_num = %d\r\n* max_tag_num = %d\r\n* sync = 0", MAX_AHCHOR_NUMBER, inst_slot_number);
     log_i("* baud_rate = %s\r\n* channel = CH%d", (inst_dataRate == DWT_BR_110K) ? "110K" : "6.8M", inst_ch);
     log_i("* data_rate = %dHz\r\n* update_time = %dms", 1000 / (inst_slot_number * inst_one_slot_time),

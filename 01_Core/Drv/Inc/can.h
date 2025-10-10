@@ -29,8 +29,8 @@ extern "C" {
 #include "main.h"
 
 /* USER CODE BEGIN Private defines */
-#define USE_CAN1 0
-#define USE_CAN2 1
+#define USE_CAN1 1
+#define USE_CAN2 0
 /* USER CODE END Private defines */
 
 #if USE_CAN1

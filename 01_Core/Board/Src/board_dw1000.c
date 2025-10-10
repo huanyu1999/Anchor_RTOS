@@ -5,9 +5,9 @@
 
 static volatile uint32_t signalResetDone;
 static gpio_config_t dw1000_boardParam[] = {
-    {.gpio_port = Dw1000_IRQ_GPIO_Port,  .gpio_pin = Dw1000_IRQ_Pin, .gpio_mode = GPIO_MODE_IT_RISING, .gpio_pull = GPIO_PULLDOWN, .gpio_speed = NULL},
+    {.gpio_port = Dw1000_IRQ_GPIO_Port, .clk_port = GPIO_PORT_A, .gpio_pin = Dw1000_IRQ_Pin, .gpio_mode = GPIO_MODE_IT_RISING, .gpio_pull = GPIO_PULLDOWN, .gpio_speed = NULL},
 
-    {.gpio_port = Dw1000_RSTn_GPIO_Port, .gpio_pin = Dw1000_RSTn_Pin, .gpio_mode = GPIO_MODE_ANALOG, .gpio_pull = GPIO_NOPULL, .gpio_speed = NULL},
+    {.gpio_port = Dw1000_RSTn_GPIO_Port, .clk_port = GPIO_PORT_C, .gpio_pin = Dw1000_RSTn_Pin, .gpio_mode = GPIO_MODE_ANALOG, .gpio_pull = GPIO_NOPULL, .gpio_speed = NULL},
 };
 
 static exti_irq_t exti_config[exti_num] = {

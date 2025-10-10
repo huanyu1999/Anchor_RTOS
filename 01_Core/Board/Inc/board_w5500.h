@@ -4,9 +4,9 @@
 #define W5500_RST_PORT    GPIOB
 #define W5500_RST_PIN     GPIO_PIN_4
 
-#define W5500_INT_PORT    GPIOA
-#define W5500_INT_PIN     GPIO_PIN_10
-#define W5500_EXTI_IRQ    EXTI15_10_IRQn       // 跟UWB中断冲突，原理图需要协调修改 
+#define W5500_INT_PORT    GPIOB
+#define W5500_INT_PIN     GPIO_PIN_5
+#define W5500_EXTI_IRQ    EXTI9_5_IRQn
 
 typedef enum {
     W5500_RST = 0,

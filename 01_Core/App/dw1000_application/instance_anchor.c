@@ -28,8 +28,8 @@ static uint64_t final_rx_ts;
 // static volatile uint8_t tx_status = TX_WAIT;
 
 static prev_range_t prev_range[MAX_TAG_LIST_SIZE];
-static uint8_t resp_valid = 0x00;                    //基站数据有效标志 
-static uint8_t sr;                               //用于控制当前基站处于resp时是发送还是接收,sr用于确认基站发送resp后，
+static uint8_t resp_valid = 0x00;                    // 基站数据有效标志 
+static uint8_t sr;                                   // 用于控制当前基站处于resp时是发送还是接收,sr用于确认基站发送resp后，
 static dwt_rxdiag_t rx_diag;                         // 計算接收功率
 
 static int twrAnchor_Init(dwDevice_t *dev);
@@ -186,11 +186,11 @@ static void twrAnchor_rxOkHandle(void)
                 
                 
                 double rx_power =  calculate_RSSI(&rx_diag);
-                log_d("POWER : %.4f dBM", rx_power);
+                // log_d("POWER : %.4f dBM", rx_power);
                 // log_d("poll_tx_ts %lu resp_rx_ts %lu final_tx_ts %lu\n", poll_tx_ts, resp_rx_ts, final_tx_ts);
                 // log_d("poll_rx_ts %d resp_tx_ts %d final_rx_ts %d\n", poll_rx_ts_32, resp_tx_ts_32, final_rx_ts_32);
                 // ("Ra %.lf Rb %.lf Da %.lf Db %.lf\n", Ra, Rb, Da, Db);*/
-                // log_d("tag %d dis : %.2f \n", recv_tag_id, (float)(prev_range[recv_tag_id].distance) / 1000.0); 
+                log_d("tag %d dis : %.2f \n", recv_tag_id, (float)(prev_range[recv_tag_id].distance) / 1000.0); 
                 
                 //更新prev_range为本次测距值
                 prev_range[recv_tag_id].distance = distance_now_m * 1000;//单位转换为mm
@@ -202,7 +202,7 @@ static void twrAnchor_rxOkHandle(void)
                 range_status = RANGE_TWR_OK;            // 设置TWR成功测距标志，在dw_main.c里判断打包串口输出
                 extern osThreadId_t task4_Handle;
                 osThreadFlagsSet(task4_Handle, 0x0001U);
-                dev_ledBlink(uwb_ok_led);
+                dev_ledBlink(UWB_OK_LED);
             }
             else
             {

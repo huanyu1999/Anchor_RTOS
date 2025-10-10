@@ -163,6 +163,7 @@ void elog_componentInit(void)
 
 void elog_entry(void *para)
 {
+    elog_componentInit();
     size_t get_log_size = 0;
 #ifdef ELOG_ASYNC_LINE_OUTPUT
     static char poll_get_buf[ELOG_LINE_BUF_SIZE - 4];

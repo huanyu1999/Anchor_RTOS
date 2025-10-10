@@ -4,15 +4,28 @@
 #include "dev_w5500.h"
 #include "board_w5500.h"
 #include "spi.h"
-#include "timer.h"
+#include "drv_timer.h"
 #include "socket.h"
 #include "w5500.h"
 #include "dhcp.h"
 #include "elog.h"
 
 #define W5500_VERSION 0x04
+#define KEEPALIVE_ENABLE 1
+#define IS_SOCKET_INT(ch)  (0x01 << ch)
 
 TIM_HandleTypeDef dhcp_oneSecondHandle;
+
+w5500_device dev_w5500 = { 0, 0, 0, 0, 0, 0, 0 };
+
+dev_w5500Handler dev_w5500TcpServer = {
+    .init = dev_w5500TcpServerInit,
+    .handle_w5500Event = dev_w5500TcpServerHandler
+};
+
+dev_w5500Handler dev_w5500TcpCLient = {
+    0, 0
+};
 
 static uint8_t dev_w5500DhcpProcess(uint8_t sn, uint8_t *buffer);
 
@@ -28,7 +41,7 @@ void dev_w5500Initialize(void)
 
     dev_w5500VersionCheck();
 
-    dev_w5500PhyLinkCheck();
+    // dev_w5500PhyLinkCheck();
 }
 
 void dev_w5500VersionCheck(void)
@@ -42,15 +55,27 @@ void dev_w5500VersionCheck(void)
             error_count++;
             if (error_count > 5)
             {
-                log_e("error, %s version is 0x%02x, but read %s version value = 0x%02x\r\n", _WIZCHIP_ID_, W5500_VERSION, _WIZCHIP_ID_, getVERSIONR());
+                // log_e("error, %s version is 0x%02x, but read %s version value = 0x%02x\r\n", _WIZCHIP_ID_, W5500_VERSION, _WIZCHIP_ID_, getVERSIONR());
                 Error_Handler();
             }
         }
         else
         {
+            // log_d("w5500 version check success.");
             break;
         }
     }
+}
+
+void dev_w5500PhyConfigInit(void)
+{   
+    wiz_PhyConf phy_conf;
+    phy_conf.by = PHY_CONFBY_SW;
+    phy_conf.mode = PHY_MODE_MANUAL;
+    phy_conf.duplex = PHY_DUPLEX_FULL;
+    phy_conf.speed = PHY_SPEED_100;
+
+    ctlwizchip(CW_SET_PHYCONF, &phy_conf);
 }
 
 void dev_w5500PhyInfoGet(void)
@@ -64,6 +89,7 @@ void dev_w5500PhyInfoGet(void)
 void dev_w5500PhyLinkCheck(void)
 {
     uint8_t phy_link_status;
+    dev_w5500PhyConfigInit();
     do
     {
         HAL_Delay(1000);
@@ -81,9 +107,15 @@ void dev_w5500PhyLinkCheck(void)
 
 }
 
-void dev_w5500NetWorkInit(uint8_t *ethernet_buff, wiz_NetInfo *conf_info)
+void dev_w5500TcpServerInit(w5500_device* dev, uint8_t *ethernet_buff, wiz_NetInfo *conf_info)
 {
     int ret;
+    setSIMR(0x01);              // 打开中断
+    setSn_IMR(SOCKET_ID, 0x0f);
+
+    dev->dest_port = 8080;
+    dev->socket_num = SOCKET_ID;
+
     wizchip_setnetinfo(conf_info); // Configuring Network Information
     if (conf_info->dhcp == NETINFO_DHCP)
     {
@@ -95,6 +127,165 @@ void dev_w5500NetWorkInit(uint8_t *ethernet_buff, wiz_NetInfo *conf_info)
         }
     }
     dev_w5500PrintfNetworkInfo();
+
+    if (socket(dev->socket_num, Sn_MR_TCP, dev->dest_port, 0x00) != SOCKET_ID) {
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:socket open failed.", dev->socket_num);
+#endif
+    } else {
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:Socket opened\r\n", dev->socket_num);
+#endif
+        listen(SOCKET_ID);
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:Listen, TCP server, port [%d]\r\n", dev->socket_num, dev->dest_port);
+#endif
+    }
+}
+
+void dev_w5500PrintfNetworkInfo(void)
+{
+    wiz_NetInfo net_info;
+    wizchip_getnetinfo(&net_info);
+
+    if (net_info.dhcp == NETINFO_DHCP)
+    {
+        log_d("====================================================================================================\r\n");
+        log_d(" %s network configuration : DHCP\r\n\r\n", _WIZCHIP_ID_);
+    }
+    else
+    {
+        log_d("====================================================================================================\r\n");
+        log_d(" %s network configuration : static\r\n\r\n", _WIZCHIP_ID_);
+    }
+
+    log_d(" MAC         : %02X:%02X:%02X:%02X:%02X:%02X\r\n", net_info.mac[0], net_info.mac[1], net_info.mac[2], net_info.mac[3], net_info.mac[4], net_info.mac[5]);
+    log_d(" IP          : %d.%d.%d.%d\r\n", net_info.ip[0], net_info.ip[1], net_info.ip[2], net_info.ip[3]);
+    log_d(" Subnet Mask : %d.%d.%d.%d\r\n", net_info.sn[0], net_info.sn[1], net_info.sn[2], net_info.sn[3]);
+    log_d(" Gateway     : %d.%d.%d.%d\r\n", net_info.gw[0], net_info.gw[1], net_info.gw[2], net_info.gw[3]);
+    log_d(" DNS         : %d.%d.%d.%d\r\n", net_info.dns[0], net_info.dns[1], net_info.dns[2], net_info.dns[3]);
+    log_d("====================================================================================================");
+}
+
+void dev_w5500TcpServerHandler(w5500_device* dev, w5500_event event) {
+    uint16_t len = 0;
+    // uint16_t sent_size = 0;
+    uint8_t destip[4] = {0, 0, 0, 0};
+    uint16_t destport;
+
+    switch (event) {
+    case EVENT_SENDOK:
+#ifdef _LOOPBACK_DEBUG_
+            log_d("%d:socket send OK.", dev->socket_num);
+#endif
+        break;
+
+    case EVENT_TIMEOUT: 
+        if (socket(dev->socket_num, Sn_MR_TCP, dev->dest_port, 0x00) != SOCKET_ID) {    // 重新打开socket
+#ifdef _LOOPBACK_DEBUG_
+            log_d("%d:socket open failed.", dev->socket_num);
+#endif
+        } else {
+#ifdef _LOOPBACK_DEBUG_
+            log_d("%d:Socket opened\r\n", dev->socket_num);
+#endif
+            listen(SOCKET_ID);
+#ifdef _LOOPBACK_DEBUG_
+            log_d("%d:Listen, TCP server, port [%d]\r\n", dev->socket_num, dev->dest_port);
+#endif
+        }
+        break;
+
+    case EVENT_DISCON:
+        if ((len = getSn_RX_RSR(dev->socket_num)) > 0) { // 如果关闭有接收到数据，先接收再关闭
+            if (len > DATA_BUF_SIZE) {
+                len = DATA_BUF_SIZE;
+            }
+            recv(dev->socket_num, dev->buffer, len);
+            dev->buffer[len] = 0x00;
+            log_d("recv_data:%s", dev->buffer);
+            int ret = send(dev->socket_num, dev->buffer, len);
+        }
+        disconnect(dev->socket_num);
+
+        if (getSn_SR(dev->socket_num) == SOCK_CLOSED) {
+            if (socket(dev->socket_num, Sn_MR_TCP, dev->dest_port, 0x00) != SOCKET_ID) {
+#ifdef _LOOPBACK_DEBUG_
+            log_d("%d:socket open failed.", dev->socket_num);
+#endif
+            } else {
+#ifdef _LOOPBACK_DEBUG_
+                log_d("%d:Socket opened\r\n", dev->socket_num);
+#endif
+                listen(SOCKET_ID);
+#ifdef _LOOPBACK_DEBUG_
+                log_d("%d:Listen, TCP server, port [%d]\r\n", dev->socket_num, dev->dest_port);
+#endif
+            }
+        }
+        break;
+        
+    case EVENT_RECV:
+        if ((len = getSn_RX_RSR(dev->socket_num)) > 0) { // 读取接收数据的大小
+            if (len > DATA_BUF_SIZE) {
+                len = DATA_BUF_SIZE;
+            }
+            recv(dev->socket_num, dev->buffer, len);
+            dev->buffer[len] = 0x00;
+            log_d("recv_data:%s", dev->buffer);
+            int ret = send(dev->socket_num, dev->buffer, len);
+            if (ret != len) {
+                log_d("sent failed, ret : %d, len : %d", ret, len);
+            }
+        }
+        break;
+
+    case EVENT_CON:
+#ifdef _LOOPBACK_DEBUG_
+        getSn_DIPR(dev->socket_num, destip);
+        destport = getSn_DPORT(dev->socket_num);
+        log_d("%d:Connected - %d.%d.%d.%d : %d\r\n", dev->socket_num, destip[0], destip[1], destip[2], destip[3], destport);
+#endif
+        break;
+    }
+}
+
+void w5500_isr(void) {
+    uint8_t sir_val = 0;
+    uint8_t tmp, sn;
+    sir_val = getSIR();         // 获取是哪些socket触发了中断
+    if (sir_val != 0xff) {
+        setSIMR(0x00);          // 暂时关闭Socket 中断，避免中断处理有产生新的中断
+        for (sn = 0; sn < _WIZCHIP_SOCK_NUM_; sn++) {
+            tmp = 0;
+            if (sir_val & IS_SOCKET_INT(sn)) {
+                tmp = getSn_IR(sn);
+                if(tmp != 0x03) {//error interrupt
+                    // I_STATUS[sn] |= tmp;
+                    switch (tmp) {
+                    case Sn_IR_CON:
+                        dev_w5500TcpServer.handle_w5500Event(&dev_w5500, EVENT_CON);
+                        break;
+                    case Sn_IR_DISCON:
+                        dev_w5500TcpServer.handle_w5500Event(&dev_w5500, EVENT_DISCON);
+                        break;
+                    case Sn_IR_RECV:
+                        dev_w5500TcpServer.handle_w5500Event(&dev_w5500, EVENT_RECV);
+                        break;
+                    case Sn_IR_TIMEOUT:
+                        dev_w5500TcpServer.handle_w5500Event(&dev_w5500, EVENT_TIMEOUT);
+                        break;
+                    case Sn_IR_SENDOK:
+                        dev_w5500TcpServer.handle_w5500Event(&dev_w5500, EVENT_SENDOK);
+                        break;
+                    }
+                    tmp &= 0x1f;
+                    setSn_IR(sn, tmp); // 清除Sn_IR bit
+                }
+            }
+        }
+        setSIMR(0xff);  // 重新打开Socket 中断
+    }
 }
 
 /**
@@ -113,7 +304,7 @@ int32_t dev_w5500TcpClientLoopBack(uint8_t sn, uint8_t* buf, uint8_t *destip, ui
     // Destination (TCP Server) IP info (will be connected)
     // >> loopback_tcpc() function parameter
     // >> Ex)
-    uint8_t dip[4] = {192, 168, 0, 214};
+    uint8_t  dip[4] = {192, 168, 0, 214};
     uint16_t dport = 5000;
     getSn_DIPR(sn, dip);
     dport = getSn_DPORT(sn);
@@ -149,7 +340,7 @@ int32_t dev_w5500TcpClientLoopBack(uint8_t sn, uint8_t* buf, uint8_t *destip, ui
                     size = DATA_BUF_SIZE;        // DATA_BUF_SIZE means user defined buffer size (array)
                 ret       = recv(sn, buf, size); // Data Receive process (H/W Rx socket buffer -> User's buffer)
                 buf[size] = 0x00;
-                printf("rece from %d.%d.%d.%d:%d data:%s\r\n", dip[0], dip[1], dip[2], dip[3], dport, buf);
+                log_d("rece from %d.%d.%d.%d:%d data:%s\r\n", dip[0], dip[1], dip[2], dip[3], dport, buf);
                 if (ret <= 0)
                     return ret; // If the received data length <= 0, receive failed and process end
                 size     = (uint16_t)ret;
@@ -208,28 +399,96 @@ int32_t dev_w5500TcpClientLoopBack(uint8_t sn, uint8_t* buf, uint8_t *destip, ui
     return 1;
 }
 
-void dev_w5500PrintfNetworkInfo(void)
-{
-    wiz_NetInfo net_info;
-    wizchip_getnetinfo(&net_info);
+/**
+ * @brief   tcp server loopback test
+ * @param   sn:    socket number
+ * @param   buf:   Data sending and receiving cache
+ * @param   port:  Listen port
+ * @return  value for SOCK_ERRORs,return 1:no error
+ */
+int32_t loopback_tcps(uint8_t sn, uint8_t *buf, uint16_t port) {
+    int32_t ret;
+    uint16_t size = 0, sentsize = 0;
 
-    if (net_info.dhcp == NETINFO_DHCP)
-    {
-        log_d("====================================================================================================\r\n");
-        log_d(" %s network configuration : DHCP\r\n\r\n", _WIZCHIP_ID_);
-    }
-    else
-    {
-        log_d("====================================================================================================\r\n");
-        log_d(" %s network configuration : static\r\n\r\n", _WIZCHIP_ID_);
-    }
+#ifdef _LOOPBACK_DEBUG_
+    uint8_t destip[4];
+    uint16_t destport;
+#endif
 
-    log_d(" MAC         : %02X:%02X:%02X:%02X:%02X:%02X\r\n", net_info.mac[0], net_info.mac[1], net_info.mac[2], net_info.mac[3], net_info.mac[4], net_info.mac[5]);
-    log_d(" IP          : %d.%d.%d.%d\r\n", net_info.ip[0], net_info.ip[1], net_info.ip[2], net_info.ip[3]);
-    log_d(" Subnet Mask : %d.%d.%d.%d\r\n", net_info.sn[0], net_info.sn[1], net_info.sn[2], net_info.sn[3]);
-    log_d(" Gateway     : %d.%d.%d.%d\r\n", net_info.gw[0], net_info.gw[1], net_info.gw[2], net_info.gw[3]);
-    log_d(" DNS         : %d.%d.%d.%d\r\n", net_info.dns[0], net_info.dns[1], net_info.dns[2], net_info.dns[3]);
-    log_d("====================================================================================================");
+    switch (getSn_SR(sn)) {
+    case SOCK_ESTABLISHED:
+        if (getSn_IR(sn) & Sn_IR_CON) {
+#ifdef _LOOPBACK_DEBUG_
+            getSn_DIPR(sn, destip);
+            destport = getSn_DPORT(sn);
+            log_d("%d:Connected - %d.%d.%d.%d : %d\r\n", sn, destip[0], destip[1], destip[2], destip[3], destport);
+#endif
+#if KEEPALIVE_ENABLE == 1
+            // We need to send a packet of data to activate keepalive
+            ret = send(sn, (uint8_t *)"", 1); // Data send process
+            if (ret < 0) {                    // Send Error occurred (sent data length < 0)
+                close(sn); // socket close
+                return ret;
+            }
+#endif
+            setSn_IR(sn, Sn_IR_CON);
+        }
+        if ((size = getSn_RX_RSR(sn)) > 0) { // Don't need to check SOCKERR_BUSY because it doesn't not occur.
+            if (size > DATA_BUF_SIZE) {
+                size = DATA_BUF_SIZE;
+            }
+            ret = recv(sn, buf, size);
+            if (ret <= 0) {
+                return ret; // check SOCKERR_BUSY & SOCKERR_XXX. For showing the occurrence of SOCKERR_BUSY.
+            }
+            size = (uint16_t)ret;
+            sentsize = 0;
+            buf[size] = 0x00;
+            log_d("rece data:%s\r\n", buf);
+            while (size != sentsize) {
+                ret = send(sn, buf + sentsize, size - sentsize);
+                if (ret < 0) {
+                    close(sn);
+                    return ret;
+                }
+                sentsize += ret; // Don't care SOCKERR_BUSY, because it is zero.
+            }
+        }
+        break;
+    case SOCK_CLOSE_WAIT:
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:CloseWait\r\n", sn);
+#endif
+        if ((ret = disconnect(sn)) != SOCK_OK) {
+            return ret;
+        }
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:Socket Closed\r\n", sn);
+#endif
+        break;
+    case SOCK_INIT:
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:Listen, TCP server loopback, port [%d]\r\n", sn, port);
+#endif
+        if ((ret = listen(sn)) != SOCK_OK) {
+            return ret;
+        }
+        break;
+    case SOCK_CLOSED:
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:TCP server loopback start\r\n", sn);
+#endif
+        if ((ret = socket(sn, Sn_MR_TCP, port, 0x00)) != sn) {
+            return ret;
+        }
+#ifdef _LOOPBACK_DEBUG_
+        log_d("%d:Socket opened\r\n", sn);
+#endif
+        break;
+    default:
+        break;
+    }
+    return 1;
 }
 
 static uint8_t dev_w5500DhcpProcess(uint8_t sn, uint8_t *buffer)

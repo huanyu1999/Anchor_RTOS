@@ -19,11 +19,10 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "dev.h"
 #include "board_dw1000.h"
+#include "board_w5500.h"
 #include "stm32f4xx_it.h"
-#include "FreeRTOS.h"
-#include "task.h"
+#include "cmsis_os.h"
 #include "elog.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -61,13 +60,13 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern UART_HandleTypeDef huart3;
 extern UART_HandleTypeDef huart4;
-extern UART_HandleTypeDef huart1;
 extern SD_HandleTypeDef sdCard_Handle;
+extern MMC_HandleTypeDef emmc_handle;
 extern TIM_HandleTypeDef htimer2;
-extern TIM_HandleTypeDef htimer3;
 extern TIM_HandleTypeDef htim6;
-extern CAN_HandleTypeDef hcan2;
+extern CAN_HandleTypeDef hcan1;
 
 /* USER CODE BEGIN EV */
 
@@ -175,27 +174,15 @@ void DebugMon_Handler(void)
 /* please refer to the startup file (startup_stm32f4xx.s).                    */
 /******************************************************************************/
 
-void DMA2_Stream7_IRQHandler(void)
-{
-    HAL_DMA_IRQHandler(huart1.hdmatx);
-}
-
-void DMA2_Stream2_IRQHandler(void)
-{
-    HAL_DMA_IRQHandler(huart1.hdmarx);
-}
-
-/**
-  * @brief This function handles timer3 global interrupt.
-  */
-void TIM3_IRQHandler(void)
-{
-    HAL_TIM_IRQHandler(&htimer3);
-}
-
 void TIM2_IRQHandler(void)
 {
     HAL_TIM_IRQHandler(&htimer2);
+}
+
+void TIM3_IRQHandler(void)
+{
+    extern TIM_HandleTypeDef button_tickHandler;
+    HAL_TIM_IRQHandler(&button_tickHandler);
 }
 
 #if TASK_INFO
@@ -206,52 +193,66 @@ void TIM4_IRQHandler(void)
 }
 #endif
 
-extern TIM_HandleTypeDef dhcp_oneSecondHandle;
 void TIM4_IRQHandler(void)
 {
+    extern TIM_HandleTypeDef dhcp_oneSecondHandle;
     HAL_TIM_IRQHandler(&dhcp_oneSecondHandle);
 }
 
 /**
   * @brief This function handles CAN1 RX0 interrupt request.
   */
-void CAN2_RX0_IRQHandler(void)
+void CAN1_RX0_IRQHandler(void)
 {
-    HAL_CAN_IRQHandler(&hcan2);
+    HAL_CAN_IRQHandler(&hcan1);
 }
-
-
 
 /**
   * @brief This function handles EXTI line[15:10] interrupts.
   */
-void EXTI15_10_IRQHandler(void)
+void EXTI2_IRQHandler(void)
 {
-    HAL_GPIO_EXTI_IRQHandler(Dw1000_IRQ_Pin);
+    HAL_GPIO_EXTI_IRQHandler(Dw1000_IRQ_Pin); 
+}
+
+void EXTI4_IRQHandler(void)
+{
     HAL_GPIO_EXTI_IRQHandler(Dw1000_RSTn_Pin);
+}
+
+void EXTI9_5_IRQHandler(void) 
+{
+    HAL_GPIO_EXTI_IRQHandler(W5500_INT_PIN);
+}
+
+void HAL_UART_IdleCallback(UART_HandleTypeDef *huart)
+{
+    if (huart->Instance == UART4)
+    {
+        // 释放一个信号量
+        extern osSemaphoreId_t gnssReceiveSem;
+        osSemaphoreRelease(gnssReceiveSem);
+    }
 }
 
 /**
   * @brief This function handles UART4 global interrupt.
   */
-//void UART4_IRQHandler(void)
-//{
-//    HAL_UART_IRQHandler(&huart4);
-//}
-
-void USART1_IRQHandler(void)
-{
-    HAL_UART_IRQHandler(&huart1);
-
-    if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_IDLE))
+void UART4_IRQHandler(void)
+{        
+    HAL_UART_IRQHandler(&huart4);   
+    if (__HAL_UART_GET_FLAG(&huart4, UART_FLAG_IDLE))
     {
-        __HAL_UART_CLEAR_IDLEFLAG(&huart1);
-        HAL_UART_IdleCallback(&huart1);
+        __HAL_UART_CLEAR_IDLEFLAG(&huart4);
+        HAL_UART_IdleCallback(&huart4);
         // log_d("HAL_UART_IdleCallback");
-    }
+    }                                 
 }
 
-/* USER CODE BEGIN 1 */
+void USART3_IRQHandler(void)
+{
+    HAL_UART_IRQHandler(&huart3);
+}
 
 /**
   * @brief This function handles TIM6 global interrupt, DAC1 and DAC2 underrun error interrupts.
@@ -263,17 +264,15 @@ void TIM6_DAC_IRQHandler(void)
 
 void SDIO_IRQHandler(void)
 {
-    HAL_SD_IRQHandler(&sdCard_Handle);
+    HAL_MMC_IRQHandler(&emmc_handle);
 }
 
 void DMA2_Stream3_IRQHandler(void)
 {
-    HAL_DMA_IRQHandler(sdCard_Handle.hdmatx);
+    HAL_DMA_IRQHandler(emmc_handle.hdmatx);
 }
 
 void DMA2_Stream6_IRQHandler(void)
 {
-    HAL_DMA_IRQHandler(sdCard_Handle.hdmarx);
+    HAL_DMA_IRQHandler(emmc_handle.hdmarx);
 }
-
-/* USER CODE END 1 */

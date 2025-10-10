@@ -9,7 +9,8 @@ uint8_t debug_buff1[256];
 uint8_t debug_buff2[256];
 static uint8_t *current_buff = debug_buff1; 
 
-void printf_use_dma(const char *format, ...) {
+void printf_use_dma(const char *format, ...)
+{
     uint8_t *send_buff = current_buff;
     uint32_t length = 0;
     current_buff = (current_buff == debug_buff1) ? debug_buff2 : debug_buff1;
@@ -20,5 +21,5 @@ void printf_use_dma(const char *format, ...) {
     va_end(args);
     extern osSemaphoreId_t uart_dmaLockSem;
     osSemaphoreAcquire(uart_dmaLockSem, osWaitForever);
-    HAL_UART_Transmit_DMA(&huart1, send_buff, length);
+    // HAL_UART_Transmit_DMA(&huart1, send_buff, length);
 }

@@ -61,7 +61,7 @@ typedef struct {
 
 void dev_rx8130ceInit(void);
 void dev_rx8130ceSoftInit(void);
-void dev_rx8130ceSetTimeTest(void);
+void dev_rx8130ceSetDefaultTime(void);
 void dev_rx8130ceWritebuf(uint16_t devAddr_w, uint8_t memAddr, uint8_t* data, uint16_t length);
 void dev_rx8130ceRead(uint16_t devAddr, uint8_t memAddr, uint8_t *buf, uint16_t length);
 void dev_rx8130ceSetDateTime(volatile rx8130ce_time_t *time);

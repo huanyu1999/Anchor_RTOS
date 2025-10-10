@@ -15,15 +15,15 @@
       <uAC6>0</uAC6>
       <TargetOption>
         <TargetCommonOption>
-          <Device>STM32F405RGTx</Device>
+          <Device>STM32F405VGTx</Device>
           <Vendor>STMicroelectronics</Vendor>
           <PackID>Keil.STM32F4xx_DFP.3.0.0</PackID>
           <PackURL>https://www.keil.com/pack/</PackURL>
-          <Cpu>IRAM(0x20000000-0x2001BFFF) IRAM2(0x2001C000-0x2001FFFF) IROM(0x8000000-0x80FFFFF)  CLOCK(25000000) FPU2 CPUTYPE("Cortex-M4")</Cpu>
+          <Cpu>IRAM(0x20000000,0x00020000) IRAM2(0x10000000,0x00010000) IROM(0x08000000,0x00100000) CPUTYPE("Cortex-M4") FPU2 CLOCK(12000000) ELITTLE</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
           <StartupFile></StartupFile>
-          <FlashDriverDll></FlashDriverDll>
-          <DeviceId></DeviceId>
+          <FlashDriverDll>UL2CM3(-S0 -C0 -P0 -FD20000000 -FC1000 -FN1 -FF0STM32F4xx_1024 -FS08000000 -FL0100000 -FP0($$Device:STM32F405VGTx$CMSIS\Flash\STM32F4xx_1024.FLM))</FlashDriverDll>
+          <DeviceId>0</DeviceId>
           <RegisterFile></RegisterFile>
           <MemoryEnv></MemoryEnv>
           <Cmp></Cmp>
@@ -34,7 +34,7 @@
           <SLE66CMisc></SLE66CMisc>
           <SLE66AMisc></SLE66AMisc>
           <SLE66LinkerMisc></SLE66LinkerMisc>
-          <SFDFile>$$Device:STM32F405RGTx$CMSIS\SVD\STM32F40x.svd</SFDFile>
+          <SFDFile>$$Device:STM32F405VGTx$CMSIS\SVD\STM32F405.svd</SFDFile>
           <bCustSvd>0</bCustSvd>
           <UseEnv>0</UseEnv>
           <BinPath></BinPath>
@@ -111,12 +111,12 @@
         </CommonProperty>
         <DllOption>
           <SimDllName>SARMCM3.DLL</SimDllName>
-          <SimDllArguments>-REMAP -MPU</SimDllArguments>
+          <SimDllArguments> -REMAP -MPU</SimDllArguments>
           <SimDlgDll>DCM.DLL</SimDlgDll>
           <SimDlgDllArguments>-pCM4</SimDlgDllArguments>
           <TargetDllName>SARMCM3.DLL</TargetDllName>
-          <TargetDllArguments>-MPU</TargetDllArguments>
-          <TargetDlgDll>DCM.DLL</TargetDlgDll>
+          <TargetDllArguments> -MPU</TargetDllArguments>
+          <TargetDlgDll>TCM.DLL</TargetDlgDll>
           <TargetDlgDllArguments>-pCM4</TargetDlgDllArguments>
         </DllOption>
         <DebugOption>
@@ -138,8 +138,8 @@
             <DriverSelection>4101</DriverSelection>
           </Flash1>
           <bUseTDR>1</bUseTDR>
-          <Flash2>STLink\ST-LINKIII-KEIL_SWO.dll</Flash2>
-          <Flash3>"" ()</Flash3>
+          <Flash2>BIN\UL2CM3.DLL</Flash2>
+          <Flash3></Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
           <pFcarmGrp></pFcarmGrp>
@@ -195,7 +195,7 @@
             <uLtcg>0</uLtcg>
             <nSecure>0</nSecure>
             <RoSelD>3</RoSelD>
-            <RwSelD>3</RwSelD>
+            <RwSelD>4</RwSelD>
             <CodeSel>0</CodeSel>
             <OptFeed>0</OptFeed>
             <NoZi1>0</NoZi1>
@@ -212,7 +212,7 @@
             <Ra2Chk>0</Ra2Chk>
             <Ra3Chk>0</Ra3Chk>
             <Im1Chk>1</Im1Chk>
-            <Im2Chk>1</Im2Chk>
+            <Im2Chk>0</Im2Chk>
             <OnChipMemories>
               <Ocm1>
                 <Type>0</Type>
@@ -247,7 +247,7 @@
               <IRAM>
                 <Type>0</Type>
                 <StartAddress>0x20000000</StartAddress>
-                <Size>0x1c000</Size>
+                <Size>0x20000</Size>
               </IRAM>
               <IROM>
                 <Type>1</Type>
@@ -302,19 +302,19 @@
               <OCR_RVCT9>
                 <Type>0</Type>
                 <StartAddress>0x20000000</StartAddress>
-                <Size>0x1c000</Size>
+                <Size>0x20000</Size>
               </OCR_RVCT9>
               <OCR_RVCT10>
                 <Type>0</Type>
-                <StartAddress>0x2001c000</StartAddress>
-                <Size>0x4000</Size>
+                <StartAddress>0x10000000</StartAddress>
+                <Size>0x10000</Size>
               </OCR_RVCT10>
             </OnChipMemories>
             <RvctStartVector></RvctStartVector>
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>0</Optim>
+            <Optim>4</Optim>
             <oTime>0</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
@@ -415,9 +415,9 @@
               <FilePath>..\01_Core\App\Src\app_sdCard.c</FilePath>
             </File>
             <File>
-              <FileName>app_ethernet.c</FileName>
+              <FileName>app_network.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\01_Core\App\Src\app_ethernet.c</FilePath>
+              <FilePath>..\01_Core\App\Src\app_network.c</FilePath>
             </File>
             <File>
               <FileName>stm32f4xx_it.c</FileName>
@@ -445,6 +445,16 @@
               <FilePath>..\01_Core\Board\Src\board_dw1000.c</FilePath>
             </File>
             <File>
+              <FileName>board_emmc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Board\Src\board_emmc.c</FilePath>
+            </File>
+            <File>
+              <FileName>board_gnss.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Board\Src\board_gnss.c</FilePath>
+            </File>
+            <File>
               <FileName>board_gpio.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Board\Src\board_gpio.c</FilePath>
@@ -465,34 +475,14 @@
           <GroupName>Dev</GroupName>
           <Files>
             <File>
-              <FileName>dev_can.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\Dev\Src\dev_can.c</FilePath>
-            </File>
-            <File>
-              <FileName>dev_rx8130ce.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\Dev\Src\dev_rx8130ce.c</FilePath>
-            </File>
-            <File>
-              <FileName>dev_led_buzzer_dip.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\Dev\Src\dev_led_buzzer_dip.c</FilePath>
-            </File>
-            <File>
               <FileName>dev_button.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Dev\Src\dev_button.c</FilePath>
             </File>
             <File>
-              <FileName>dev_sdCard.c</FileName>
+              <FileName>dev_can.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\01_Core\Dev\Src\dev_sdCard.c</FilePath>
-            </File>
-            <File>
-              <FileName>dev_linkFatFs.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\Dev\Src\dev_linkFatFs.c</FilePath>
+              <FilePath>..\01_Core\Dev\Src\dev_can.c</FilePath>
             </File>
             <File>
               <FileName>dev_dw1000.c</FileName>
@@ -500,14 +490,9 @@
               <FilePath>..\01_Core\Dev\Src\dev_dw1000.c</FilePath>
             </File>
             <File>
-              <FileName>usart_voice.c</FileName>
+              <FileName>dev_emmc.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\01_Core\Dev\Src\usart_voice.c</FilePath>
-            </File>
-            <File>
-              <FileName>dev_uart.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\Dev\Src\dev_uart.c</FilePath>
+              <FilePath>..\01_Core\Dev\Src\dev_emmc.c</FilePath>
             </File>
             <File>
               <FileName>dev_gnss.c</FileName>
@@ -515,9 +500,34 @@
               <FilePath>..\01_Core\Dev\Src\dev_gnss.c</FilePath>
             </File>
             <File>
+              <FileName>dev_linkFatFs.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_linkFatFs.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_led_buzzer_dip.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_led_buzzer_dip.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_rx8130ce.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_rx8130ce.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_uart.c</FilePath>
+            </File>
+            <File>
               <FileName>dev_w5500.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Dev\Src\dev_w5500.c</FilePath>
+            </File>
+            <File>
+              <FileName>dev_jq8400.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Dev\Src\dev_jq8400.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -533,6 +543,16 @@
               <FileName>drv_sdio.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Drv\Src\drv_sdio.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_emmc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Drv\Src\drv_emmc.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_timer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\01_Core\Drv\Src\drv_timer.c</FilePath>
             </File>
             <File>
               <FileName>can.c</FileName>
@@ -555,11 +575,6 @@
               <FilePath>..\01_Core\Drv\Src\spi.c</FilePath>
             </File>
             <File>
-              <FileName>timer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\01_Core\Drv\Src\timer.c</FilePath>
-            </File>
-            <File>
               <FileName>usart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Drv\Src\usart.c</FilePath>
@@ -573,6 +588,57 @@
               <FileName>kalman.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\01_Core\Com\kalmanfilter\kalman.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>0</IncludeInBuild>
+                  <AlwaysBuild>2</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
             </File>
             <File>
               <FileName>com_heap.c</FileName>
@@ -695,6 +761,11 @@
               <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_iwdg.c</FilePath>
             </File>
             <File>
+              <FileName>stm32f4xx_hal_mmc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_mmc.c</FilePath>
+            </File>
+            <File>
               <FileName>stm32f4xx_hal_pwr.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_pwr.c</FilePath>
@@ -740,9 +811,19 @@
               <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_uart.c</FilePath>
             </File>
             <File>
+              <FileName>stm32f4xx_hal_usart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_hal_usart.c</FilePath>
+            </File>
+            <File>
               <FileName>stm32f4xx_ll_sdmmc.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_ll_sdmmc.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32f4xx_ll_usb.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\02_Vendor_Lib\STM32F4xx_HAL_Driver\Src\stm32f4xx_ll_usb.c</FilePath>
             </File>
           </Files>
         </Group>

@@ -6,42 +6,39 @@
 #include <stdbool.h>
 #include <math.h>
 
+#include "board_dw1000.h"
+#include "com_MultiTimer.h"
+#include "com_heap.h"
+// #include "kalman.h"
+#include "dev_led_buzzer_dip.h"
+#include "drv_timer.h"
+#include "iwdg.h"
+
 #include "deca_port.h"
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include "deca_types.h"
 #include "deca_spi.h"
 
-#include "dev_led_buzzer_dip.h"
-#include "board_dw1000.h"
-#include "timer.h"
-// #include "dev.h"
-#include "iwdg.h"
-#include "kalman.h"
-
 #include "cmsis_os.h"
-
-#include "com_MultiTimer.h"
-#include "com_heap.h"
 
 /***********************************************************************************************/
 // #define ANCRANGE                         //基站间测距，用于基站自标定
 /***********************************************************************************************/
-
 
 #define SOFTWARE_VER                   "V1.3"
 
 #define MAX_AHCHOR_NUMBER               3       //系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
 #define MAX_TAG_NUMBER                  40     // 设置最大标签个数
 
-#define ANCHOR_ID_0                     0x0
-#define ANCHOR_ID_1                     0x1
-#define ANCHOR_ID_2                     0x2
-#define ANCHOR_ID_3                     0x3
-#define ANCHOR_ID_4                     0x4
-#define ANCHOR_ID_5                     0x5
-#define ANCHOR_ID_6                     0x6
-#define ANCHOR_ID_7                     0x7
+// #define ANCHOR_ID_0                     0x0
+// #define ANCHOR_ID_1                     0x1
+// #define ANCHOR_ID_2                     0x2
+// #define ANCHOR_ID_3                     0x3
+// #define ANCHOR_ID_4                     0x4
+// #define ANCHOR_ID_5                     0x5
+// #define ANCHOR_ID_6                     0x6
+// #define ANCHOR_ID_7                     0x7
 
 /* 天线延时
  * 计算距离结果比实际距离小，需要增大距离，则减小这个数
@@ -89,6 +86,7 @@
 
 #define MAX_POLL_SEND_SLEEP_COUNT       150     //MAX_POLL_SEND_SLEEP_COUNT次发送后无运动则进入休眠
 #define ANC_RANGE_COUNT                 5       //自标定时每个基站测距次数
+
 /* PAN ID */
 #define PAN_ID                          0xDECA
 
@@ -311,8 +309,6 @@ void tag_distClearInvalid(void);
 dwDistance_t* get_the_local_structure_of_dis(void);
 dwDevice_t* get_the_local_structure_of_dev(void);
 uint8_t get_tagFinalRecvFlag(uint8_t tad_idx);
-void setup_tdmaCycleTimer(void);
-
 
 /******************************************************instance_anchor.c************************************************************/
 // void anchor_app(void);

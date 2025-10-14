@@ -17,18 +17,19 @@
   */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __USBD_CONF_TEMPLATE_H
-#define __USBD_CONF_TEMPLATE_H
+#ifndef __DRV_USBD_CONF_H
+#define __DRV_USBD_CONF_H
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* Includes ------------------------------------------------------------------*/
-#include "stm32fxxx.h"  /* replace 'stm32xxx' with your HAL driver header filename, ex: stm32f4xx.h */
+#include "stm32f4xx.h"  /* replace 'stm32xxx' with your HAL driver header filename, ex: stm32f4xx.h */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "elog.h"
 
 /** @addtogroup STM32_USB_DEVICE_LIBRARY
   * @{
@@ -38,6 +39,7 @@ extern "C" {
   * @brief USB device low level driver configuration file
   * @{
   */
+#define USE_USB_FS
 
 /** @defgroup USBD_CONF_Exported_Defines
   * @{
@@ -55,7 +57,7 @@ extern "C" {
 
 /* BillBoard Class Config */
 #define USBD_CLASS_USER_STRING_DESC                 1U
-#define USBD_CLASS_BOS_ENABLED                      1U
+#define USBD_CLASS_BOS_ENABLED                      0U
 #define USB_BB_MAX_NUM_ALT_MODE                     0x2U
 
 /* MSC Class Config */
@@ -143,8 +145,7 @@ extern "C" {
 /* DEBUG macros */
 #if (USBD_DEBUG_LEVEL > 0U)
 #define  USBD_UsrLog(...)   do { \
-                                 printf(__VA_ARGS__); \
-                                 printf("\n"); \
+                                    log_d(__VA_ARGS__); \
                                } while (0)
 #else
 #define USBD_UsrLog(...) do {} while (0)
@@ -153,9 +154,8 @@ extern "C" {
 #if (USBD_DEBUG_LEVEL > 1U)
 
 #define  USBD_ErrLog(...) do { \
-                               printf("ERROR: ") ; \
-                               printf(__VA_ARGS__); \
-                               printf("\n"); \
+                                log_e("ERROR: ") ; \
+                                log_e(__VA_ARGS__); \
                              } while (0)
 #else
 #define USBD_ErrLog(...) do {} while (0)
@@ -163,9 +163,8 @@ extern "C" {
 
 #if (USBD_DEBUG_LEVEL > 2U)
 #define  USBD_DbgLog(...)   do { \
-                                 printf("DEBUG : ") ; \
-                                 printf(__VA_ARGS__); \
-                                 printf("\n"); \
+                                    log_d("DEBUG : ") ; \
+                                    log_d(__VA_ARGS__); \
                                } while (0)
 #else
 #define USBD_DbgLog(...) do {} while (0)

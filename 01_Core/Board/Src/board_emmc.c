@@ -13,4 +13,7 @@ void board_emmcInit(void)
 void board_emmcReset(void)
 {
     drv_gpioSetLevel(emmc_boardParam, GPIO_PIN_RESET);
+    HAL_Delay(1);
+    drv_gpioSetLevel(emmc_boardParam, GPIO_PIN_SET);
+    HAL_Delay(5);
 }

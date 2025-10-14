@@ -215,9 +215,12 @@ const osThreadAttr_t task9_attr = {
 };
 
 osThreadId_t task10_emmcHandle;
+uint32_t  task10_buffer[256];
+osStaticThreadDef_t task10CB;
 const osThreadAttr_t task10_attr = {
     .name = "task10_emmcReadWrite",
-    .stack_size = 512,
+    .stack_mem = &task10_buffer[0], .stack_size = sizeof(task10_buffer),
+    .cb_mem = &task10CB, .cb_size = sizeof(task10CB),
     .priority = (osPriority_t) osPriorityRealtime7,
 };
 
@@ -407,9 +410,10 @@ void task8_canReceiveHandle(void *arg) {
 }
 
 void task10_emmcTest(void *arg) {
-    app_sdFileSystemInit();
+    sdCard_readWriteDemo();
+    // app_emmcTest();
     for (;;) {
-        // sdCard_readWriteDemo();
+        // drv_emmcGetInfo();
         osDelay(2000);
     }
 }

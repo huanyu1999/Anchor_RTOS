@@ -10,8 +10,7 @@
 #define EMMC_TRANSFER_OK       (uint8_t)(0x00)
 #define EMMC_TRANSFER_BUSY     (uint8_t)(0x01)
 
-#define EMMC_CMD_PORT   GPIOD
-#define EMMC_CMD_PIN    GPIO_PIN_2
+
 #define EMMC_D0_PORT    GPIOC
 #define EMMC_D0_PIN     GPIO_PIN_8
 #define EMMC_D1_PORT    GPIOC
@@ -30,6 +29,8 @@
 #define EMMC_D7_PIN     GPIO_PIN_7
 #define EMMC_CLK_PORT   GPIOC
 #define EMMC_CLK_PIN    GPIO_PIN_12
+#define EMMC_CMD_PORT   GPIOD
+#define EMMC_CMD_PIN    GPIO_PIN_2
 
 uint8_t drv_emmcInit(void);
 void HAL_MMC_MspInit(MMC_HandleTypeDef *hmmc);

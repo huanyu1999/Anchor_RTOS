@@ -62,11 +62,11 @@
 /* External variables --------------------------------------------------------*/
 extern UART_HandleTypeDef huart3;
 extern UART_HandleTypeDef huart4;
-extern SD_HandleTypeDef sdCard_Handle;
-extern MMC_HandleTypeDef emmc_handle;
-extern TIM_HandleTypeDef htimer2;
-extern TIM_HandleTypeDef htim6;
-extern CAN_HandleTypeDef hcan1;
+extern TIM_HandleTypeDef  htimer2;
+extern TIM_HandleTypeDef  htimer6;
+extern CAN_HandleTypeDef  hcan1;
+extern PCD_HandleTypeDef  hpcd;
+extern MMC_HandleTypeDef  emmc_handle;
 
 /* USER CODE BEGIN EV */
 
@@ -225,14 +225,11 @@ void EXTI9_5_IRQHandler(void)
     HAL_GPIO_EXTI_IRQHandler(W5500_INT_PIN);
 }
 
-void HAL_UART_IdleCallback(UART_HandleTypeDef *huart)
+
+
+void USART3_IRQHandler(void)
 {
-    if (huart->Instance == UART4)
-    {
-        // 释放一个信号量
-        extern osSemaphoreId_t gnssReceiveSem;
-        osSemaphoreRelease(gnssReceiveSem);
-    }
+    HAL_UART_IRQHandler(&huart3);
 }
 
 /**
@@ -249,9 +246,14 @@ void UART4_IRQHandler(void)
     }                                 
 }
 
-void USART3_IRQHandler(void)
+void HAL_UART_IdleCallback(UART_HandleTypeDef *huart)
 {
-    HAL_UART_IRQHandler(&huart3);
+    if (huart->Instance == UART4)
+    {
+        // 释放一个信号量
+        extern osSemaphoreId_t gnssReceiveSem;
+        osSemaphoreRelease(gnssReceiveSem);
+    }
 }
 
 /**
@@ -259,7 +261,7 @@ void USART3_IRQHandler(void)
   */
 void TIM6_DAC_IRQHandler(void)
 {
-    HAL_TIM_IRQHandler(&htim6);
+    HAL_TIM_IRQHandler(&htimer6);
 }
 
 void SDIO_IRQHandler(void)
@@ -275,4 +277,9 @@ void DMA2_Stream3_IRQHandler(void)
 void DMA2_Stream6_IRQHandler(void)
 {
     HAL_DMA_IRQHandler(emmc_handle.hdmarx);
+}
+
+void OTG_FS_IRQHandler(void)
+{
+    HAL_PCD_IRQHandler(&hpcd);
 }

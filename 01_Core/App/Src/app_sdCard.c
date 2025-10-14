@@ -13,6 +13,7 @@
 #include "dev_linkFatFs.h"
 #include "dev_rx8130ce.h"
 #include "dev_emmc.h"
+#include "drv_emmc.h"
 
 #include "cmsis_os2.h"
 #include "elog.h"
@@ -42,7 +43,7 @@ FATFS logSaveFatFs; /* File system object for SD card logical drive */
 
 uint8_t app_sdFileSystemInit(void)
 {
-    dev_emmcInitialize();
+    // dev_emmcInitialize();
     if (dev_FATFS_LinkDriver(&emmc_driver, SDPath) == 1) // 链接EMMC驱动到fatfs
     {
         // Error_Handler();
@@ -52,7 +53,7 @@ uint8_t app_sdFileSystemInit(void)
     else
     {
         // 上电后检测逻辑驱动状态，操作创建驱动号，直接挂载
-        if (f_mount(&logSaveFatFs, (TCHAR const *)SDPath, 0) == 0)
+        if (f_mount(&logSaveFatFs, (TCHAR const *)SDPath, 0) != FR_OK)
         {
             // 挂载失败，输出报警信息（后续考虑添加一个指示灯，表示SD卡异常），继续处理其他任务
             log_e("SD Card mounted failed.");
@@ -64,6 +65,25 @@ uint8_t app_sdFileSystemInit(void)
         return 1;
     }
 }
+
+uint8_t app_emmcTest(void)
+{
+    dev_emmcInitialize(0);
+    uint32_t tx_buf[64];
+    uint32_t rx_buf[64];
+
+    for (uint32_t i = 0; i < 64; i++) {
+        tx_buf[i] = i & 0xFFFF;
+    }
+    
+    /* 写一个扇区 */
+    if (drv_emmcWriteBlocks(tx_buf, 1, 1) != EMMC_OK)
+        Error_Handler();
+
+    /* 读回来验证 */
+    if (drv_emmcReadBlocks(rx_buf, 1, 1) != EMMC_OK)
+        Error_Handler();
+}   
 
 void app_logWrite(const char* log_data)
 {
@@ -150,77 +170,55 @@ void sdCard_readWriteDemo(void)
     uint32_t byteswritten, bytesread;                     /* File write/read counts */
     uint8_t wtext[] = "This is STM32 working with FatFs"; /* File write buffer */
     uint8_t rtext[100];                                   /* File read buffer */
-    // dev_emmcInitialize(0);
     /*##-1- Link the micro SD disk I/O driver ##################################*/
-    if (dev_FATFS_LinkDriver(&emmc_driver, SDTestPath) == 0)
-    {
+    if (dev_FATFS_LinkDriver(&emmc_driver, SDTestPath) == 0) {
         /*##-2- Register the file system object to the FatFs module ##############*/
-        if (f_mount(&SDFatFsTest, (TCHAR const *)SDTestPath, 0) != FR_OK)
-        {
+        if (f_mount(&SDFatFsTest, (TCHAR const *)SDTestPath, 0) != FR_OK) {
             /* FatFs Initialization Error */
             log_e("f_mount failed.");
-        }
-        else
-        {
+        } else {
             /*##-3- Create a FAT file system (format) on the logical drive #########*/
             /* WARNING: Formatting the uSD card will delete all content on the device */
-            if (f_mkfs((TCHAR const *)SDTestPath, FM_FAT32, 0, workTestBuffer, sizeof(workTestBuffer)) != FR_OK)
-            {
+            uint8_t res = f_mkfs((TCHAR const *)SDTestPath, FM_FAT32, 0, workTestBuffer, sizeof(workTestBuffer));
+            if (res != FR_OK) {
                 /* FatFs Format Error */
                 log_e("f_mkfs failed.");
-            }
-            else
-            {
+            } else {
                 /*##-4- Create and Open a new text file object with write access #####*/
-                if (f_open(&MyTestFile, "STM32.TXT", FA_CREATE_ALWAYS | FA_WRITE) != FR_OK)
-                {
+                if (f_open(&MyTestFile, "STM32.TXT", FA_CREATE_ALWAYS | FA_WRITE) != FR_OK) {
                     /* 'STM32.TXT' file Open for write Error */
                     log_e("f_open failed.");
-                }
-                else
-                {
+                } else {
                     /*##-5- Write data to the text file ################################*/
                     res = f_write(&MyTestFile, wtext, sizeof(wtext), (void *)&byteswritten);
 
-                    if ((byteswritten == 0) || (res != FR_OK))
-                    {
+                    if ((byteswritten == 0) || (res != FR_OK)) {
                         /* 'STM32.TXT' file Write or EOF Error */
                         log_e("'STM32.TXT' file Write or EOF Error.");
-                    }
-                    else
-                    {
+                    } else {
                         /*##-6- Close the open text file #################################*/
                         f_close(&MyTestFile);
 
                         /*##-7- Open the text file object with read access ###############*/
-                        if (f_open(&MyTestFile, "STM32.TXT", FA_READ) != FR_OK)
-                        {
+                        if (f_open(&MyTestFile, "STM32.TXT", FA_READ) != FR_OK) {
                             /* 'STM32.TXT' file Open for read Error */
                             log_e("'STM32.TXT' file Open for read Error.");
-                        }
-                        else
-                        {
+                        } else {
                             /*##-8- Read data from the text file ###########################*/
                             res = f_read(&MyTestFile, rtext, sizeof(rtext), (UINT *)&bytesread);
 
-                            if ((bytesread == 0) || (res != FR_OK))
-                            {
+                            if ((bytesread == 0) || (res != FR_OK)) {
                                 /* 'STM32.TXT' file Read or EOF Error */
                                 log_e("'STM32.TXT' file Read or EOF Error.");
-                            }
-                            else
-                            {
+                            } else {
                                 /*##-9- Close the open text file #############################*/
                                 f_close(&MyTestFile);
 
                                 /*##-10- Compare read data with the expected data ############*/
-                                if ((bytesread != byteswritten))
-                                {
+                                if ((bytesread != byteswritten)) {
                                     /* Read data is different from the expected data */
                                     log_e("Read data is different from the expected data.");
-                                }
-                                else
-                                {
+                                } else {
                                     /* Success of the demo: no error occurrence */
                                     log_d("Success of the sd card demo.");
                                 }
@@ -236,8 +234,8 @@ void sdCard_readWriteDemo(void)
     /*##-11- Unlink the RAM disk I/O driver ####################################*/
     dev_FATFS_UnLinkDriver(SDPath);
 
-    for (;;)
-    {
-    }
+//    for (;;)
+//    {
+//    }
 }
 #endif

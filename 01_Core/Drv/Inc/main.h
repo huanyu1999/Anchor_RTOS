@@ -57,12 +57,7 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-
-
-
-
 /* USER CODE BEGIN Private defines */
-
 #define SWO_GPIO_PORT   GPIOB
 #define SWO_GPIO_PIN    GPIO_PIN_3   
 

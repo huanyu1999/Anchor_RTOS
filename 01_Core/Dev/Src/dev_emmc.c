@@ -5,40 +5,26 @@
 #include "elog.h"
 #include "cmsis_os.h"
 
-// #define DISABLE_SD_INIT 0
-#define SDQUEUE_SIZE       (uint32_t) 10
-
 #define SD_TIMEOUT         4 * 1000
 #define SD_DEFAULT_BLOCK_SIZE   512
 
 /* Disk status */
 static volatile DSTATUS Stat = STA_NOINIT;
 
-// static osMessageQueueId_t SDQueueID;
-uint32_t SDQueueBuffer[SDQUEUE_SIZE];          // 定义SDQueue的存储空间
-StaticQueue_t SDQueueCB;                     
-const osMessageQueueAttr_t SDQueue_attr = {     
-    .name    = "SDQueue",
-    .cb_mem  = &SDQueueCB,
-    .cb_size = sizeof(SDQueueCB),
-    .mq_mem  = &SDQueueBuffer,
-    .mq_size = sizeof(SDQueueBuffer)
+static osSemaphoreId_t emmcWriteSemaID;
+StaticQueue_t emmcWriteSemaCB;                        
+const osSemaphoreAttr_t emmcWriteSema_attr = {     
+    .name    = "emmcWriteSema",
+    .cb_mem  = &emmcWriteSemaCB,
+    .cb_size = sizeof(emmcWriteSemaCB),
 };
 
-static osSemaphoreId_t SDSemaID;
-StaticQueue_t SDSemaCB;                        // 定义SDQueue的控制块
-const osSemaphoreAttr_t SDSema_attr = {     
-    .name    = "SDSema",
-    .cb_mem  = &SDSemaCB,
-    .cb_size = sizeof(SDSemaCB),
-};
-
-static osSemaphoreId_t SDReadSemaID;
-StaticQueue_t SDReadSemaCB;                    // 定义SDQueue的控制块
-const osSemaphoreAttr_t SDReadSema_attr = {    
-    .name    = "SDReadSema",
-    .cb_mem  = &SDReadSemaCB,
-    .cb_size = sizeof(SDReadSemaCB),
+static osSemaphoreId_t emmcReadSemaID;
+StaticQueue_t emmcReadSemaCB;                    
+const osSemaphoreAttr_t emmcReadSema_attr = {    
+    .name    = "emmcReadSema",
+    .cb_mem  = &emmcReadSemaCB,
+    .cb_size = sizeof(emmcReadSemaCB),
 };
 
 /*
@@ -79,38 +65,31 @@ const Diskio_drvTypeDef emmc_driver =
     dev_SD_ioctl,param  lun : not used
   * @retval DSTATUS: Operation status
   */
-DSTATUS dev_emmcInitialize(BYTE lun)
-{
+DSTATUS dev_emmcInitialize(BYTE lun) {
     Stat = STA_NOINIT;
     /*
     * check that the kernel has been started before continuing
     * as the osMessage API will fail otherwise
     */
-    if (osKernelGetState())              // 系统目前在运行
-    {
+    if (osKernelGetState()) {                   // 系统目前在运行
 #if !defined(DISABLE_SD_INIT)
-        if (drv_emmcInit() == EMMC_OK)    // SDIO接口初始化成功
-        {
-            Stat = dev_emmcCheckStatus(lun); // 获取sd卡状态
+        board_emmcInit();                       // 初始化emmc Reset引脚
+        board_emmcReset();                      // 复位emmc
+        if (drv_emmcInit() == EMMC_OK) {        // SDIO接口初始化成功
+            Stat = dev_emmcCheckStatus(lun);    // 获取sd卡状态
         }
-        board_emmcInit();
 #else
         Stat = dev_emmcCheckStatus(lun);
 #endif
-
-        if (Stat != STA_NOINIT)
-        {
-            // SDQueueID = osMessageQueueNew(SDQUEUE_SIZE, sizeof(uint32_t), &SDQueue_attr);       // if the SD is correctly initialized, create the operation queue
-            SDSemaID = osSemaphoreNew(1, 0, &SDSema_attr);
-            SDReadSemaID = osSemaphoreNew(1, 0, &SDReadSema_attr);
-            if ((SDSemaID == NULL) || (SDReadSemaID == NULL)) 
-            { 
+        if (Stat != STA_NOINIT) {
+            emmcWriteSemaID = osSemaphoreNew(1, 0, &emmcWriteSema_attr);
+            emmcReadSemaID = osSemaphoreNew(1, 0, &emmcReadSema_attr);
+            if ((emmcWriteSemaID == NULL) || (emmcReadSemaID == NULL)) { 
                 log_e("osSemaphoreNew failed."); 
-            }
-            else 
-            { 
+            } else { 
                 log_d("osSemaphoreNew success."); 
             }
+            // 初始化emmc成功，打印emmc的相关信息
             dev_emmcPrintfInfo();
         }
     }
@@ -122,8 +101,7 @@ DSTATUS dev_emmcInitialize(BYTE lun)
   * @param  lun : not used
   * @retval DSTATUS: Operation status
   */
-DSTATUS dev_emmcStatus(BYTE lun)
-{
+DSTATUS dev_emmcStatus(BYTE lun) {
     return dev_emmcCheckStatus(lun);
 }
 
@@ -144,7 +122,7 @@ DRESULT dev_emmcRead(BYTE lun, BYTE *buff, DWORD sector, UINT count)
     if (drv_emmcReadBlocks((uint32_t*)buff, (uint32_t) (sector), count) == EMMC_OK)
     {
         /* wait for a message from the queue or a timeout */
-        status = osSemaphoreAcquire(SDReadSemaID, SD_TIMEOUT);
+        status = osSemaphoreAcquire(emmcReadSemaID, SD_TIMEOUT);
         if (status == osOK)                     // 成功接收到队列
         {
             timer = osKernelGetTickCount() + SD_TIMEOUT;
@@ -158,7 +136,6 @@ DRESULT dev_emmcRead(BYTE lun, BYTE *buff, DWORD sector, UINT count)
             }
         }
     }
-
     return res;
 }
 
@@ -171,31 +148,24 @@ DRESULT dev_emmcRead(BYTE lun, BYTE *buff, DWORD sector, UINT count)
   * @retval DRESULT: Operation result
   */
 #if _USE_WRITE == 1
-DRESULT dev_emmcWrite(BYTE lun, const BYTE *buff, DWORD sector, UINT count)
-{
+DRESULT dev_emmcWrite(BYTE lun, const BYTE *buff, DWORD sector, UINT count) {
     // osEvent event;
     DRESULT res = RES_ERROR;
     uint32_t timer;
     osStatus status;
 
-    if(drv_emmcWriteBlocks((uint32_t*)buff, (uint32_t)(sector), count) == EMMC_OK)
-    {
+    if(drv_emmcWriteBlocks((uint32_t*)buff, (uint32_t)(sector), count) == EMMC_OK) {
         /* Get the message from the queue */
-        status = osSemaphoreAcquire(SDSemaID ,SD_TIMEOUT);
-        if (status == osOK)
-        {
+        status = osSemaphoreAcquire(emmcWriteSemaID ,SD_TIMEOUT);
+        if (status == osOK) {
             timer = osKernelGetTickCount() + SD_TIMEOUT;
-            while(timer > osKernelGetTickCount())                        /* block until SDIO IP is ready or a timeout occur */
-            {
-                if (drv_emmcGetState() == EMMC_TRANSFER_OK)
-                {
+            while(timer > osKernelGetTickCount()) {                 /* block until SDIO IP is ready or a timeout occur */
+                if (drv_emmcGetState() == EMMC_TRANSFER_OK) {
                     res = RES_OK;
                     break;
                 }
             }
-        }
-        else
-        {
+        } else {
             log_e("osSemaphoreAcquire error %d", status);
         }
     }
@@ -298,8 +268,8 @@ void dev_eMMC_WriteCpltCallback(void)
      * No need to add an "osKernelRunning()" check here, as the SD_initialize()
      * is always called before any SD_Read()/SD_Write() call
      */
-    // SD卡写操作完成，向队列发送写完成消息
-    if (osSemaphoreRelease(SDSemaID) != osOK)
+    // emmc写操作完成，向队列发送写完成消息
+    if (osSemaphoreRelease(emmcWriteSemaID) != osOK)
     {
         log_d("write cplt osSemaphoreRelease error.");
     }
@@ -316,7 +286,8 @@ void dev_eMMC_ReadCpltCallback(void)
      * No need to add an "osKernelRunning()" check here, as the SD_initialize()
      * is always called before any SD_Read()/SD_Write() call
     */
-    if (osSemaphoreRelease(SDReadSemaID) != osOK)
+    // emmc读操作完成，向队列发送写完成消息
+    if (osSemaphoreRelease(emmcReadSemaID) != osOK)
     {
         log_d("read cplt osSemaphoreRelease error.");
     }
@@ -333,4 +304,3 @@ static DSTATUS dev_emmcCheckStatus(BYTE lun)
 
     return Stat;
 }
-

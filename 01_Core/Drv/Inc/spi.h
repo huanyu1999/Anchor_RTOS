@@ -40,7 +40,7 @@ extern SPI_HandleTypeDef hspi1;
 
 void MX_SPI1_Init(void);
 void MX_SPI2_Init(void);
-void drv_spiCSCtrl(SPI_HandleTypeDef* spiHandle, uint8_t level);
+void drv_spiCSCtrl(SPI_HandleTypeDef* spiHandle, GPIO_PinState level);
 void drv_spiWriteBytes(uint8_t* data, uint32_t length);
 uint8_t drv_spiReadByte(void);
 void drv_spiReadBytes(uint8_t* data, uint32_t length);

@@ -1,6 +1,6 @@
 #include <math.h>
 #include "kalman.h"
-#include "instance.h"
+#include "dw_instance.h"
 
 const float Q=0.018;     // Q （偏差）为高斯白噪声 不随时间变化
 const float R=0.542;     // R  (偏差) 为高斯白噪声 不随时间变化

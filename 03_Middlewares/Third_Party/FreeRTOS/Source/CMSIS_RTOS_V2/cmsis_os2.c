@@ -200,8 +200,7 @@ osStatus_t osKernelInitialize (void) {
 
   if (IS_IRQ()) {
     stat = osErrorISR;
-  }
-  else {
+  } else {
     if (KernelState == osKernelInactive) {
       #if defined(USE_TRACE_EVENT_RECORDER)
         EvrFreeRTOSSetup(0U);

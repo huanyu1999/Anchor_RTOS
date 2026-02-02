@@ -1,10 +1,9 @@
 #include "board_rx8130ce.h"
 #include "drv_i2c.h"
 
-void board_rx8130ceIoInit(void)
+static void board_rx8130ceIOInit(void)
 {
     // GPIO_InitTypeDef GPIO_InitStructure = {0};
-    
     // 使能RST引脚，INT引脚
 }
 
@@ -15,7 +14,7 @@ void board_rx8130ceI2cInit(void)
 
 void board_rx8130ceInit(void)
 {
-    board_rx8130ceIoInit();
+    board_rx8130ceIOInit();         // 暂时先不实现
     board_rx8130ceI2cInit();
 }
 

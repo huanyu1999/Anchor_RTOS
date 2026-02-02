@@ -1,0 +1,2 @@
+"E:\10 2021.10\bin\arm-none-eabi-ar.exe" qc libelog.a CMakeFiles/elog.dir/01_Core/Com/easylogger/src/elog.c.obj CMakeFiles/elog.dir/01_Core/Com/easylogger/src/elog_utils.c.obj CMakeFiles/elog.dir/01_Core/Com/easylogger/src/elog_async.c.obj CMakeFiles/elog.dir/01_Core/Com/easylogger/port/elog_port.c.obj
+"E:\10 2021.10\bin\arm-none-eabi-ranlib.exe" libelog.a

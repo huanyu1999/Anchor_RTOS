@@ -236,7 +236,7 @@ void elog_hexdump(const char *name, uint8_t width, const void *buf, uint16_t siz
  * NOTE: The `LOG_TAG` and `LOG_LVL` must defined before including the <elog.h> when you want to use log_x API.
  */
 #if !defined(LOG_TAG)
-    #define LOG_TAG          "NO_TAG"
+    #define LOG_TAG          ""
 #endif
 #if !defined(LOG_LVL)
     #define LOG_LVL          ELOG_LVL_VERBOSE
@@ -282,8 +282,9 @@ void elog_buf_enabled(bool enabled);
 void elog_flush(void);
 
 /* elog_async.c */
-void elog_async_enabled(bool enabled);
+size_t elog_async_get_line_log(char *log, size_t size);
 size_t elog_async_get_log(char *log, size_t size);
+void elog_async_enabled(bool enabled);
 
 /* elog_utils.c */
 size_t elog_strcpy(size_t cur_len, char *dst, const char *src);

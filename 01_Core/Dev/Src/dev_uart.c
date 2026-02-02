@@ -11,15 +11,14 @@ static uint8_t *current_buff = debug_buff1;
 
 void printf_use_dma(const char *format, ...)
 {
-    uint8_t *send_buff = current_buff;
-    uint32_t length = 0;
-    current_buff = (current_buff == debug_buff1) ? debug_buff2 : debug_buff1;
-    va_list args;
+    // uint8_t *send_buff = current_buff;
+    // current_buff = (current_buff == debug_buff1) ? debug_buff2 : debug_buff1;
+    // va_list args;
     
-    va_start(args, format);
-    length = vsnprintf((char*) send_buff, sizeof(debug_buff1) + 1, (char*) format, args);
-    va_end(args);
-    extern osSemaphoreId_t uart_dmaLockSem;
-    osSemaphoreAcquire(uart_dmaLockSem, osWaitForever);
+    // va_start(args, format);
+    // uint32_t length = vsnprintf((char*) send_buff, sizeof(debug_buff1) + 1, (char*) format, args);
+    // va_end(args);
+    // extern osSemaphoreId_t uart_dmaLockSem;
+    // osSemaphoreAcquire(uart_dmaLockSem, osWaitForever);
     // HAL_UART_Transmit_DMA(&huart1, send_buff, length);
 }

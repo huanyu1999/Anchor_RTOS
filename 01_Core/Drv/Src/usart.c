@@ -31,18 +31,6 @@ DMA_HandleTypeDef hdma_uart4_rx;
 UART_HandleTypeDef huart3;
 DMA_HandleTypeDef hdma_uart3_tx;
 
-void drv_uartInit(UART_HandleTypeDef* uartHandle)
-{
-    if (uartHandle->Instance == USART3)
-    {
-    
-    } 
-    else if (uartHandle->Instance == UART4)
-    {
-        MX_UART4_Init();
-    }
-}
-
 /* UART4 init function */
 void MX_UART4_Init(void)
 {
@@ -60,16 +48,15 @@ void MX_UART4_Init(void)
     }
 }
 
-/* UART1 init function */
 void MX_UART3_Init(void)
 {
-    huart3.Instance = USART3;
-    huart3.Init.BaudRate = 9600;
+    huart3.Instance        = USART3;
+    huart3.Init.BaudRate   = 9600;
     huart3.Init.WordLength = UART_WORDLENGTH_8B;
-    huart3.Init.StopBits = UART_STOPBITS_1;
-    huart3.Init.Parity = UART_PARITY_NONE;
-    huart3.Init.Mode = UART_MODE_TX_RX;
-    huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart3.Init.StopBits   = UART_STOPBITS_1;
+    huart3.Init.Parity     = UART_PARITY_NONE;
+    huart3.Init.Mode       = UART_MODE_TX_RX;
+    huart3.Init.HwFlowCtl  = UART_HWCONTROL_NONE;
     huart3.Init.OverSampling = UART_OVERSAMPLING_16;
     if (HAL_UART_Init(&huart3) != HAL_OK)
     {
@@ -108,8 +95,8 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
         hdma_uart4_rx.Init.Priority  = DMA_PRIORITY_HIGH;
         hdma_uart4_rx.Init.FIFOMode  = DMA_FIFOMODE_DISABLE;
         hdma_uart4_rx.Init.FIFOThreshold  = DMA_FIFO_THRESHOLD_FULL;    // 不使用FIFO Mode的情况下，这个配置无效
-        hdma_uart4_rx.Init.MemBurst       = DMA_MBURST_INC4;           // 不使用FIFO Mode的情况下，这个配置无效
-        hdma_uart4_rx.Init.PeriphBurst    = DMA_PBURST_INC4;           // 不使用FIFO Mode的情况下，这个配置无效
+        hdma_uart4_rx.Init.MemBurst       = DMA_MBURST_INC4;            // 不使用FIFO Mode的情况下，这个配置无效
+        hdma_uart4_rx.Init.PeriphBurst    = DMA_PBURST_INC4;            // 不使用FIFO Mode的情况下，这个配置无效
         
         HAL_DMA_Init(&hdma_uart4_rx);
         

@@ -174,8 +174,11 @@ typedef signed long int32;
 
 #define FRAME_LEN_MAX           (127)
 #define FCS_LEN                 (2)
-//#define UUS_TO_DWT_TIME       63898
-#define UUS_TO_DWT_TIME         65536
+
+/* UWB microsecond (uus) to device time unit (dtu, around 15.65 ps) conversion factor.
+ * 1 uus = 512 / 499.2 �s and 1 �s = 499.2 * 128 dtu. */
+#define UUS_TO_DWT_TIME 65536
+
 #define FINAL_MSG_TS_LEN        4
 #define SPEED_OF_LIGHT          (299702547.0)
 
@@ -1813,15 +1816,6 @@ void decamutexoff(decaIrqStatus_t s) ;
  * no return value
  */
 void deca_sleep(unsigned int time_ms);
-
-
-uint64_t get_tx_timestamp_u64(void);
-uint64_t get_rx_timestamp_u64(void);
-void final_msg_get_ts(const uint8_t *ts_field, uint32_t *ts);
-void final_msg_set_ts(uint8_t *ts_field, uint64_t ts);
-
-
-
 
 #ifdef __cplusplus
 }

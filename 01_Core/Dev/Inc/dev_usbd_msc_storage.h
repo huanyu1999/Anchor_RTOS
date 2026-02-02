@@ -1,8 +1,8 @@
 /**
   ******************************************************************************
-  * @file    usbd_msc_storage.h
+  * @file    dev_usbd_msc_storage.h
   * @author  MCD Application Team
-  * @brief   Header file for the usbd_msc_storage.c file
+  * @brief   Header file for the dev_usbd_msc_storage.c file
   ******************************************************************************
   * @attention
   *
@@ -66,7 +66,7 @@ extern "C" {
 /** @defgroup USBD_STORAGE_Exported_Variables
   * @{
   */
-extern USBD_StorageTypeDef  USBD_MSC_Template_fops;
+extern USBD_StorageTypeDef  USBD_MSC_DISK_fops;
 /**
   * @}
   */

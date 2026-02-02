@@ -20,8 +20,9 @@
 #include <stdarg.h>
 
 #include "main.h"
-#include "app_sdCard.h"
-#include "instance.h"
+// #include "app_usb_msc.h"
+#include "dwt_delay.h"
+#include "dw_instance.h"
 #include "dev_button.h"
 #include "dev_can.h"
 #include "dev_dw1000.h"
@@ -33,7 +34,7 @@
 #include "dev_uart.h"
 #include "dev_w5500.h"
 #include "dev_jq8400.h"
-#include "iwdg.h"
+// #include "iwdg.h"
 #include "spi.h"
 #include "usart.h"
 #include "drv_timer.h"
@@ -44,6 +45,29 @@
 /* Private includes ----------------------------------------------------------*/
 
 /* Private typedef -----------------------------------------------------------*/
+osThreadId_t task_swoOutput_handle;
+static uint8_t task_swoOutput_buffer[1024];
+StaticTask_t task_swoOutput_cb;
+const osThreadAttr_t task_swoOutput_attr = {
+    .name = "task_swoOutput",
+    .stack_mem = &task_swoOutput_buffer[0], 
+    .stack_size = sizeof(task_swoOutput_buffer),
+    .cb_mem = &task_swoOutput_cb, 
+    .cb_size = sizeof(task_swoOutput_cb),
+    .priority = (osPriority_t) osPriorityRealtime5,
+};
+
+osThreadId_t task_main_handle;
+static uint8_t task_main_buffer[256];
+StaticTask_t task_main_cb;
+const osThreadAttr_t task_main_attr = {
+    .name = "task_main",
+    .stack_mem = &task_main_buffer[0], 
+    .stack_size = sizeof(task_main_buffer),
+    .cb_mem = &task_main_cb, 
+    .cb_size = sizeof(task_main_cb),
+    .priority = (osPriority_t) osPriorityRealtime4,
+};
 
 /* Private define ------------------------------------------------------------*/
 
@@ -55,63 +79,48 @@
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 void swo_init(void);
-static void swo_putc(char ch);
+void task_swoOutPut(void *arg);
+void task_mainProcess(void* arg);
+
+/*
+    最开始先初始化时钟，hal
+
+    创建一个system main task，system main task 处理函数先进行一系列外设初始化，信号量，队列创建
+
+    外部表现： 语音 报警灯光 蜂鸣器
+
+    内部：uwb task，距离处理，日志，GNSS
+
+    外部信号： 按键 ，旋钮
+*/
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
-int main(void) {
-    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-    HAL_Init();
+int main(void)
+{   // 底层初始化 --> flash，时钟，DWT，外设接口
+    HAL_Init();                 // Reset of all peripherals, Initializes the Flash interface and the Systick.
+    DWT_Init();                 // 初始化 DWT，用于延时功能
+    SystemClock_Config();       // Configure the system clock
+    // swo_init();                 // SWO LOG 输出端口初始化
+    MX_SPI1_Init();             // 初始化SPI1 配置，读写DMA通道，DMA中断，供uwb模组传输
+    MX_UART4_Init();            // 初始化UART4 配置，读DMA通道，串口中断，供jq8400语音模组传输
 
-    /* Configure the system clock */
-    SystemClock_Config();
-
-    swo_init();
-
-    /* Initialize all configured peripherals */
-    MX_SPI1_Init();
-    
-    /* device init */
-    dev_canInit();
-    dev_canStartRx();
-    dev_rx8130ceInit();
-    dev_gnssModInit();
-    dev_ledAndRT9013Init();
-    dev_buzzerInit(BUZZER);
-    dev_buttonInit(SWITCH_KEY);
-    dev_buttonInit(PAUSE_KEY);
-    dev_buttonTaskInit();
-    dev_dipInit(ANCHOR_ID0);
-    dev_dipInit(ANCHOR_ID1);
-    dev_dipInit(ANCHOR_ID2);
-    dev_dipInit(ANCHOR_ID3);
-    dev_w5500Initialize();
-    dev_jq8400CommandData(SetVolume, 23);       // 音量控制也可以通过上位机来确定
-    dev_gnssModStartRx();                       // 上电后先同步时间
-    dev_gnssModReceiveAndParse();
-    
-    uwb_init();
-
-    /* Init scheduler */
-    osKernelInitialize();
-
-    /* Call init function for freertos objects (in freertos.c) */
-    MX_FREERTOS_Init();
-
-    /* Start scheduler */
-    osKernelStart();
-
+    osKernelInitialize();       // Init scheduler
+    task_main_handle = osThreadNew(task_mainProcess, NULL, &task_main_attr);
+    osKernelStart();            // Start scheduler
     /* We should never get here as control is now taken by the scheduler */
-    while (1) {}
+    while (1)
+    {}
 }
 
 /**
   * @brief System Clock Configuration
   * @retval None
   */
-void SystemClock_Config(void) {
+void SystemClock_Config(void)
+{
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
     RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
@@ -131,9 +140,24 @@ void SystemClock_Config(void) {
     RCC_OscInitStruct.PLL.PLLN = 336;
     RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
     RCC_OscInitStruct.PLL.PLLQ = 7;                         // 设置PLL48CK，为48MHz，这里设置为7，336除以7为48                
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+    {
         Error_Handler();
     }
+    
+    /* 增加一个简单超时循环 */
+    // uint32_t tickStart = HAL_GetTick();
+    // while (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+    // {
+    //     if ((HAL_GetTick() - tickStart) > 100)   // 100ms 超时
+    //     {
+    //         /* HSE 起振失败，降回 HSI */
+    //         RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    //         RCC_OscInitStruct.HSEState = RCC_HSE_OFF;
+    //         HAL_RCC_OscConfig(&RCC_OscInitStruct);
+    //         break;
+    //     }
+    // }
 
     /* Initializes the CPU, AHB and APB buses clocks */
     RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
@@ -142,7 +166,8 @@ void SystemClock_Config(void) {
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK) {
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5) != HAL_OK)
+    {
         Error_Handler();
     }
 }
@@ -151,15 +176,47 @@ void SystemClock_Config(void) {
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
-void Error_Handler(void) {
+void Error_Handler(void)
+{
     /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
     __disable_irq();
-    while (1) {}
+    log_e("111");      // 计划在此打印出问题的文件名以及行数
+    while (1)
+    {}
     /* USER CODE END Error_Handler_Debug */
 }
 
-void swo_init(void) {
+void task_mainProcess(void* arg)
+{
+    UNUSED(arg);
+
+    dev_canInit();              // 调用了CAN1的底层初始化
+    dev_ledAndRT9013Init();        // dw1000初始化能够通过，说明此处没有问题
+    dev_buzzerInit(BUZZER);
+    dev_buttonInit(SWITCH_KEY);
+    dev_buttonInit(PAUSE_KEY);
+    dev_rx8130ceInit();         // 初始化外部实时时钟芯片
+    dev_canStartRx();           // can接收中断考虑放到can收发任务中开头       
+    dev_gnssModInit();        
+    dev_jq8400Init();
+    dev_buttonMultiInit();
+    dev_dipInit(ANCHOR_ID0);
+    dev_dipInit(ANCHOR_ID1);
+    dev_dipInit(ANCHOR_ID2);
+    dev_dipInit(ANCHOR_ID3);
+
+    MX_FREERTOS_Init();     // Call init function for freertos objects (in freertos.c)
+
+    // elog_componentInit();   // easy_logger 组件初始化，其中会进行rx8130ce的设备层初始化，将该初始化及log任务移到main process执行最后，貌似上电不自动运行得到解决，待进一步观察
+    // task_swoOutput_handle = osThreadNew(&task_swoOutPut, NULL, &task_swoOutput_attr);
+
+    osThreadExit();         // 初始化以及RTOS相关对象创建完成后，删除该任务
+}
+
+/************************************************* swo log **************************************************/
+void swo_init(void)
+{
     __HAL_RCC_GPIOB_CLK_ENABLE();
     GPIO_InitTypeDef GPIO_InitStructure = {0};
     GPIO_InitStructure.Pin = SWO_GPIO_PIN;
@@ -169,36 +226,39 @@ void swo_init(void) {
     GPIO_InitStructure.Alternate = GPIO_AF0_TRACE;
     HAL_GPIO_Init(SWO_GPIO_PORT, &GPIO_InitStructure);
 
-    // 打开 SWO 功能
+    // 打开 SWO 功能 LAR(Lock Acess reg) TCR(Trace control reg) TER(Trace Enable reg)
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;  // Enable trace
     ITM->LAR  = 0xC5ACCE55;                          // Unlock ITM
     ITM->TCR  = ITM_TCR_ITMENA_Msk | ITM_TCR_SYNCENA_Msk | ITM_TCR_TSENA_Msk;
-    ITM->TER  = 0x1;                                  // Enable stimulus port 0
+    ITM->TER  = 0x1;                                 // Enable stimulus port 0   
 }
 
-static void swo_putc(char ch) {
-    if (ITM->TCR & ITM_TCR_ITMENA_Msk) {
-        while (!(ITM->PORT[0].u32 & 1));
-        ITM->PORT[0].u8 = ch;
-    }
-}
-
-// SWO 格式化输出（最大支持256字节缓冲）
-void swo_printf(const char *fmt, ...) {
-    char buffer[256];  // 根据需要修改大小
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(buffer, sizeof(buffer), fmt, args);
-    va_end(args);
-
-    for (char *p = buffer; *p; p++) {
-        swo_putc(*p);
-    }
-}
-
-void swo_logOutput(const char *data, size_t dataSize) {
-    for (int i = 0; i < dataSize; i++) {
-        swo_putc(*data++);
+void task_swoOutPut(void *arg)
+{
+    UNUSED(arg);
+    uint8_t temp_buf[128];
+    size_t num_bytes;
+    
+    for (;;)
+    {
+        extern StreamBufferHandle_t log_streamBufferHandle;
+        size_t idx = 0;
+        // 阻塞等待接收streambuffer中的数据，发送到ITM端口
+        num_bytes = xStreamBufferReceive(log_streamBufferHandle, temp_buf, sizeof(temp_buf), portMAX_DELAY);
+        while (idx < num_bytes)
+        {
+            if (ITM->TCR & ITM_TCR_ITMENA_Msk)
+            {
+                if (ITM->PORT[0].u32 & 1)
+                {
+                    ITM->PORT[0].u8 = temp_buf[idx++];
+                }
+                else
+                {
+                    taskYIELD();        // buffer满了就让出CPU，但是不丢状态
+                }
+            }
+        }
     }
 }
 

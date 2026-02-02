@@ -30,13 +30,12 @@ void dev_canSendMsg(uint32_t extId, uint8_t* data, uint32_t length)
 {
     CAN_TxHeaderTypeDef tx_header;
     uint32_t TxMailbox = 0;
-    tx_header.ExtId = extId;
-    tx_header.IDE = CAN_ID_EXT;
-    tx_header.RTR = CAN_RTR_DATA;
-    tx_header.DLC = length;
+    tx_header.ExtId    = extId;
+    tx_header.IDE      = CAN_ID_EXT;
+    tx_header.RTR      = CAN_RTR_DATA;
+    tx_header.DLC      = length;
     tx_header.TransmitGlobalTime = DISABLE;
-    // while( HAL_CAN_GetTxMailboxesFreeLevel( &hcan1 ) == 0 );
-    // 替换为中断处理后续
+
 #if USE_CAN1
     if(HAL_CAN_AddTxMessage(&hcan1, &tx_header, data, &TxMailbox) == HAL_OK)
 #elif USE_CAN2
@@ -51,8 +50,7 @@ void dev_canSendMsg(uint32_t extId, uint8_t* data, uint32_t length)
     } 
     else 
     {
-        // uint32_t err = HAL_CAN_GetError(&hcan1);
-        // log_i("CAN Error: 0x%08lX\r\n", err);
+        // CAN发送异常日志输出
         uint32_t err = HAL_CAN_GetTxMailboxesFreeLevel(&hcan1);
         log_i("CAN Error: 0x%08lX\r\n", err);
     }

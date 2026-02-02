@@ -3,8 +3,7 @@
 #include "main.h"
 #include "dev_w5500.h"
 #include "cmsis_os.h"
-#include "elog.h"
-#include "socket.h"
+// #include "socket.h"
 
 #define ETHERNET_BUF_MAX_SIZE (1024 * 2)
 
@@ -27,9 +26,10 @@ extern osSemaphoreId_t w5500IntSem;
 extern w5500_device dev_w5500;
 void task_eth(void* arg)
 {
+    UNUSED(arg);
     wiz_NetInfo net_info;
     dev_w5500Handler *current_handler = &dev_w5500TcpServer;
-    dev_w5500Initialize();
+    dev_w5500Init();
 
     current_handler->init(&dev_w5500, ethernet_buf, &default_net_info);
     wizchip_getnetinfo(&net_info);

@@ -1,14 +1,15 @@
-
+#include "dwt_delay.h"
+#include "board_w5500.h"
 #include "spi.h"
 #include "gpio.h"
-#include "board_w5500.h"
 
+#include "cmsis_os.h"
 #include "wizchip_conf.h"
 
 extern SPI_HandleTypeDef hspi2;
 
 static gpio_config_t w5500_boardParam[] = {
-    { .gpio_port = W5500_RST_PORT, .gpio_pin = W5500_RST_PIN, .gpio_mode = GPIO_MODE_OUTPUT_PP, .gpio_pull = GPIO_NOPULL, .gpio_speed = GPIO_SPEED_FAST },
+    { .gpio_port = W5500_RST_PORT, .gpio_pin = W5500_RST_PIN, .gpio_mode = GPIO_MODE_OUTPUT_PP, .gpio_pull = GPIO_PULLUP, .gpio_speed = GPIO_SPEED_FAST },
 
     { .gpio_port = W5500_INT_PORT, .gpio_pin = W5500_INT_PIN, .gpio_mode = GPIO_MODE_IT_FALLING, .gpio_pull = GPIO_PULLUP, .gpio_speed = GPIO_SPEED_FAST },
 };
@@ -40,12 +41,10 @@ void board_w5500RstIntInit(void)
 void board_w5500Reset(void)
 {
     /* (Active low) RESET should be held low at least 500 us for W5500 */
-    board_w5500RstHigh();
-    HAL_Delay(10);
     board_w5500RstLow();
-    HAL_Delay(10);
+    DWT_Delay(1000);
     board_w5500RstHigh();
-    HAL_Delay(10);
+    DWT_Delay(1000);
 }
 
 void board_w5500ChipSel(void)

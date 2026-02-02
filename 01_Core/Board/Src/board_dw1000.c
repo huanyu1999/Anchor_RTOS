@@ -5,9 +5,8 @@
 
 static volatile uint32_t signalResetDone;
 static gpio_config_t dw1000_boardParam[] = {
+    {.gpio_port = Dw1000_RSTn_GPIO_Port, .clk_port = GPIO_PORT_C, .gpio_pin = Dw1000_RSTn_Pin, .gpio_mode = GPIO_MODE_OUTPUT_OD, .gpio_pull = GPIO_NOPULL, .gpio_speed = NULL},
     {.gpio_port = Dw1000_IRQ_GPIO_Port, .clk_port = GPIO_PORT_A, .gpio_pin = Dw1000_IRQ_Pin, .gpio_mode = GPIO_MODE_IT_RISING, .gpio_pull = GPIO_PULLDOWN, .gpio_speed = NULL},
-
-    {.gpio_port = Dw1000_RSTn_GPIO_Port, .clk_port = GPIO_PORT_C, .gpio_pin = Dw1000_RSTn_Pin, .gpio_mode = GPIO_MODE_ANALOG, .gpio_pull = GPIO_NOPULL, .gpio_speed = NULL},
 };
 
 static exti_irq_t exti_config[exti_num] = {
@@ -18,10 +17,20 @@ static void setup_DW1000RSTnIRQ(int enable);
 
 void board_dw1000Init(void)
 {
+    GPIO_InitTypeDef GPIO_InitStructure;
     // 使能中断脚和reset脚
     drv_gpioInit(&dw1000_boardParam[dw1000_reset]);
-    drv_gpioInit(&dw1000_boardParam[dw1000_interrupt]);
+    // drv_gpioInit(&dw1000_boardParam[dw1000_interrupt]);
+    __HAL_RCC_GPIOA_CLK_ENABLE();
 
+    GPIO_InitStructure.Pin = GPIO_PIN_2;
+    GPIO_InitStructure.Mode = GPIO_MODE_IT_RISING;
+    GPIO_InitStructure.Pull = GPIO_PULLDOWN;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStructure);
+}
+
+void board_dw1000IRQInit(void)
+{
     // 使能dw1000中断
     drv_extiInit(&exti_config[0]);
 }
@@ -34,7 +43,7 @@ void board_dw1000SlowWakeup(void)
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);
     Sleep(1);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-    Sleep(7);                   //wait 7ms for DW1000 XTAL to stabilise
+    Sleep(7);                   // wait 7ms for DW1000 XTAL to stabilise
 }
 
 void board_dw1000FastWakeup(void)
@@ -42,7 +51,7 @@ void board_dw1000FastWakeup(void)
     #define WAKEUP_TMR_MS   (10)
 
     uint32_t x = 0;
-    uint32_t timestamp = HAL_GetTick();    //protection
+    uint32_t timestamp = HAL_GetTick();    // protection
 
     setup_DW1000RSTnIRQ(0);         //disable RSTn IRQ
     signalResetDone = 0;            //signalResetDone connected to RST_PIN_IRQ
@@ -71,6 +80,8 @@ void board_dw1000SetSignalReset(void)
 
 /** @fn      reset_DW1000
   * @brief   DW_RESET pin on DW1000 has 2 functions
+  * @note    RESET pin. Active Low Output, may be pulled low by external open drain driver to 
+  *          reset the DW1000
   *      In general it is output, but it also can be used to reset the digital
   *      part of DW1000 by driving this pin low.
   *      Note, the DW_RESET pin should not be driven high externally.
@@ -118,7 +129,7 @@ static void setup_DW1000RSTnIRQ(int enable)
     }
     else
     {
-        HAL_NVIC_DisableIRQ(EXTI4_IRQn);            //pin #4 -> EXTI #4
+        HAL_NVIC_DisableIRQ(EXTI4_IRQn);            //EXTI #4 -> pin  
 
         // put the pin back to tri-state ... as 
         // output open-drain (not active)

@@ -1,5 +1,7 @@
+#include "dwt_delay.h"
 #include "board_gnss.h"
 #include "gpio.h"
+#include "cmsis_os.h"
 
 static gpio_config_t gnssBoardParam[] = {
     { .gpio_port = GNSS_RST_PORT, .gpio_pin = GNSS_RST_PIN, .gpio_mode = GPIO_MODE_OUTPUT_PP, 
@@ -15,7 +17,8 @@ void board_gnssModInit(void)
 void board_gnssModReset(void)
 {
     drv_gpioSetLevel(gnssBoardParam, GPIO_PIN_SET);
-    HAL_Delay(10);
+    // HAL_Delay(10);
+    DWT_Delay(10000);       // 拉高reset引脚10ms
     drv_gpioSetLevel(gnssBoardParam, GPIO_PIN_RESET);
 }
 

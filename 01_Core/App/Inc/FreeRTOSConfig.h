@@ -80,8 +80,9 @@
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION  0
 #define configUSE_TASK_NOTIFICATIONS             1
 #define configUSE_TRACE_FACILITY                 1
-#define configGENERATE_RUN_TIME_STATS            0
-#define configUSE_STATS_FORMATTING_FUNCTIONS     0
+#define configGENERATE_RUN_TIME_STATS            1
+#define configUSE_STATS_FORMATTING_FUNCTIONS     1
+
 
 // extern volatile uint32_t ulHighFrequencyTimerTicks;
 // #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()    (ulHighFrequencyTimerTicks = 0ul)
@@ -180,6 +181,10 @@ standard names. */
 
 /* USER CODE BEGIN Defines */
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
+/* Run time and task status gathering related definitions */
+extern volatile uint32_t ulHighFrequencyTimerTicks;
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS()    ulHighFrequencyTimerTicks = 0ul
+#define portGET_RUN_TIME_COUNTER_VALUE()            ulHighFrequencyTimerTicks
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */

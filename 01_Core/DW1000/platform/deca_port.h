@@ -63,8 +63,6 @@ void port_set_dw1000_fastrate(void);
 void process_deca_irq(void);
 
 int  peripherals_init(void);
-void setup_DW1000RSTnIRQ(int enable);
-void reset_DW1000(void);
 int usleep(unsigned long usec);
 
 ITStatus EXTI_GetITEnStatus(uint32_t x);

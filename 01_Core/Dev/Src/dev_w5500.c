@@ -1,10 +1,11 @@
 #include <stdio.h>
-
-
+#include "dwt_delay.h"
 #include "dev_w5500.h"
 #include "board_w5500.h"
 #include "spi.h"
 #include "drv_timer.h"
+#include "cmsis_os.h"
+
 #include "socket.h"
 #include "w5500.h"
 #include "dhcp.h"
@@ -29,9 +30,9 @@ dev_w5500Handler dev_w5500TcpCLient = {
 
 static uint8_t dev_w5500DhcpProcess(uint8_t sn, uint8_t *buffer);
 
-void dev_w5500Initialize(void)
+void dev_w5500Init(void)
 {
-    drv_setTimerForInt(&dhcp_oneSecondHandle, TIM4, 1, 9);
+    // drv_setTimerForInt(&dhcp_oneSecondHandle, TIM5, 1, 9);   // 初始化TIM5定时器中断给dhcp处理用，中断为1s触发一次
 
     board_w5500Init();
 
@@ -49,19 +50,20 @@ void dev_w5500VersionCheck(void)
     uint8_t error_count = 0;
     while (1)
     {
-        HAL_Delay(1000);
+        // HAL_Delay(1000);
+        DWT_Delay(1000000);
         if (getVERSIONR() != W5500_VERSION)
         {
             error_count++;
             if (error_count > 5)
             {
-                // log_e("error, %s version is 0x%02x, but read %s version value = 0x%02x\r\n", _WIZCHIP_ID_, W5500_VERSION, _WIZCHIP_ID_, getVERSIONR());
+                log_e("error, %s version is 0x%02x, but read %s version value = 0x%02x\r\n", _WIZCHIP_ID_, W5500_VERSION, _WIZCHIP_ID_, getVERSIONR());
                 Error_Handler();
             }
         }
         else
         {
-            // log_d("w5500 version check success.");
+            log_d("w5500 version check success.");
             break;
         }
     }
@@ -92,7 +94,8 @@ void dev_w5500PhyLinkCheck(void)
     dev_w5500PhyConfigInit();
     do
     {
-        HAL_Delay(1000);
+        // HAL_Delay(1000);
+        DWT_Delay(1000000);
         ctlwizchip(CW_GET_PHYLINK, (void *)&phy_link_status);
         if (phy_link_status == PHY_LINK_ON)
         {

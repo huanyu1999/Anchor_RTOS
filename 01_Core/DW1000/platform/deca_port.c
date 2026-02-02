@@ -11,10 +11,11 @@
  * @author DecaWave
  */
 
-#include "deca_port.h"
-#include "deca_device_api.h"
-#include "stm32f4xx_hal_conf.h"
+ #include "dwt_delay.h"
 #include "board_dw1000.h"
+#include "deca_device_api.h"
+#include "cmsis_os.h"
+#include "deca_port.h"
 
 extern          SPI_HandleTypeDef hspi1;
 // static volatile uint32_t signalResetDone;
@@ -30,8 +31,10 @@ volatile        int32_t sys_time_diff = 0;
 // portGetTickCnt(void)
 unsigned long portGetTickCnt(void)
 {
-	return HAL_GetTick() - sys_time_diff;
-	//return HAL_GetTick();
+	// return HAL_GetTick() - sys_time_diff;
+	// 暂时先不用TIM6的中断计数，采用RTOS时基计数
+    uint32_t tick = osKernelGetTickCount();
+    return tick;
 }
 
 
@@ -66,6 +69,7 @@ __INLINE void
 Sleep(uint32_t x)
 {
     HAL_Delay(x);
+    // DWT_Delay(x * 1000);
 }
 
 
@@ -234,9 +238,7 @@ __INLINE void process_deca_irq(void)
 {
     while(port_CheckEXT_IRQ() != 0)
     {
-
         dwt_isr();
-
     } //while DW1000 IRQ line active
 }
 

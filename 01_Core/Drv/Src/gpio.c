@@ -37,7 +37,7 @@ void drv_gpioInit(gpio_config_t *io_cfg)
 
     HAL_GPIO_Init(io_cfg->gpio_port, &GPIO_InitStruct);
 
-    HAL_GPIO_WritePin(io_cfg->gpio_port, io_cfg->gpio_pin, GPIO_PIN_SET);
+    // HAL_GPIO_WritePin(io_cfg->gpio_port, io_cfg->gpio_pin, GPIO_PIN_RESET);
 }
 
 void drv_extiInit(exti_irq_t *exti_cfg)

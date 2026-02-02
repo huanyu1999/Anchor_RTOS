@@ -26,7 +26,7 @@ void drv_i2cInit(void);
 void drv_i2cRead(uint8_t addr, uint8_t* buf, uint16_t size);
 void drv_i2cWrite(uint8_t addr, uint8_t* data, uint16_t size);
 void drv_i2cMemRead(uint8_t addr, uint8_t reg, uint8_t* buf, uint16_t read_size);
-void drv_i2cMemWrite(uint8_t addr, uint8_t reg, uint8_t* data, uint16_t write_size);
+void drv_i2cMemWrite(uint8_t addr, uint8_t reg, uint8_t* buf, uint16_t write_size);
 
 void drv_i2cError(void);
 

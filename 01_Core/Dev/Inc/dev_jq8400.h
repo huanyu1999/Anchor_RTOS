@@ -16,8 +16,17 @@ typedef enum {
     AppointTimeFast                 = 0x23,                 /*指定时间快退*/
 }UartCommandData;                                           //包含多个数据的指令,起始码-指令类型-数据长度-数据1-...-校验和
 
+typedef enum {
+    JQ8X00_USB                      = 0X00,                 /*UPANND*/
+    JQ8X00_SD                       = 0x01,                 /*SD*/
+    JQ8X00_FLASH                    = 0x02,                 /*FLASH*/
+} jq8400SystemSymbol;
+
 void dev_jq8400ConvertDis(float dis);
 void dev_jq8400Init(void);
+void dev_jq8400DeInit(void);
 void dev_jq8400VoiceOut(uint8_t *pVoiceBuf, int len);
 void dev_jq8400CommandData(UartCommandData Command, uint8_t DATA);
+void dev_jq8400RandomPathPlay(jq8400SystemSymbol symbol, char *data);
+void dev_jq8400CombinePlay(char *data, uint8_t len);
 #endif

@@ -17,11 +17,11 @@
 *.dbg*
 *.uvguix.*
 .mxproject
- 
+
 RTE/
 Templates/
 Examples/
- 
+
 !*.uvprojx
 !*.h
 !*.c
@@ -39,9 +39,5 @@ JLinkLog.txt
 *.json
 .vscode
 
-#EIDE file 
+#Cmake file 
 build
-*.clang-format
-.cmsis
-.eide
-*.code-workspace

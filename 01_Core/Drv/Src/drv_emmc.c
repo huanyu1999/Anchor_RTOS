@@ -41,7 +41,7 @@ void HAL_MMC_MspInit(MMC_HandleTypeDef *hmmc) {
 
     GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStructure.Pull = GPIO_PULLUP;
-    GPIO_InitStructure.Speed = GPIO_SPEED_HIGH;
+    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     GPIO_InitStructure.Alternate = GPIO_AF12_SDIO;
 
     GPIO_InitStructure.Pin = EMMC_CLK_PIN | EMMC_D0_PIN | EMMC_D1_PIN | EMMC_D2_PIN | EMMC_D3_PIN | EMMC_D6_PIN | EMMC_D7_PIN;

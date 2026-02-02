@@ -21,6 +21,7 @@
 #include "main.h"
 #include "board_dw1000.h"
 #include "board_w5500.h"
+#include "stm32f4xx_hal_pcd.h"
 #include "stm32f4xx_it.h"
 #include "cmsis_os.h"
 #include "elog.h"
@@ -62,7 +63,7 @@
 /* External variables --------------------------------------------------------*/
 extern UART_HandleTypeDef huart3;
 extern UART_HandleTypeDef huart4;
-extern TIM_HandleTypeDef  htimer2;
+// extern TIM_HandleTypeDef  htimer2;
 extern TIM_HandleTypeDef  htimer6;
 extern CAN_HandleTypeDef  hcan1;
 extern PCD_HandleTypeDef  hpcd;
@@ -176,7 +177,8 @@ void DebugMon_Handler(void)
 
 void TIM2_IRQHandler(void)
 {
-    HAL_TIM_IRQHandler(&htimer2);
+    extern TIM_HandleTypeDef timerForInvaildDistanceClearHandle;
+    HAL_TIM_IRQHandler(&timerForInvaildDistanceClearHandle);
 }
 
 void TIM3_IRQHandler(void)
@@ -185,15 +187,15 @@ void TIM3_IRQHandler(void)
     HAL_TIM_IRQHandler(&button_tickHandler);
 }
 
-#if TASK_INFO
-extern TIM_HandleTypeDef timer50usHandle;
+#ifdef TASK_DEBUG_INFO
 void TIM4_IRQHandler(void)
 {
+    extern TIM_HandleTypeDef timer50usHandle;
     HAL_TIM_IRQHandler(&timer50usHandle);
 }
 #endif
 
-void TIM4_IRQHandler(void)
+void TIM5_IRQHandler(void)
 {
     extern TIM_HandleTypeDef dhcp_oneSecondHandle;
     HAL_TIM_IRQHandler(&dhcp_oneSecondHandle);
@@ -220,12 +222,10 @@ void EXTI4_IRQHandler(void)
     HAL_GPIO_EXTI_IRQHandler(Dw1000_RSTn_Pin);
 }
 
-void EXTI9_5_IRQHandler(void) 
+void EXTI9_5_IRQHandler(void)
 {
     HAL_GPIO_EXTI_IRQHandler(W5500_INT_PIN);
 }
-
-
 
 void USART3_IRQHandler(void)
 {
@@ -256,9 +256,6 @@ void HAL_UART_IdleCallback(UART_HandleTypeDef *huart)
     }
 }
 
-/**
-  * @brief This function handles TIM6 global interrupt, DAC1 and DAC2 underrun error interrupts.
-  */
 void TIM6_DAC_IRQHandler(void)
 {
     HAL_TIM_IRQHandler(&htimer6);
@@ -278,6 +275,19 @@ void DMA2_Stream6_IRQHandler(void)
 {
     HAL_DMA_IRQHandler(emmc_handle.hdmarx);
 }
+
+#if USE_SPI1_DMA
+extern SPI_HandleTypeDef hspi1;
+void DMA2_Stream5_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(hspi1.hdmatx);
+}
+
+void DMA2_Stream2_IRQHandler(void)
+{
+    HAL_DMA_IRQHandler(hspi1.hdmarx);
+}
+#endif 
 
 void OTG_FS_IRQHandler(void)
 {

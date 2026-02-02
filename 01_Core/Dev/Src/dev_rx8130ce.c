@@ -1,6 +1,7 @@
 #include "dev_rx8130ce.h"
 #include "board_rx8130ce.h"
-#include "main.h"
+#include "cmsis_os.h"
+// #include "main.h"
 
 
 /* define rx8130ce device address */
@@ -9,7 +10,7 @@
 void dev_rx8130ceInit(void)
 {
     board_rx8130ceInit();
-    dev_rx8130ceSoftInit();
+    // dev_rx8130ceSoftInit();
 }
 
 void dev_rx8130ceSoftInit(void)
@@ -28,7 +29,7 @@ void dev_rx8130ceSoftInit(void)
 void dev_rx8130ceSetDefaultTime(void)
 {
     rx8130ce_time_t now = {
-        .year = 99,
+        .year = 00,
         .month = 1,
         .day = 1,
         .hours = 1, 
@@ -61,14 +62,12 @@ void dev_rx8130ceWritebuf(uint16_t devAddr_w, uint8_t memAddr, uint8_t* data, ui
   */
 void dev_rx8130ceRead(uint16_t devAddr, uint8_t memAddr, uint8_t *buf, uint16_t length)
 {
-    // transmits the RX8130CE's slave address with the R/W bit set to write mode. 
-    // transfers address for reading from RX8130CE. 
-    // board_rx8130ceBufWrite1(devAddr, &memAddr, 1);
-
-    // transfers RESTART condition [Sr] (in which case, CPU does not transfer a STOP condition [P]). 
-    // transfers RX8130'CEs slave address with the R/W bit set to read mode. 
-    // receive data
-    // board_rx8130ceBufRead1(devAddr, buf, length);
+    /* transmits the RX8130CE's slave address with the R/W bit set to write mode. 
+        transfers address for reading from RX8130CE. 
+        transfers RESTART condition [Sr] (in which case, CPU does not transfer a STOP condition [P]). 
+        transfers RX8130'CEs slave address with the R/W bit set to read mode. 
+        receive data
+        */
     board_rx8130ceBufRead(devAddr, memAddr, buf, length);
 }
 

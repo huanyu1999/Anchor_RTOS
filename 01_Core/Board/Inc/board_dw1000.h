@@ -22,6 +22,7 @@ typedef enum {
 } dw1000Irq_enum_t;
 
 void board_dw1000Init(void);
+void board_dw1000IRQInit(void);
 void board_dw1000SlowWakeup(void);
 void board_dw1000FastWakeup(void);
 void board_dw1000SetSignalReset(void);

@@ -19,6 +19,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "spi.h"
+#include "cmsis_os.h"
+
+#define USE_SPI1_DMA 1
 
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
@@ -46,6 +49,7 @@ void MX_SPI1_Init(void)
     {
         Error_Handler();
     }
+
 }
 
 /* SPI2 init function */
@@ -70,7 +74,7 @@ void MX_SPI2_Init(void)
     }
 }
 
-void drv_spiCSCtrl(SPI_HandleTypeDef* spiHandle, uint8_t level)
+void drv_spiCSCtrl(SPI_HandleTypeDef* spiHandle, GPIO_PinState level)
 {
     if(spiHandle->Instance == SPI1)
     {
@@ -133,51 +137,55 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
         GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
         HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-//        /* USER CODE BEGIN SPI1_MspInit 1 */
-//        /* SPI1_TX DMA Init */
-//        hdma_spi1_tx.Instance = DMA2_Stream3;
-//        hdma_spi1_tx.Init.Channel = DMA_CHANNEL_3;
-//        hdma_spi1_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
-//        hdma_spi1_tx.Init.PeriphInc = DMA_PINC_DISABLE;
-//        hdma_spi1_tx.Init.MemInc    = DMA_MINC_ENABLE;
-//        hdma_spi1_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-//        hdma_spi1_tx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
-//        hdma_spi1_tx.Init.Mode = DMA_NORMAL;
-//        hdma_spi1_tx.Init.Priority = DMA_PRIORITY_HIGH;
-//        hdma_spi1_tx.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
-//        hdma_spi1_tx.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_FULL;
-//        hdma_spi1_tx.Init.MemBurst = DMA_MBURST_INC4;
-//        hdma_spi1_tx.Init.PeriphBurst = DMA_PBURST_INC4;
+#ifdef USE_SPI1_DMA
+        __HAL_RCC_DMA2_CLK_ENABLE();
+       /* USER CODE BEGIN SPI1_MspInit 1 */
+       /* SPI1_TX DMA Init */
+        hdma_spi1_tx.Instance                 = DMA2_Stream5;
+        hdma_spi1_tx.Init.Channel             = DMA_CHANNEL_3;
+        hdma_spi1_tx.Init.Direction           = DMA_MEMORY_TO_PERIPH;
+        hdma_spi1_tx.Init.PeriphInc           = DMA_PINC_DISABLE;
+        hdma_spi1_tx.Init.MemInc              = DMA_MINC_ENABLE;
+        hdma_spi1_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+        hdma_spi1_tx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+        hdma_spi1_tx.Init.Mode                = DMA_NORMAL;
+        hdma_spi1_tx.Init.Priority            = DMA_PRIORITY_HIGH;
+        hdma_spi1_tx.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;
+        hdma_spi1_tx.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+        hdma_spi1_tx.Init.MemBurst            = DMA_MBURST_INC8;
+        hdma_spi1_tx.Init.PeriphBurst         = DMA_MBURST_INC8;
+        hdma_spi1_tx.Init.Priority            = DMA_PRIORITY_VERY_HIGH;
 
-//        HAL_DMA_Init(&hdma_spi1_tx);
-//        __HAL_LINKDMA(spiHandle, hdmatx, hdma_spi1_tx);
+        HAL_DMA_Init(&hdma_spi1_tx);
+        __HAL_LINKDMA(spiHandle, hdmatx, hdma_spi1_tx);
 
-//        /* SPI1_RX DMA Init */
-//        hdma_spi1_rx.Instance                 = DMA2_Stream2;
-//        hdma_spi1_rx.Init.Channel             = DMA_CHANNEL_3;
-//        hdma_spi1_rx.Init.Direction           = DMA_PERIPH_TO_MEMORY;
-//        hdma_spi1_rx.Init.PeriphInc           = DMA_PINC_DISABLE;
-//        hdma_spi1_rx.Init.MemInc              = DMA_MINC_ENABLE;
-//        hdma_spi1_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-//        hdma_spi1_rx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-//        hdma_spi1_rx.Init.Mode                = DMA_NORMAL;
-//        hdma_spi1_rx.Init.Priority            = DMA_PRIORITY_HIGH;
-//        hdma_spi1_rx.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;         
-//        hdma_spi1_rx.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
-//        hdma_spi1_rx.Init.MemBurst            = DMA_MBURST_INC4;
-//        hdma_spi1_rx.Init.PeriphBurst         = DMA_PBURST_INC4; 
-//        
-//        HAL_DMA_Init(&hdma_spi1_rx);
-//        __HAL_LINKDMA(spiHandle, hdmarx, hdma_spi1_rx);
-//        
-//        /* NVIC configuration for DMA transfer complete interrupt (SPI3_TX) */
-//        HAL_NVIC_SetPriority(DMA2_Stream3_IRQn, 0, 1);
-//        HAL_NVIC_EnableIRQ(DMA2_Stream3_IRQn);
-//        
-//        /* NVIC configuration for DMA transfer complete interrupt (SPI3_RX) */
-//        HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 0, 0);
-//        HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+        /* SPI1_RX DMA Init */
+        hdma_spi1_rx.Instance                 = DMA2_Stream2;
+        hdma_spi1_rx.Init.Channel             = DMA_CHANNEL_3;
+        hdma_spi1_rx.Init.Direction           = DMA_PERIPH_TO_MEMORY;
+        hdma_spi1_rx.Init.PeriphInc           = DMA_PINC_DISABLE;
+        hdma_spi1_rx.Init.MemInc              = DMA_MINC_ENABLE;
+        hdma_spi1_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+        hdma_spi1_rx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+        hdma_spi1_rx.Init.Mode                = DMA_NORMAL;
+        hdma_spi1_rx.Init.Priority            = DMA_PRIORITY_HIGH;
+        hdma_spi1_rx.Init.FIFOMode            = DMA_FIFOMODE_ENABLE;         
+        hdma_spi1_rx.Init.FIFOThreshold       = DMA_FIFO_THRESHOLD_FULL;
+        hdma_spi1_rx.Init.MemBurst            = DMA_MBURST_INC8;
+        hdma_spi1_rx.Init.PeriphBurst         = DMA_MBURST_INC8;
+        hdma_spi1_tx.Init.Priority            = DMA_PRIORITY_VERY_HIGH;
         
+        HAL_DMA_Init(&hdma_spi1_rx);
+        __HAL_LINKDMA(spiHandle, hdmarx, hdma_spi1_rx);
+        
+        /* NVIC configuration for DMA transfer complete interrupt (SPI1_TX) */
+        HAL_NVIC_SetPriority(DMA2_Stream5_IRQn, 0x05, 0);
+        HAL_NVIC_EnableIRQ(DMA2_Stream5_IRQn);
+        
+        /* NVIC configuration for DMA transfer complete interrupt (SPI1_RX) */
+        HAL_NVIC_SetPriority(DMA2_Stream2_IRQn, 0x05, 0);
+        HAL_NVIC_EnableIRQ(DMA2_Stream2_IRQn);
+#endif
         /* USER CODE END SPI1_MspInit 1 */
     }
     else if(spiHandle->Instance==SPI2)
@@ -254,4 +262,24 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
         // HAL_NVIC_DisableIRQ(DMA2_Stream3_IRQn);
         // HAL_NVIC_DisableIRQ(DMA2_Stream2_IRQn);
     }
+}
+
+extern osSemaphoreId_t dw1000WriteSem;
+extern osSemaphoreId_t dw1000ReadSem;
+
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    UNUSED(hspi);
+    osSemaphoreRelease(dw1000ReadSem);
+}
+
+void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    UNUSED(hspi);
+    osSemaphoreRelease(dw1000WriteSem);
+}
+
+void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    UNUSED(hspi);
 }

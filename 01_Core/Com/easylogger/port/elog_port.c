@@ -26,14 +26,21 @@
  * Created on: 2015-04-28
  */
 
-#include "cmsis_os.h"
-#include "dev_rx8130ce.h"
-#include "usart.h"
+#include <stdio.h>
 #include <elog.h>
+#include "dev_rx8130ce.h"
+#include "cmsis_os.h"
 
 extern osSemaphoreId_t elog_lockSem;
 extern osSemaphoreId_t elog_asyncSem;
-extern osSemaphoreId_t uart_dmaLockSem;
+// extern osSemaphoreId_t uart_dmaLockSem;
+// extern void swo_logOutput(const char *data, size_t dataSize);
+
+#define LOG_STREAM_BUF_SIZE 256
+StreamBufferHandle_t log_streamBufferHandle;
+static uint8_t log_streamBuffer[LOG_STREAM_BUF_SIZE];
+StaticStreamBuffer_t streamBufferStructure;
+const size_t triggerLevel = 8;          // 暂定为1
 
 /**
  * EasyLogger port initialize
@@ -45,6 +52,10 @@ ElogErrCode elog_port_init(void)
     ElogErrCode result = ELOG_NO_ERR;
 
     /* add your code here */
+    // 此处创建一个stream buffer给log输出用
+    log_streamBufferHandle = xStreamBufferCreateStatic(sizeof(log_streamBuffer), triggerLevel, log_streamBuffer, &streamBufferStructure);
+
+    // dev_rx8130ceInit(); // 初始化外部实时时钟芯片
 
     return result;
 }
@@ -68,13 +79,14 @@ void elog_port_deinit(void)
 void elog_port_output(const char *log, size_t size)
 {
     /* add your code here */
-    // HAL_UART_Transmit(&huart1, (uint8_t *)log, size, 1000);             // 使用串口阻塞输出
+    // swo_logOutput(log, size);       // 考虑SWO输出
 
-    // osSemaphoreAcquire(uart_dmaLockSem, osWaitForever);              // 使用串口DMA输出,
-    // 存在打印日志时，日志丢失重叠的bug HAL_UART_Transmit_DMA(&huart1, (uint8_t *)log, size);
+    size_t written = xStreamBufferSend(log_streamBufferHandle, log, size, 0);// 在这里朝streambuffer写入数据，传递给SWO端口
 
-    // 考虑SWO输出
-    swo_logOutput(log, size);
+    if (written < size)
+    {
+        // 可在此统计丢弃的字节
+    }
 }
 
 /**
@@ -82,7 +94,6 @@ void elog_port_output(const char *log, size_t size)
  */
 void elog_port_output_lock(void)
 {
-
     /* add your code here */
     osSemaphoreAcquire(elog_lockSem, osWaitForever);
 }
@@ -92,7 +103,6 @@ void elog_port_output_lock(void)
  */
 void elog_port_output_unlock(void)
 {
-
     /* add your code here */
     osSemaphoreRelease(elog_lockSem);
 }
@@ -104,17 +114,15 @@ void elog_port_output_unlock(void)
  */
 const char *elog_port_get_time(void)
 {
-
     /* add your code here */
     // static char cur_system_time[16] = "";
     // snprintf(cur_system_time, 16, "%lu", osKernelGetTickCount());
     // return cur_system_time;
 
-    static char cur_system_time[128] = "";
+    static char cur_system_time[64] = "";
     static rx8130ce_time_t now;
-    dev_rx8130ceGetDateTime(&now);
-    snprintf(cur_system_time, 128, "%d-%d-%d %02d:%02d:%02d", now.year + 2000, now.month, now.day, now.hours,
-             now.minutes, now.seconds);
+    dev_rx8130ceGetDateTime(&now);          // 考虑后续增加DMA I2C读取
+    snprintf(cur_system_time, 64, "%d.%d.%d %02d:%02d:%02d", now.year + 2000, now.month, now.day, now.hours, now.minutes, now.seconds);
     return cur_system_time;
 }
 
@@ -163,7 +171,6 @@ void elog_componentInit(void)
 
 void elog_entry(void *para)
 {
-    elog_componentInit();
     size_t get_log_size = 0;
 #ifdef ELOG_ASYNC_LINE_OUTPUT
     static char poll_get_buf[ELOG_LINE_BUF_SIZE - 4];
@@ -173,9 +180,7 @@ void elog_entry(void *para)
     for (;;)
     {
         /* waiting log */
-        osSemaphoreAcquire(
-            elog_asyncSem,
-            osWaitForever); // 异步输出的循环buffer中有数据，接收到elog_async_output_notice函数释放的信号量
+        osSemaphoreAcquire(elog_asyncSem, osWaitForever); // 异步输出的循环buffer中有数据，接收到elog_async_output_notice函数释放的信号量
         /* polling gets and outputs the log */
         while (1)
         {

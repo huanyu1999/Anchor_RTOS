@@ -34,7 +34,7 @@ typedef struct {
     void (*handle_w5500Event)(w5500_device* dev, w5500_event event);
 } dev_w5500Handler;
 
-void dev_w5500Initialize(void);
+void dev_w5500Init(void);
 void dev_w5500VersionCheck(void);
 void dev_w5500PhyConfigInit(void);
 void dev_w5500PhyInfoGet(void);

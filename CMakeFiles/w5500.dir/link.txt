@@ -1,0 +1,2 @@
+"E:\10 2021.10\bin\arm-none-eabi-ar.exe" qc libw5500.a CMakeFiles/w5500.dir/01_Core/W5500/Ethernet/socket.c.obj CMakeFiles/w5500.dir/01_Core/W5500/Ethernet/W5500/w5500.c.obj CMakeFiles/w5500.dir/01_Core/W5500/Ethernet/wizchip_conf.c.obj CMakeFiles/w5500.dir/01_Core/W5500/Internet/DHCP/dhcp.c.obj
+"E:\10 2021.10\bin\arm-none-eabi-ranlib.exe" libw5500.a

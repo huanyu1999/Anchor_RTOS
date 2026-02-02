@@ -1,0 +1,1 @@
+"E:\10 2021.10\bin\arm-none-eabi-gcc.exe" -O3 -DNDEBUG -TD:/WorkSpace/RailroadActiveWarningDevice/Firmware/Anchor_RTOS/STM32F405XX_FLASH.ld -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard -specs=nano.specs -lc -lm -Wl,-Map=Anchor.map,--cref,--gc-sections,--print-memory-usage @CMakeFiles\Anchor.elf.dir\objects1.rsp -o Anchor.elf  libelog.a libw5500.a

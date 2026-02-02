@@ -46,7 +46,7 @@ extern "C" {
 
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
-#define TASK_INFO             0                 // 通过该宏定义控制task信息打印调试
+#define TASK_DEBUG_INFO      1                    // 通过该宏定义控制task信息打印调试
 /* USER CODE END EM */
 
 /* Exported functions prototypes ---------------------------------------------*/
@@ -65,7 +65,7 @@ void Error_Handler(void);
 
 void swo_printf(const char *fmt, ...);
 
-void swo_logOutput(const char *data, size_t dataSize);
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

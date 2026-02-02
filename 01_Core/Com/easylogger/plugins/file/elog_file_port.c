@@ -27,7 +27,7 @@
  */
 
 #include "elog_file.h"
-#include "app_sdCard.h"
+#include "app_emmc.h"
 
 /**
  * EasyLogger flile log pulgin port initialize

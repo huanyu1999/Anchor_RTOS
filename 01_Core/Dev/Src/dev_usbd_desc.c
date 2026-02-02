@@ -55,7 +55,7 @@ uint8_t *USBD_USR_BOSDescriptor(USBD_SpeedTypeDef speed, uint16_t *length);
 #endif /* (USBD_LPM_ENABLED == 1) || (USBD_MSC_BOS_ENABLED == 1) */
 
 /* Private variables ---------------------------------------------------------*/
-USBD_DescriptorsTypeDef Class_Desc = {
+USBD_DescriptorsTypeDef MSC_Desc = {
     USBD_MSC_DeviceDescriptor,
     USBD_MSC_LangIDStrDescriptor,
     USBD_MSC_ManufacturerStrDescriptor,

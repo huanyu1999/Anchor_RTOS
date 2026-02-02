@@ -17,7 +17,7 @@ void MX_TIM2_Init(uint32_t period_ms)
     /* Set TIMx instance */
     htimer2.Instance = TIM2;
     
-    htimer2.Init.Period = period_value;                 // 500ms 中断一次
+    htimer2.Init.Period = period_value;        
     htimer2.Init.Prescaler = uwPrescalerValue;
     htimer2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htimer2.Init.CounterMode = TIM_COUNTERMODE_UP;
@@ -256,7 +256,7 @@ void drv_setTimerForInt(TIM_HandleTypeDef* timHandler, TIM_TypeDef* timer, uint3
         else if (timer == TIM14)
             irqNum = TIM8_TRG_COM_TIM14_IRQn;
 
-        HAL_NVIC_SetPriority(irqNum, interruptPriority, 0);
+        HAL_NVIC_SetPriority(irqNum, interruptPriority, 0xF);
         HAL_NVIC_EnableIRQ(irqNum);
     }
     

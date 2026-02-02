@@ -21,6 +21,7 @@
 #ifndef __STM32F4xx_IT_H
 #define __STM32F4xx_IT_H
 
+#define USE_SPI1_DMA 1
 #ifdef __cplusplus
  extern "C" {
 #endif
@@ -65,6 +66,10 @@ void TIM6_DAC_IRQHandler(void);
 void SDIO_IRQHandler(void);
 void DMA2_Stream3_IRQHandler(void);
 void DMA2_Stream6_IRQHandler(void);
+#if USE_SPI1_DMA
+void DMA2_Stream5_IRQHandler(void);
+void DMA2_Stream2_IRQHandler(void);
+#endif
 void OTG_FS_IRQHandler(void);
 
 /* USER CODE BEGIN EFP */

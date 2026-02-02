@@ -68,7 +68,7 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd) {
         __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
 
         /* Set USBFS Interrupt to the lowest priority */
-        HAL_NVIC_SetPriority(OTG_FS_IRQn, 7, 0);
+        HAL_NVIC_SetPriority(OTG_FS_IRQn, 15, 0);
 
         /* Enable USBFS Interrupt */
         HAL_NVIC_EnableIRQ(OTG_FS_IRQn);
@@ -234,7 +234,7 @@ USBD_StatusTypeDef USBD_LL_Init(USBD_HandleTypeDef *pdev) {
     hpcd.Init.phy_itface = PCD_PHY_EMBEDDED;
     hpcd.Init.Sof_enable = 0;
     hpcd.Init.speed = PCD_SPEED_FULL;
-    hpcd.Init.vbus_sensing_enable = 1;
+    hpcd.Init.vbus_sensing_enable = 0;
     /* Link The driver to the stack */
     hpcd.pData = pdev;
     pdev->pData = &hpcd;
@@ -426,9 +426,9 @@ USBD_StatusTypeDef USBD_LL_SetTestMode(USBD_HandleTypeDef *pdev, uint8_t testmod
   */
 void *USBD_static_malloc(uint32_t size)
 {
-  UNUSED(size);
-//   static uint32_t mem[(sizeof(USBD_HID_HandleTypeDef) / 4) + 1]; /* On 32-bit boundary */
-//   return mem;
+    UNUSED(size);
+    static uint32_t mem[(sizeof(USBD_MSC_BOT_HandleTypeDef) / 4) + 1]; /* On 32-bit boundary */
+    return mem;
 }
 
 /**
@@ -438,7 +438,7 @@ void *USBD_static_malloc(uint32_t size)
   */
 void USBD_static_free(void *p)
 {
-  UNUSED(p);
+    UNUSED(p);
 }
 
 /**

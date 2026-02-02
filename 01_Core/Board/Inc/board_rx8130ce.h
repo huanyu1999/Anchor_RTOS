@@ -9,7 +9,6 @@
 #define RX8130CE_INT_PORT       GPIOB
 #define RX8130CE_INT_PIN        GPIO_PIN_7
 
-void board_rx8130ceIoInit(void);
 void board_rx8130ceI2cInit(void);
 void board_rx8130ceInit(void);
 void board_rx8130ceBufWrite(uint8_t addr, uint8_t reg, uint8_t* val, uint16_t buf_size);

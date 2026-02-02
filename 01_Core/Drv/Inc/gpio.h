@@ -33,13 +33,6 @@ extern "C" {
 /* USER CODE END Includes */
 
 /* USER CODE BEGIN Private defines */
-//#define IO_OUTPUT_CLOSE()                                                \
-//        HAL_GPIO_WritePin(UwbOK_LED_GPIO_Port, UwbOK_LED_Pin, GPIO_PIN_RESET);    \
-//        HAL_GPIO_WritePin(Onside_LED_GPIO_Port, Onside_LED_Pin, GPIO_PIN_RESET);  \
-//        HAL_GPIO_WritePin(Across_LED_GPIO_Port, Across_LED_Pin, GPIO_PIN_RESET);  \
-//        HAL_GPIO_WritePin(CAN_TX_LED_GPIO_Port, CAN_TX_LED_Pin, GPIO_PIN_RESET);  \
-//        HAL_GPIO_WritePin(CAN_RX_LED_GPIO_Port, CAN_RX_LED_Pin, GPIO_PIN_RESET);  \
-//        HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET)             \
 
 //#define SW_IS_ON(sw_gpio_port, sw_pin)    return ((HAL_GPIO_ReadPin(sw_gpio_port, sw_pin)) ? (0) : (1)
 /* USER CODE END Private defines */

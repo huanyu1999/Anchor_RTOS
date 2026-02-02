@@ -11,7 +11,7 @@
 /* Disk status */
 static volatile DSTATUS Stat = STA_NOINIT;
 
-static osSemaphoreId_t emmcWriteSemaID;
+osSemaphoreId_t emmcWriteSemaID;
 StaticQueue_t emmcWriteSemaCB;                        
 const osSemaphoreAttr_t emmcWriteSema_attr = {     
     .name    = "emmcWriteSema",
@@ -19,7 +19,7 @@ const osSemaphoreAttr_t emmcWriteSema_attr = {
     .cb_size = sizeof(emmcWriteSemaCB),
 };
 
-static osSemaphoreId_t emmcReadSemaID;
+osSemaphoreId_t emmcReadSemaID;
 StaticQueue_t emmcReadSemaCB;                    
 const osSemaphoreAttr_t emmcReadSema_attr = {    
     .name    = "emmcReadSema",
@@ -46,8 +46,7 @@ DRESULT dev_emmcWrite(BYTE lun, const BYTE *buff, DWORD sector, UINT count);
 DRESULT dev_emmcIoCtl(BYTE lun, BYTE cmd, void *buff);
 #endif /* _USE_IOCTL == 1 */
 
-const Diskio_drvTypeDef emmc_driver = 
-{
+const Diskio_drvTypeDef emmc_driver = {
     dev_emmcInitialize,
     dev_emmcStatus,
     dev_emmcRead,
@@ -58,6 +57,19 @@ const Diskio_drvTypeDef emmc_driver =
     dev_emmcIoCtl
 #endif /* _USE_IOCTL == 1 */
 };
+
+DSTATUS dev_emmcSemaInit(void)
+{
+    emmcWriteSemaID = osSemaphoreNew(1, 0, &emmcWriteSema_attr);
+    emmcReadSemaID = osSemaphoreNew(1, 0, &emmcReadSema_attr);
+    if ((emmcWriteSemaID == NULL) || (emmcReadSemaID == NULL)) { 
+        log_e("emmc R/W osSemaphore create failed."); 
+    } else { 
+        log_d("emmc R/W osSemaphore create success."); 
+    }
+    
+    return 0;
+}
 
 /**
   * @brief  Initializes a Drive
@@ -82,13 +94,7 @@ DSTATUS dev_emmcInitialize(BYTE lun) {
         Stat = dev_emmcCheckStatus(lun);
 #endif
         if (Stat != STA_NOINIT) {
-            emmcWriteSemaID = osSemaphoreNew(1, 0, &emmcWriteSema_attr);
-            emmcReadSemaID = osSemaphoreNew(1, 0, &emmcReadSema_attr);
-            if ((emmcWriteSemaID == NULL) || (emmcReadSemaID == NULL)) { 
-                log_e("osSemaphoreNew failed."); 
-            } else { 
-                log_d("osSemaphoreNew success."); 
-            }
+
             // 初始化emmc成功，打印emmc的相关信息
             dev_emmcPrintfInfo();
         }
@@ -246,7 +252,6 @@ void dev_emmcPrintfInfo(void)
         default :
             break;
     }
-
     log_i("Card ManufacturerID: %d \r\n",emmc_cardCID.ManufacturerID);				//制造商ID	
     log_i("Class:               %d \r\n",(uint32_t)(emmc_cardInfo.Class));		    //
     log_i("Card RCA(RelCardAdd):%d \r\n",emmc_cardInfo.RelCardAdd);					//卡相对地址

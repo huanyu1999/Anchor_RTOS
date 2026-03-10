@@ -52,8 +52,6 @@ void drv_i2cWrite(uint8_t addr, uint8_t* data, uint16_t size)
 void drv_i2cMemRead(uint8_t addr, uint8_t reg, uint8_t* buf, uint16_t read_size)
 {
     HAL_StatusTypeDef status = HAL_OK;
-    // osSemaphoreAcquire(rx8130ReadSem, osWaitForever);  
-    // status = HAL_I2C_Mem_Read_DMA(&i2c_handle, addr, reg, I2C_MEMADD_SIZE_8BIT, buf, read_size);
     status = HAL_I2C_Mem_Read(&i2c_handle, addr, reg, I2C_MEMADD_SIZE_8BIT, buf, read_size, 1000);
     if (status != HAL_OK)
     {
@@ -64,8 +62,6 @@ void drv_i2cMemRead(uint8_t addr, uint8_t reg, uint8_t* buf, uint16_t read_size)
 void drv_i2cMemWrite(uint8_t addr, uint8_t reg, uint8_t* buf, uint16_t write_size)
 {
     HAL_StatusTypeDef status = HAL_OK;
-    // osSemaphoreAcquire(rx8130WriteSem, osWaitForever);  
-    // status = HAL_I2C_Mem_Write_DMA(&i2c_handle, addr, (uint16_t)reg, I2C_MEMADD_SIZE_8BIT, data, write_size);
     status = HAL_I2C_Mem_Write(&i2c_handle, addr, reg, I2C_MEMADD_SIZE_8BIT, buf, write_size, 1000);
     if (status != HAL_OK)
     {
@@ -98,63 +94,5 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
     __HAL_RCC_I2C1_CLK_ENABLE();
     __HAL_RCC_I2C1_FORCE_RESET();
     __HAL_RCC_I2C1_RELEASE_RESET();
-
-    // __HAL_RCC_DMA1_CLK_ENABLE();
-
-    // hdma_tx.Instance = DMA1_Stream7;
-    // hdma_tx.Init.Channel = DMA_CHANNEL_1;
-    // hdma_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
-    // hdma_tx.Init.PeriphInc = DMA_PINC_DISABLE;
-    // hdma_tx.Init.MemInc = DMA_MINC_ENABLE;
-    // hdma_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-    // hdma_tx.Init.MemDataAlignment = DMA_PDATAALIGN_BYTE;
-    // hdma_tx.Init.Mode = DMA_NORMAL;
-    // hdma_tx.Init.Priority = DMA_PRIORITY_MEDIUM;
-    // hdma_tx.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
-    // hdma_tx.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_FULL;
-    // hdma_tx.Init.MemBurst = DMA_MBURST_INC4;
-    // hdma_tx.Init.PeriphBurst = DMA_PBURST_INC4;
-    // HAL_DMA_Init(&hdma_tx);
-    // __HAL_LINKDMA(hi2c, hdmatx, hdma_tx);
-
-    // hdma_rx.Instance = DMA1_Stream0;
-    // hdma_rx.Init.Channel = DMA_CHANNEL_1;
-    // hdma_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
-    // hdma_rx.Init.PeriphInc = DMA_PINC_DISABLE;
-    // hdma_rx.Init.MemInc = DMA_MINC_ENABLE;
-    // hdma_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-    // hdma_rx.Init.MemDataAlignment = DMA_PDATAALIGN_BYTE;
-    // hdma_rx.Init.Mode = DMA_NORMAL;
-    // hdma_rx.Init.Priority = DMA_PRIORITY_MEDIUM;
-    // hdma_rx.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
-    // hdma_rx.Init.FIFOThreshold = DMA_FIFO_THRESHOLD_FULL;
-    // hdma_rx.Init.MemBurst = DMA_MBURST_INC4;
-    // hdma_rx.Init.PeriphBurst = DMA_PBURST_INC4;
-    // HAL_DMA_Init(&hdma_rx);
-    // __HAL_LINKDMA(hi2c, hdmarx, hdma_rx);
-
-    // /* 使能DMA中断 */
-    // HAL_NVIC_SetPriority(DMA1_Stream7_IRQn, 7, 0);
-    // HAL_NVIC_EnableIRQ(DMA1_Stream7_IRQn);
-
-    // HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 7, 0);
-    // HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
-
-    // /* 使能I2C中断 */
-    // HAL_NVIC_SetPriority(I2C1_EV_IRQn, 7, 0);
-    // HAL_NVIC_EnableIRQ(I2C1_EV_IRQn);
-    // HAL_NVIC_SetPriority(I2C1_ER_IRQn, 7, 0);
-    // HAL_NVIC_EnableIRQ(I2C1_ER_IRQn);
 }
 
-// void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
-// {
-//     UNUSED(hi2c);
-//     osSemaphoreRelease(rx8130WriteSem);
-// }
-
-// void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
-// {
-//     UNUSED(hi2c);
-//     osSemaphoreRelease(rx8130ReadSem);
-// }

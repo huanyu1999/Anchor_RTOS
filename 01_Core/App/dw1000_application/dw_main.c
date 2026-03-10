@@ -6,7 +6,6 @@
 #include "elog.h"
 
 #define ANCHOR_DEV_ID 0x00
-
 uint8_t group_id;                   // 组ID，后续会有用处，不同车务段的人员共同施工，各自跟各自的基站通信？？？？
 uint8_t anc_id;                     // 如当前角色是基站，则表示当前基站ID
 uint8_t tag_id;                     // 如当前角色是标签，则表示当前标签ID
@@ -83,7 +82,7 @@ static uwbAlgorithm_t dummy_Algorithm;
 static uwbAlgorithm_t *current_Algorithm = &dummy_Algorithm;
 extern uwbAlgorithm_t uwbTwr_AnchorAlgorithm;
 static dwDevice_t   dw1000_dev;      // 定义dw1000设备，twr使用
-static dwDistance_t distance_data; // 定义距离管理
+static dwDistance_t distance_data;   // 定义距离管理
 
 const struct {
     uwbAlgorithm_t *algorithm;
@@ -93,35 +92,33 @@ const struct {
     {NULL, NULL}
 };
 
-static osMutexId_t  dis_access_mutex;
-const osMutexAttr_t dis_access_mutex_attr = {
-    .name = "dis_access_mutex", .attr_bits = osMutexRecursive | osMutexPrioInherit, .cb_mem = NULL, .cb_size = 0
+// osMutexId_t  dis_access_mutex;
+// const osMutexAttr_t dis_access_mutex_attr = {
+//     .name = "dis_access_mutex", .attr_bits = osMutexRecursive | osMutexPrioInherit, .cb_mem = NULL, .cb_size = 0
+// };
+
+osSemaphoreId_t sema_uwbInt;                                   // 用于dw1000中断同步
+StaticSemaphore_t sema_uwbInt_cb;
+const osSemaphoreAttr_t sema_uwbInt_attr = {
+    .name = "sema_uwbInt", .cb_mem = &sema_uwbInt_cb, .cb_size = sizeof(sema_uwbInt_cb)
 };
 
-osSemaphoreId_t uwbIntSem;                                   // 用于dw1000中断同步
-StaticSemaphore_t uwbIntSemCB;
-const osSemaphoreAttr_t uwbIntSem_attr = {
-    .name = "uwbIntSem", .cb_mem = &uwbIntSemCB, .cb_size = sizeof(StaticSemaphore_t)
+osSemaphoreId_t sema_dw1000Write;
+StaticQueue_t sema_dw1000Write_cb;                        
+const osSemaphoreAttr_t sema_dw1000Write_attr = {
+    .name = "sema_dw1000Write", .cb_mem  = &sema_dw1000Write_cb, .cb_size = sizeof(sema_dw1000Write_cb)
 };
 
-osSemaphoreId_t dw1000WriteSem;
-StaticQueue_t dw1000WriteSemCB;                        
-const osSemaphoreAttr_t dw1000WriteSem_attr = {
-    .name = "dw1000WriteSem", .cb_mem  = &dw1000WriteSemCB, .cb_size = sizeof(dw1000WriteSemCB)
+osSemaphoreId_t sema_dw1000Read;
+StaticQueue_t sema_dw1000Read_cb;                    
+const osSemaphoreAttr_t sema_dw1000Read_attr = {
+    .name = "sema_dw1000Read", .cb_mem  = &sema_dw1000Read_cb, .cb_size = sizeof(sema_dw1000Read_cb)
 };
 
-osSemaphoreId_t dw1000ReadSem;
-StaticQueue_t dw1000ReadSemCB;                    
-const osSemaphoreAttr_t dw1000ReadSem_attr = {
-    .name = "dw1000ReadSem", .cb_mem  = &dw1000ReadSemCB, .cb_size = sizeof(dw1000ReadSemCB)
-};
-
-osMessageQueueId_t queue_uwbEvent;
-
-osSemaphoreId_t   tagDistClear_sem;        // 该信号量用于周期性采集最小值处理与定时器中断同步
-StaticSemaphore_t tagDistClear_sem_cb;
-const osSemaphoreAttr_t tagDistClear_sem_attr = {
-    .name = "tagDistClear", .cb_mem = &tagDistClear_sem_cb, .cb_size = sizeof(tagDistClear_sem_cb)
+osSemaphoreId_t   sema_tagDistClear;        // 该信号量用于周期性采集最小值处理与定时器中断同步
+StaticSemaphore_t sema_tagDistClear_cb;
+const osSemaphoreAttr_t sema_tagDistClear_attr = {
+    .name = "sema_tagDistClear", .cb_mem = &sema_tagDistClear_cb, .cb_size = sizeof(sema_tagDistClear_cb)
 };
 
 osMessageQueueId_t queue_processDis;       // 该队列用于传递距离给排序处理用
@@ -129,8 +126,15 @@ tag_hashNode_t queue_processDis_buf[16];   // 初始化队列的存储空间
 StaticQueue_t queue_processDis_cb;         // 初始化队列控制块存储空间
 const osMessageQueueAttr_t queue_processDis_attr = {
     .name = "queue_processDis",
-    .cb_mem = &queue_processDis_cb, .cb_size = sizeof(queue_processDis_cb),
-    .mq_mem = &queue_processDis_buf, .mq_size = sizeof(queue_processDis_buf)
+    .mq_mem = &queue_processDis_buf, .mq_size = sizeof(queue_processDis_buf), .cb_mem = &queue_processDis_cb, .cb_size = sizeof(queue_processDis_cb),
+};
+
+osMessageQueueId_t queue_uwbEvent;
+uwbEvent_t queue_uwbEvent_buf[8];
+StaticQueue_t queue_uwbEvent_cb;
+const osMessageQueueAttr_t queue_uwbEvent_attr = {
+    .name = "queue_uwbEvent",
+    .mq_mem = &queue_uwbEvent_buf, .mq_size = sizeof(queue_uwbEvent_buf), .cb_mem = &queue_uwbEvent_cb, .cb_size = sizeof(queue_uwbEvent_cb),
 };
 
 TIM_HandleTypeDef timerForInvaildDistanceClearHandle;
@@ -153,10 +157,13 @@ void dev_uwbInit(void)
 
     distance_init(distance);
     dw1000Device_init(dev);
-    uwbIntSem       = osSemaphoreNew(1, 0, &uwbIntSem_attr);
-    dw1000WriteSem  = osSemaphoreNew(1, 0, &dw1000WriteSem_attr);
-    dw1000ReadSem   = osSemaphoreNew(1, 0, &dw1000ReadSem_attr);
-    queue_uwbEvent  = osMessageQueueNew(8, sizeof(uwbEvent_t), NULL);
+    current_Algorithm = availableAlgorithms[0].algorithm;
+    sema_uwbInt       = osSemaphoreNew(1, 0, &sema_uwbInt_attr);
+    sema_dw1000Write  = osSemaphoreNew(1, 0, &sema_dw1000Write_attr);
+    sema_dw1000Read   = osSemaphoreNew(1, 0, &sema_dw1000Read_attr);
+    sema_tagDistClear = osSemaphoreNew(1, 0, &sema_tagDistClear_attr);
+    queue_uwbEvent    = osMessageQueueNew(8, sizeof(uwbEvent_t), &queue_uwbEvent_attr);
+    queue_processDis  = osMessageQueueNew(16, sizeof(tag_hashNode_t), &queue_processDis_attr);
     board_dw1000Rst();      // Target specific drive of RSTn line into DW1000 low for a period.
     port_set_dw1000_slowrate();
     if (0xDECA0130 != dwt_readdevid())
@@ -250,15 +257,13 @@ void dev_uwbInit(void)
         dwt_forcetrxoff();
     }
 
-    drv_setTimerForInt(&timerForInvaildDistanceClearHandle, TIM2, 10, 5);  // 硬件定时器，用于清除无效距离
+    drv_setTimerForInt(&timerForInvaildDistanceClearHandle, TIM2, 20, 5);  // 硬件定时器，用于清除无效距离,频率20Hz
 
-    current_Algorithm = availableAlgorithms[0].algorithm;
-    dis_access_mutex  = osMutexNew(&dis_access_mutex_attr);
-    tagDistClear_sem  = osSemaphoreNew(1, 0, &tagDistClear_sem_attr);
-    queue_processDis  = osMessageQueueNew(16, sizeof(tag_hashNode_t), &queue_processDis_attr);
-    osMutexRelease(dis_access_mutex);
+    // dis_access_mutex  = osMutexNew(&dis_access_mutex_attr);
+    // osMutexRelease(dis_access_mutex);
     current_Algorithm->init(&dw1000_dev);                                   // 初始化TWR流程，立即打开接收
-    // logOut_dw1000Config();
+    disManager_memPoolInit();
+    logOut_dw1000Config();
 }
 
 void logOut_dw1000Config(void)
@@ -281,38 +286,14 @@ void logOut_dw1000Config(void)
 void task_uwb(void *arg)
 {
     UNUSED(arg);
-    uwbEvent_t evt;
     dev_uwbInit();
     board_dw1000IRQInit();
     for (;;)
-    {
-        osStatus_t status = osSemaphoreAcquire(uwbIntSem, osWaitForever); // 采用中断触发的方式执行，获取信号量
-        // uint32_t flag = osThreadFlagsWait(0x00000001, osFlagsWaitAll, osWaitForever);
+    {   // 遵循先中断，后处理的思路，
+        osStatus_t status = osSemaphoreAcquire(sema_uwbInt, osWaitForever); // 采用中断触发的方式执行，获取信号量
         if (status == osOK)
         {
-        // if (flag == 0x00000001)
             process_deca_irq();
-        }
-        osMessageQueueGet(queue_uwbEvent, &evt, NULL, osWaitForever);
-        switch (evt) {
-        case eventPacketSent:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketSent);
-            break;
-
-        case eventPacketReceived:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
-            break;
-
-        case eventReceiveTimeout:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveTimeout);
-            break;
-
-        case eventReceiveFailed:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveFailed);
-            break;
-
-        default:
-            break;
         }
     }
 }
@@ -328,26 +309,9 @@ void task_twrRun(void *arg)
     uwbEvent_t evt;
     for (;;)
     {
-        // uint32_t flag = osThreadFlagsWait(EVENT_TX_CPLT_BIT | EVENT_RX_OK_BIT | EVENT_RX_TIMEOUT_BIT | EVENT_RX_FAILED_BIT, osFlagsWaitAny, osWaitForever);
-
-        // if (flag & EVENT_TX_CPLT_BIT)
-        // {
-        //     (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketSent);
-        // }
-        // if (flag & EVENT_RX_OK_BIT)
-        // {
-        //     (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
-        // }
-        // if (flag & EVENT_RX_TIMEOUT_BIT)
-        // {
-        //     (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveTimeout);
-        // }
-        // if (flag & EVENT_RX_FAILED_BIT)
-        // {
-        //     (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveFailed);
-        // }
-        osMessageQueueGet(queue_uwbEvent, &evt, NULL, osWaitForever);
-        switch (evt) {
+        osMessageQueueGet(queue_uwbEvent, &evt, NULL, osWaitForever);  // event trigger twr handle
+        switch (evt) 
+        {
         case eventPacketSent:
             (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketSent);
             break;
@@ -370,6 +334,9 @@ void task_twrRun(void *arg)
     }
 }
 
+static tag_hashNode_t recv_processedDis = {0};
+static distance_manager_t task_dis_manage = {0};
+
 /**
  * @brief 最小堆管理任务，插入，更新，删除
  * @param  void *arg RTOS要求参数为空指针类型
@@ -378,45 +345,54 @@ void task_twrRun(void *arg)
 void task_minHeapManage(void *arg)
 {
     UNUSED(arg);
-    osStatus status;
-
-    static tag_hashNode_t recv_processedDis = {0};
-    static distance_manager_t task_dis_manage = {0};
-    static outDistance_t min_selfDis = {0};
-    static uint8_t can_buf[5] = {0};
     
     for (;;)
     {
-        osMutexAcquire(dis_access_mutex,osWaitForever);
-
-        status = osMessageQueueGet(queue_processDis, &recv_processedDis, 0, osWaitForever);
+        // osMutexAcquire(dis_access_mutex,osWaitForever);
+        osStatus_t status = osMessageQueueGet(queue_processDis, &recv_processedDis, 0, osWaitForever);
         // 接收到计算完成的距离，以及TWR完成时的tick数，进行插入以及更新，同时只要有标签TWR成功，就进行排序，最小距离发送
         if (status == osOK)    
         {
+            uint32_t current_tick = osKernelGetTickCount();
+
             disManager_update(&task_dis_manage, recv_processedDis.tag_id, recv_processedDis.distance, recv_processedDis.last_updateTick);
 
             // 堆更新后，清除无效距离，获取当前tick，将超时的标签清除
-            uint32_t current_tick = osKernelGetTickCount();
             disManager_purgeExpired(&task_dis_manage, current_tick);
+        }
+        // osMutexRelease(dis_access_mutex);
+    }
+}
 
-            // 定时获取堆顶最小距离
-            status = osSemaphoreAcquire(tagDistClear_sem, osWaitForever);
-            if (status == osOK)
+void task_getMinDis(void *arg)
+{
+    UNUSED(arg);
+    static outDistance_t min_selfDis = {0};
+    static uint16_t cur_tagNum = 0;
+    static tag_hashNode_t *min_dis_node = NULL;
+    for (;;)
+    {
+        osStatus_t status = osSemaphoreAcquire(sema_tagDistClear, osWaitForever); // 周期获取最小距离
+        if (status == osOK)
+        {
+            disManager_purgeExpired(&task_dis_manage, osKernelGetTickCount());
+            min_dis_node = disManager_getMin(&task_dis_manage); // 获取堆顶算是改写吗
+            if (min_dis_node == NULL)
             {
-                tag_hashNode_t *min_dis_node = disManager_getMin(&task_dis_manage);
+                // 什么都不处理，没有标签通信的情况
+            }
+            else
+            {
+                cur_tagNum = disManager_getNodeNum(&task_dis_manage);
                 min_selfDis.dis_value = min_dis_node->distance;
                 min_selfDis.dis_index = min_dis_node->tag_id;
                 min_selfDis.dis_class = ANCHOR_SELF_DIS;
 
                 extern osMessageQueueId_t queue_minimalDis; 
                 osMessageQueuePut(queue_minimalDis, &min_selfDis, 0, 0);
-
-                can_buf[4] = min_selfDis.dis_index;
-                dev_canSendMsg(CAN_EXT_ID_DIS, can_buf, ARRAY_LENGTH(can_buf));             // 直接发送
-                log_d("local min dis :ID %d %.2f.", min_selfDis.dis_index, (float)(min_selfDis.dis_value) / 1000.0f);
+                log_d("cur tag num : %d*tag-%d*local min dis : %.2f.", cur_tagNum, min_selfDis.dis_index, (float)(min_selfDis.dis_value) / 1000.0f);
             }
         }
-        osMutexRelease(dis_access_mutex);
     }
 }
 
@@ -529,7 +505,6 @@ extern osThreadId_t task_twrRun_handle;
 static void txcallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    osThreadFlagsSet(task_twrRun_handle, EVENT_TX_CPLT_BIT);
     uwbEvent_t evt = eventPacketSent;
     osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
 }
@@ -537,24 +512,21 @@ static void txcallback(const dwt_cb_data_t *cb_data)
 static void rxcallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    osThreadFlagsSet(task_twrRun_handle, EVENT_RX_OK_BIT);
-        uwbEvent_t evt = eventPacketReceived;
+    uwbEvent_t evt = eventPacketReceived;
     osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
 }
 
 static void rxTimeoutCallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    osThreadFlagsSet(task_twrRun_handle, EVENT_RX_TIMEOUT_BIT);
-        uwbEvent_t evt = eventReceiveTimeout;
+    uwbEvent_t evt = eventReceiveTimeout;
     osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
 }
 
 static void rxfailedcallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    osThreadFlagsSet(task_twrRun_handle, EVENT_RX_FAILED_BIT);
-        uwbEvent_t evt = eventReceiveFailed;
+    uwbEvent_t evt = eventReceiveFailed;
     osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
 }
 

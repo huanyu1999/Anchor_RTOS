@@ -14,7 +14,8 @@ wiz_NetInfo default_net_info = {
     .gw   = {192, 168, 1, 1},
     .sn   = {255, 255, 255, 0},
     .dns  = {8, 8, 8, 8},
-    .dhcp = NETINFO_STATIC};        // use static ip
+    .dhcp = NETINFO_STATIC
+};        // use static ip
 
 uint8_t ethernet_buf[ETHERNET_BUF_MAX_SIZE] = {0};
 
@@ -22,7 +23,7 @@ uint8_t dest_ip[4] = {192, 168, 1, 10};     // 默认静态IP，后续可通过�
 uint16_t dest_port = 8080;
 
 extern dev_w5500Handler dev_w5500TcpServer;
-extern osSemaphoreId_t w5500IntSem;
+extern osSemaphoreId_t sema_w5500Int;       // 后续可以重写这个w5500状态机，适配TCP通信
 extern w5500_device dev_w5500;
 void task_eth(void* arg)
 {
@@ -37,7 +38,7 @@ void task_eth(void* arg)
     // setSn_KPALVTR(SOCKET_ID, 6); 
     for(;;)
     {
-        osStatus_t status = osSemaphoreAcquire(w5500IntSem, osWaitForever); // 采用中断触发的方式执行，获取信号量
+        osStatus_t status = osSemaphoreAcquire(sema_w5500Int, osWaitForever); // 采用中断触发的方式执行，获取信号量
         if (status == osOK)
         {
             w5500_isr();

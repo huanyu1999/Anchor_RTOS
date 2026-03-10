@@ -3,6 +3,7 @@
 #include "cmsis_os.h"
 #include "elog.h"
 
+// #define TWR_DEBUG
 // extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
 
 /* 保存当前ID标签的测距值，下次发送resp时发给标签 */
@@ -177,25 +178,29 @@ static void twrAnchor_rxOkHandle(void)
                 int twr_quality = check_twr_quality(dev->indexDiff_poll, dev->indexDiff_final);
                 dev->indexDiff_poll = 0;
                 dev->indexDiff_final = 0;
-
-                if (twr_quality == -1)                      // TWR质量不合格，拒绝此次测距结果，沿用上次测距结果
+                // float dis_toss =  fabsf(distance_now_m -((float)prev_range[recv_tag_id] / 1000.0f));
+                // if (prev_range[recv_tag_id] > 0 && dis_toss >= 5)
+                // {
+                //     distance_now_m = (float)(prev_range[recv_tag_id]) / 1000.0f; // 如果测距结果出现不符合人体正常移动速度的波动，就滤掉本次结果，use last distance.
+                // }
+#ifdef TWR_DEBUG
+                if (twr_quality == -1)             // TWR质量不合格，拒绝此次测距结果，沿用上次测距结果，这里质量差的判别存在问题
                 {
-                    distance_now_m = (float)(prev_range[recv_tag_id]) / 1000.0f;  // 沿用上次测距结果，不更新prev_range,今天测试过滤暂时生效
-                    log_d("TWR quality C, tag %d dis : %.2f \n", recv_tag_id, (float)(distance_now_m));
+                    log_d("TWR C, tag %d dis : %.2f", recv_tag_id, (float)(distance_now_m));
                 }
                 else if (twr_quality == 0)               
                 {
                     prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m                     
-                    log_d("TWR quality A, tag %d dis : %.2f \n", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
+                    log_d("TWR A, tag %d dis : %.2f", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
                 } 
                 else if (twr_quality == 1)
                 {
                     prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m，                      
-                    log_d("TWR quality B, tag %d dis : %.2f \n", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
+                    log_d("TWR B, tag %d dis : %.2f", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
                 }
-                
-                // 构建消息队列
-                send_processeDis.distance = prev_range[recv_tag_id];
+#endif 
+                // send_processeDis.distance = prev_range[recv_tag_id];
+                send_processeDis.distance = distance_now_m * 1000;
                 send_processeDis.tag_id   = recv_tag_id;
                 send_processeDis.last_updateTick = range_time;
                 extern osMessageQueueId_t queue_processDis;
@@ -203,7 +208,6 @@ static void twrAnchor_rxOkHandle(void)
 
                 range_status = RANGE_TWR_OK;  
                 dev_ledBlink(UWB_OK_LED);
-                dev_ledBlink(ACROSS_LED);
             }
             else     
             {

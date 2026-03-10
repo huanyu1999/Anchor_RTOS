@@ -157,8 +157,9 @@ static size_t async_put_log(const char *log, size_t size) {
         write_index += size;
     } else {
         memcpy(log_buf + write_index, log, OUTPUT_BUF_SIZE - write_index);
-        memcpy(log_buf, log + OUTPUT_BUF_SIZE - write_index,
-                size - (OUTPUT_BUF_SIZE - write_index));
+        memcpy( log_buf, 
+                log + OUTPUT_BUF_SIZE - write_index,
+                size - (OUTPUT_BUF_SIZE - write_index) );
         write_index += size - OUTPUT_BUF_SIZE;
     }
 
@@ -274,7 +275,7 @@ void elog_async_output(uint8_t level, const char *log, size_t size) {
             put_size = async_put_log(log, size);
             /* notify output log thread */
             if (put_size > 0) {
-                elog_async_output_notice();
+                elog_async_output_notice(); // use async mode to output log
             }
         } else {                            // 采用正常模式输出
             elog_port_output(log, size);   

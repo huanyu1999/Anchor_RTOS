@@ -10,9 +10,9 @@
 #include <math.h>
 
 #include "board_dw1000.h"
-#include "com_MultiTimer.h"
-#include "com_heap.h"
-#include "uthash.h"
+// #include "com_MultiTimer.h"
+// #include "com_heap.h"
+// #include "uthash.h"
 #include "dev_led_buzzer_dip.h"
 #include "drv_timer.h"
 #include "iwdg.h"
@@ -95,11 +95,11 @@
 /* PAN ID */
 #define PAN_ID                          0xDECA
 
-#define UWB_INT_BIT                     0x0000000F
-#define EVENT_TX_CPLT_BIT               0x00000001
-#define EVENT_RX_OK_BIT                 0x00000002
-#define EVENT_RX_TIMEOUT_BIT            0x00000004
-#define EVENT_RX_FAILED_BIT             0x00000008
+// #define UWB_INT_BIT                     0x0000000F
+// #define EVENT_TX_CPLT_BIT               0x00000001
+// #define EVENT_RX_OK_BIT                 0x00000002
+// #define EVENT_RX_TIMEOUT_BIT            0x00000004
+// #define EVENT_RX_FAILED_BIT             0x00000008
 
 /* 中断状态标志 */
 #define RX_WAIT                         0
@@ -112,7 +112,7 @@
 /* 数据帧长度 */
 #define POLL_MSG_LEN                    16
 #define RESP_MSG_LEN                    19
-#define FIANL_MSG_LEN                   (22 + 5 * MAX_AHCHOR_NUMBER)
+#define FIANL_MSG_LEN                   (22 + 5 * MAX_AHCHOR_NUMBER + 10)
 #define BLINK_MSG_LEN                   10
 #define INIT_MSG_LEN                    12
 #define SYNC_MSG_LEN                    15
@@ -268,10 +268,10 @@ typedef struct dwDevice_s {
 #define FINAL_DIS        2
 #define MIN_DIS_QUEUE_LEN 3
 
-typedef struct {
-    uint8_t twr_successSign;          // 本次TWR测距是否成功的标志位，同标签编号进行绑定
-    int32_t tag_distance;
-} tagDistance_t;    
+// typedef struct {
+//     uint8_t twr_successSign;          // 本次TWR测距是否成功的标志位，同标签编号进行绑定
+//     int32_t tag_distance;
+// } tagDistance_t;    
 
 typedef struct {            
     int32_t dis_value;
@@ -282,8 +282,7 @@ typedef struct {
 typedef struct {
     outDistance_t disMsg[MIN_DIS_QUEUE_LEN];               // 输出距离时使用的数组
     int32_t       min_dis;                                 // 最小的距离值
-    uint8_t       dis_idx;                                 // 最小距离值对应的索引，也就是对应的标签ID
-    // min_heap      dis_min_heap;                            // 用于查找最小值距离的最小堆                       
+    uint8_t       dis_idx;                                 // 最小距离值对应的索引，也就是对应的标签ID                   
 } dwDistance_t;
 
 /******************************************************Uwb Event************************************************************/
@@ -341,6 +340,7 @@ void logOut_dw1000Config(void);
 void task_uwb(void *arg);
 void task_twrRun(void *arg);
 void task_minHeapManage(void *arg);
+void task_getMinDis(void *arg);
 float uwb_isInNLOS_power(dwt_rxdiag_t *rx_diag, uint8_t receive_functionCode);
 uint16_t uwb_isInNLOS_index(uint8_t receive_functionCode);
 int check_twr_quality(uint16_t indexDiff_poll, uint16_t indexDiff_final);

@@ -5,6 +5,7 @@
 
 void task_gnssSyncTime(void* arg)
 {
+    UNUSED(arg);
     uint32_t tick;
     tick = osKernelGetTickCount();
     MX_UART3_Init();
@@ -12,8 +13,8 @@ void task_gnssSyncTime(void* arg)
     dev_gnssModReceiveAndParse();
     for (;;)
     {
-        extern osSemaphoreId_t gnssReceiveSem;
-        osSemaphoreAcquire(gnssReceiveSem, osWaitForever); // 当串口空闲中断触发时中执行该任务
+        extern osSemaphoreId_t sema_gnssReceive;
+        osSemaphoreAcquire(sema_gnssReceive, osWaitForever); // 当串口空闲中断触发时中执行该任务
         // 检测GNSS 定位有效引脚电平，
         dev_gnssModReceiveAndParse();
         dev_gnssModStartRx();

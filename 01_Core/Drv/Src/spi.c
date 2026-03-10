@@ -264,19 +264,19 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
     }
 }
 
-extern osSemaphoreId_t dw1000WriteSem;
-extern osSemaphoreId_t dw1000ReadSem;
+extern osSemaphoreId_t sema_dw1000Write;
+extern osSemaphoreId_t sema_dw1000Read;
 
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
     UNUSED(hspi);
-    osSemaphoreRelease(dw1000ReadSem);
+    osSemaphoreRelease(sema_dw1000Read);
 }
 
 void HAL_SPI_TxCpltCallback(SPI_HandleTypeDef *hspi)
 {
     UNUSED(hspi);
-    osSemaphoreRelease(dw1000WriteSem);
+    osSemaphoreRelease(sema_dw1000Write);
 }
 
 void HAL_SPI_RxCpltCallback(SPI_HandleTypeDef *hspi)

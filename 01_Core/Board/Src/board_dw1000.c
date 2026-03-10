@@ -16,13 +16,12 @@ static exti_irq_t exti_config[exti_num] = {
 static void setup_DW1000RSTnIRQ(int enable);
 
 void board_dw1000Init(void)
-{
-    GPIO_InitTypeDef GPIO_InitStructure;
+{   
     // 使能中断脚和reset脚
+    GPIO_InitTypeDef GPIO_InitStructure;
+    
     drv_gpioInit(&dw1000_boardParam[dw1000_reset]);
-    // drv_gpioInit(&dw1000_boardParam[dw1000_interrupt]);
     __HAL_RCC_GPIOA_CLK_ENABLE();
-
     GPIO_InitStructure.Pin = GPIO_PIN_2;
     GPIO_InitStructure.Mode = GPIO_MODE_IT_RISING;
     GPIO_InitStructure.Pull = GPIO_PULLDOWN;

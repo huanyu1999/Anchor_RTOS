@@ -21,8 +21,8 @@
 #define DW1000_USE_SPI_DMA 1
 #define DW1000_USE_SPI_BLOCK 0
 
-extern osSemaphoreId_t dw1000WriteSem;
-extern osSemaphoreId_t dw1000ReadSem;
+extern osSemaphoreId_t sema_dw1000Write;
+extern osSemaphoreId_t sema_dw1000Read;
 extern 	SPI_HandleTypeDef hspi1;
 
 /****************************************************************************//**
@@ -87,9 +87,9 @@ int writetospi(uint16_t headerLength,
     /* Blocking: Check whether previous transfer has been finished */
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET);               /**< Put chip select line low */
     HAL_SPI_Transmit_DMA(&hspi1, (uint8_t *)&headerBuffer[0], headerLength);    /* Send header in DMA mode */
-    osSemaphoreAcquire(dw1000WriteSem, 1000);
+    osSemaphoreAcquire(sema_dw1000Write, 1000);
     HAL_SPI_Transmit_DMA(&hspi1, (uint8_t *)&bodyBuffer[0], bodyLength);        /* Send data in DMA mode */
-    osSemaphoreAcquire(dw1000WriteSem, 1000);
+    osSemaphoreAcquire(sema_dw1000Write, 1000);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);                 /**< Put chip select line high */
 
     decamutexoff(stat);
@@ -140,7 +140,7 @@ int readfromspi(uint16_t headerLength,
 
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_RESET); /**< Put chip select line low */
     HAL_SPI_TransmitReceive_DMA(&hspi1, (uint8_t *)headerBuffer, spi_tmpBuffer, (uint16_t)(headerLength+readlength));
-    osSemaphoreAcquire(dw1000ReadSem, 1000);
+    osSemaphoreAcquire(sema_dw1000Read, 1000);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);   /**< Put chip select line high */
     memcpy((uint8_t*)readBuffer , (uint8_t*)&spi_tmpBuffer[headerLength], readlength);
 

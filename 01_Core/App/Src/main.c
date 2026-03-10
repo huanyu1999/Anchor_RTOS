@@ -49,24 +49,18 @@ osThreadId_t task_swoOutput_handle;
 static uint8_t task_swoOutput_buffer[1024];
 StaticTask_t task_swoOutput_cb;
 const osThreadAttr_t task_swoOutput_attr = {
-    .name = "task_swoOutput",
-    .stack_mem = &task_swoOutput_buffer[0], 
-    .stack_size = sizeof(task_swoOutput_buffer),
-    .cb_mem = &task_swoOutput_cb, 
-    .cb_size = sizeof(task_swoOutput_cb),
-    .priority = (osPriority_t) osPriorityRealtime5,
+    .name      = "task_swoOutput",
+    .stack_mem = task_swoOutput_buffer, .stack_size = sizeof(task_swoOutput_buffer), .cb_mem = &task_swoOutput_cb, .cb_size = sizeof(task_swoOutput_cb),
+    .priority  = (osPriority_t) osPriorityRealtime5,
 };
 
 osThreadId_t task_main_handle;
 static uint8_t task_main_buffer[256];
 StaticTask_t task_main_cb;
 const osThreadAttr_t task_main_attr = {
-    .name = "task_main",
-    .stack_mem = &task_main_buffer[0], 
-    .stack_size = sizeof(task_main_buffer),
-    .cb_mem = &task_main_cb, 
-    .cb_size = sizeof(task_main_cb),
-    .priority = (osPriority_t) osPriorityRealtime4,
+    .name      = "task_main",
+    .stack_mem = task_main_buffer, .stack_size = sizeof(task_main_buffer), .cb_mem = &task_main_cb, .cb_size = sizeof(task_main_cb),
+    .priority  = (osPriority_t) osPriorityRealtime4,
 };
 
 /* Private define ------------------------------------------------------------*/
@@ -103,7 +97,7 @@ int main(void)
     HAL_Init();                 // Reset of all peripherals, Initializes the Flash interface and the Systick.
     DWT_Init();                 // 初始化 DWT，用于延时功能
     SystemClock_Config();       // Configure the system clock
-    // swo_init();                 // SWO LOG 输出端口初始化
+    swo_init();                 // SWO LOG 输出端口初始化
     MX_SPI1_Init();             // 初始化SPI1 配置，读写DMA通道，DMA中断，供uwb模组传输
     MX_UART4_Init();            // 初始化UART4 配置，读DMA通道，串口中断，供jq8400语音模组传输
 
@@ -190,9 +184,9 @@ void Error_Handler(void)
 void task_mainProcess(void* arg)
 {
     UNUSED(arg);
-
+    // the Initializes sequence can not be changed
     dev_canInit();              // 调用了CAN1的底层初始化
-    dev_ledAndRT9013Init();        // dw1000初始化能够通过，说明此处没有问题
+    dev_ledAndRT9013Init();     // dw1000初始化能够通过，说明此处没有问题
     dev_buzzerInit(BUZZER);
     dev_buttonInit(SWITCH_KEY);
     dev_buttonInit(PAUSE_KEY);
@@ -205,13 +199,12 @@ void task_mainProcess(void* arg)
     dev_dipInit(ANCHOR_ID1);
     dev_dipInit(ANCHOR_ID2);
     dev_dipInit(ANCHOR_ID3);
+    MX_FREERTOS_Init();     // call init function for freertos objects (in freertos.c)
 
-    MX_FREERTOS_Init();     // Call init function for freertos objects (in freertos.c)
+    elog_componentInit();   //（create streambuffer，set elog format, start the elog function.），将该初始化及log任务移到main process执行最后
+    task_swoOutput_handle = osThreadNew(&task_swoOutPut, NULL, &task_swoOutput_attr);
 
-    // elog_componentInit();   // easy_logger 组件初始化，其中会进行rx8130ce的设备层初始化，将该初始化及log任务移到main process执行最后，貌似上电不自动运行得到解决，待进一步观察
-    // task_swoOutput_handle = osThreadNew(&task_swoOutPut, NULL, &task_swoOutput_attr);
-
-    osThreadExit();         // 初始化以及RTOS相关对象创建完成后，删除该任务
+    osThreadExit();         // after init the RTOS, delete the task.
 }
 
 /************************************************* swo log **************************************************/
@@ -236,7 +229,7 @@ void swo_init(void)
 void task_swoOutPut(void *arg)
 {
     UNUSED(arg);
-    uint8_t temp_buf[128];
+    static uint8_t temp_buf[1024];
     size_t num_bytes;
     
     for (;;)
@@ -255,7 +248,7 @@ void task_swoOutPut(void *arg)
                 }
                 else
                 {
-                    taskYIELD();        // buffer满了就让出CPU，但是不丢状态
+                    taskYIELD();        // buffer满了就让出CPU，但是不丢状态 if buffer is fulled, 
                 }
             }
         }

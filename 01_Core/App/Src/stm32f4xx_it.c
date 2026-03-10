@@ -242,7 +242,6 @@ void UART4_IRQHandler(void)
     {
         __HAL_UART_CLEAR_IDLEFLAG(&huart4);
         HAL_UART_IdleCallback(&huart4);
-        // log_d("HAL_UART_IdleCallback");
     }                                 
 }
 
@@ -251,8 +250,8 @@ void HAL_UART_IdleCallback(UART_HandleTypeDef *huart)
     if (huart->Instance == UART4)
     {
         // 释放一个信号量
-        extern osSemaphoreId_t gnssReceiveSem;
-        osSemaphoreRelease(gnssReceiveSem);
+        extern osSemaphoreId_t sema_gnssReceive;
+        osSemaphoreRelease(sema_gnssReceive);
     }
 }
 
@@ -289,7 +288,7 @@ void DMA2_Stream2_IRQHandler(void)
 }
 #endif 
 
-void OTG_FS_IRQHandler(void)
-{
-    HAL_PCD_IRQHandler(&hpcd);
-}
+// void OTG_FS_IRQHandler(void)
+// {
+//     HAL_PCD_IRQHandler(&hpcd);
+// }

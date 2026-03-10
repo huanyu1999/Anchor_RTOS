@@ -57,8 +57,8 @@ file(GLOB 03_MIDDLEWARE_RTOS_SRC_FILES
 
 file(GLOB_RECURSE 04_MIDDLEWARE_OTHER_SRC_FILES
     03_Middlewares/Third_Party/FatFS/Src/*.c
-    03_Middlewares/STM32_USB_Device_Library/Class/MSC/Src/*.c
-    03_Middlewares/STM32_USB_Device_Library/Core/Src/*.c
+    # 03_Middlewares/STM32_USB_Device_Library/Class/MSC/Src/*.c
+    # 03_Middlewares/STM32_USB_Device_Library/Core/Src/*.c
 )
 
 # file(GLOB_RECURSE EASY_LOGGER_SRC_FILES

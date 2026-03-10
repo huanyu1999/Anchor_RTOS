@@ -4,9 +4,9 @@
 
 #define ZH_MAX  32          // 定义组合播放最大容量
 
-uint8_t voice_next[4] = {0xAA, 0x06, 0x00, 0xB0};               // 下一曲 
-uint8_t voice_shezhi[5] = {0xAA, 0x13, 0x01, 0x1E,0xDC};    // 设置声音等级
-uint8_t voice_up[4] = {0xAA, 0x14, 0x00, 0xBE};                 // 音量增加命令
+uint8_t voice_next[4]   = { 0xAA, 0x06, 0x00, 0xB0 };               // 下一曲 
+uint8_t voice_shezhi[5] = { 0xAA, 0x13, 0x01, 0x1E,0xDC };          // 设置声音等级
+uint8_t voice_up[4]     = { 0xAA, 0x14, 0x00, 0xBE };               // 音量增加命令
 
 void dev_jq8400Init(void)
 {
@@ -41,7 +41,7 @@ void dev_jq8400CommandData(UartCommandData Command, uint8_t DATA)
         DataLen = 5;
     }
     else
-    {                        // 含两个数据指令
+    {                               // 含两个数据指令
         Buffer[2] = 2;              // 数据长度
         Buffer[3] = DATA/256;       // 数据
         Buffer[4] = DATA%256;       // 数据
@@ -95,9 +95,9 @@ void dev_jq8400RandomPathPlay(jq8400SystemSymbol symbol, char *data)
 void dev_jq8400CombinePlay(char *data, uint8_t len)
 {
     uint16_t crc_data = 0, i = 3;
-    uint8_t Buffer[ZH_MAX] ={0xaa, 0x1b};
-    Buffer[2] = len;
-    crc_data = 0xaa + 0x1b + Buffer[2];
+    uint8_t Buffer[ZH_MAX] ={0xaa, 0x1b};  // 先定义组合播报包的包头
+    Buffer[2] = len;                       // 包头后续跟传入的数据长度
+    crc_data = 0xaa + 0x1b + Buffer[2];    // 包头和数据长度参与校验和计算
 
     while (*data)
     {

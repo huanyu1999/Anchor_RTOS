@@ -237,7 +237,7 @@ void elog_start(void) {
     elog_set_output_enabled(true);
 
 #if defined(ELOG_ASYNC_OUTPUT_ENABLE)
-    elog_async_enabled(true);
+    elog_async_enabled(true);       // enable the async mode
 #elif defined(ELOG_BUF_OUTPUT_ENABLE)
     elog_buf_enabled(true);
 #endif

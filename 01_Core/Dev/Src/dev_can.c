@@ -45,13 +45,10 @@ void dev_canSendMsg(uint32_t extId, uint8_t* data, uint32_t length)
 #endif
     {
         // log_i("HAL_CAN_AddTxMessage Ok.");
-        // uint32_t err = HAL_CAN_GetTxMailboxesFreeLevel(&hcan1);
-        // log_i("CAN Error: 0x%08lX\r\n", err);
     } 
     else 
     {
-        // CAN发送异常日志输出
-        uint32_t err = HAL_CAN_GetTxMailboxesFreeLevel(&hcan1);
-        log_i("CAN Error: 0x%08lX\r\n", err);
+        uint32_t err = HAL_CAN_GetTxMailboxesFreeLevel(&hcan1);  // can send error, read the tx mailbox status
+        // log_i("CAN Error: 0x%08lX\r\n", err);
     }
 }

@@ -20,7 +20,8 @@
 #include <stdarg.h>
 
 #include "main.h"
-// #include "app_usb_msc.h"
+#include "app_usb_msc.h"
+#include "app_log_manage.h"
 #include "dwt_delay.h"
 #include "dw_instance.h"
 #include "dev_button.h"
@@ -139,20 +140,6 @@ void SystemClock_Config(void)
         Error_Handler();
     }
     
-    /* 增加一个简单超时循环 */
-    // uint32_t tickStart = HAL_GetTick();
-    // while (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-    // {
-    //     if ((HAL_GetTick() - tickStart) > 100)   // 100ms 超时
-    //     {
-    //         /* HSE 起振失败，降回 HSI */
-    //         RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-    //         RCC_OscInitStruct.HSEState = RCC_HSE_OFF;
-    //         HAL_RCC_OscConfig(&RCC_OscInitStruct);
-    //         break;
-    //     }
-    // }
-
     /* Initializes the CPU, AHB and APB buses clocks */
     RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
     RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
@@ -203,7 +190,8 @@ void task_mainProcess(void* arg)
 
     elog_componentInit();   //（create streambuffer，set elog format, start the elog function.），将该初始化及log任务移到main process执行最后
     task_swoOutput_handle = osThreadNew(&task_swoOutPut, NULL, &task_swoOutput_attr);
-
+    app_usbMscInit();       // 初始化USB MSC功能，创建USB事件处理任务
+    log_mgr_init();          // 初始化日志管理模块，创建日志写入任务
     osThreadExit();         // after init the RTOS, delete the task.
 }
 

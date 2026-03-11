@@ -96,3 +96,7 @@ Uses **EasyLogger** (`01_Core/Com/easylogger/`), built as static lib `libelog.a`
 | Startup | `startup4gcc/startup_stm32f405xx.s` |
 | FreeRTOS tick | 1000 Hz |
 | FreeRTOS heap | 4 KB (`heap_4`) |
+
+## Memory 规则
+
+每次对话结束前，主动询问用户是否需要更新 memory。

@@ -27,19 +27,19 @@ static gpio_config_t gpio_boardParam[IO_NUM] = {
 
     { .gpio_port = ACROSS_LED_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ACROSS_LED_PIN, .gpio_mode = GPIO_MODE_OUTPUT_PP, .gpio_pull = GPIO_NOPULL, .gpio_speed = GPIO_SPEED_FREQ_VERY_HIGH },
 
-    { .gpio_port = S_KEY_GPIO_PORT, .clk_port = GPIO_PORT_B, .gpio_pin = S_KEY_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = NULL },
+    { .gpio_port = S_KEY_GPIO_PORT, .clk_port = GPIO_PORT_B, .gpio_pin = S_KEY_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
 
-    { .gpio_port = P_KEY_GPIO_PORT, .clk_port = GPIO_PORT_C, .gpio_pin = P_KEY_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = NULL },
+    { .gpio_port = P_KEY_GPIO_PORT, .clk_port = GPIO_PORT_C, .gpio_pin = P_KEY_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
 
     { .gpio_port = BUZZER_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = BUZZER_PIN, .gpio_mode = GPIO_MODE_OUTPUT_PP, .gpio_pull = GPIO_PULLUP, .gpio_speed = GPIO_SPEED_FREQ_VERY_HIGH },
 
-    { .gpio_port = ANCHORID0_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID0_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = NULL },
+    { .gpio_port = ANCHORID0_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID0_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
 
-    { .gpio_port = ANCHORID1_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID1_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = NULL },
+    { .gpio_port = ANCHORID1_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID1_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
 
-    { .gpio_port = ANCHORID2_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID2_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = NULL },
+    { .gpio_port = ANCHORID2_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID2_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
 
-    { .gpio_port = ANCHORID3_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID3_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = NULL }
+    { .gpio_port = ANCHORID3_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID3_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 }
 };
 
 void board_gpioInit(gpioBoard_enum_t io_index)

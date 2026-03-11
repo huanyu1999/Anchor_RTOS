@@ -31,7 +31,6 @@ set (STARTUP_FILE
     startup4gcc/startup_stm32f405xx.s
 )
 
-
 # 收集源文件
 file(GLOB_RECURSE 01_CORE_SRC_FILES
     01_Core/App/*.c
@@ -61,26 +60,6 @@ file(GLOB_RECURSE 04_MIDDLEWARE_OTHER_SRC_FILES
     # 03_Middlewares/STM32_USB_Device_Library/Core/Src/*.c
 )
 
-# file(GLOB_RECURSE EASY_LOGGER_SRC_FILES
-#     01_Core/Com/easylogger/*.c
-# )
-
-# file(GLOB_RECURSE W5500_DRV_FILES
-#     01_Core/W5500/*.c
-# )
-
-# set_source_files_properties( 
-#     ${02_VENDOR_SRC_FILES}
-#     ${EASY_LOGGER_SRC_FILES}
-#     ${W5500_DRV_FILES}
-
-#     PROPERTIES
-#         COMPILE_OPTIONS  
-#             -Wno-unused-parameter
-#             -Wno-unused-variable
-#             -Wno-unused-function
-# )
-
 # 添加可执行目标源文件
 add_executable(${EXECUTABLE} 
     ${STARTUP_FILE} 
@@ -94,7 +73,7 @@ add_executable(${EXECUTABLE}
 set(ELOG_SRC
     ${CMAKE_CURRENT_LIST_DIR}/01_Core/Com/easylogger/src/elog.c
     ${CMAKE_CURRENT_LIST_DIR}/01_Core/Com/easylogger/src/elog_utils.c
-    ${CMAKE_CURRENT_LIST_DIR}/01_Core/Com/easylogger/src/elog_async.c
+    # ${CMAKE_CURRENT_LIST_DIR}/01_Core/Com/easylogger/src/elog_async.c
     ${CMAKE_CURRENT_LIST_DIR}/01_Core/Com/easylogger/port/elog_port.c
 )
 
@@ -110,8 +89,6 @@ target_include_directories(elog
     ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2
     ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F 
     ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source/include 
-
-    
 )
 
 target_compile_options(elog 
@@ -130,6 +107,64 @@ target_compile_options(elog
     -Wno-unused-function
 )
 
+##########################################################################制作一个 TinyUSB 库（MSC device over USB OTG FS / DWC2）##########################################################################
+set(TINYUSB_SRC_DIR ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/TinyUsb/src)
+
+add_library(tinyusb STATIC
+    ${TINYUSB_SRC_DIR}/tusb.c
+    ${TINYUSB_SRC_DIR}/common/tusb_fifo.c
+    ${TINYUSB_SRC_DIR}/device/usbd.c
+    ${TINYUSB_SRC_DIR}/device/usbd_control.c
+    ${TINYUSB_SRC_DIR}/class/msc/msc_device.c
+    ${TINYUSB_SRC_DIR}/portable/synopsys/dwc2/dcd_dwc2.c
+    ${TINYUSB_SRC_DIR}/portable/synopsys/dwc2/dwc2_common.c
+)
+
+target_include_directories(tinyusb
+    PUBLIC
+        ${TINYUSB_SRC_DIR}                                  # tusb.h, tusb_option.h
+        ${TINYUSB_SRC_DIR}/common
+        ${TINYUSB_SRC_DIR}/device
+        ${TINYUSB_SRC_DIR}/class/msc
+        ${TINYUSB_SRC_DIR}/portable/synopsys/dwc2
+        # tusb_config.h 由 App/Inc 提供（PUBLIC 可被主目标继承引用）
+        ${CMAKE_CURRENT_LIST_DIR}/01_Core/App/Inc
+    PRIVATE
+        # TinyUSB 内部需要 STM32F4 HAL 头和 FreeRTOS 头
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc/Legacy
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Core/Include
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Device/ST/STM32F4xx/Include
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Include
+        ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source/include
+        ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F
+        ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2
+)
+
+target_compile_definitions(tinyusb
+    PRIVATE
+        USE_HAL_DRIVER
+        STM32F405xx
+)
+
+target_compile_options(tinyusb
+    PRIVATE
+        -mcpu=cortex-m4
+        -mthumb
+        -mfpu=fpv4-sp-d16
+        -mfloat-abi=hard
+        -ffunction-sections
+        -fdata-sections
+        -g
+        -O2
+        -Wall
+        -Wextra
+        -Wno-pedantic           # TinyUSB 源码有部分非 strict-pedantic 写法
+        -Wno-unused-parameter
+        -Wno-cast-qual
+)
+
 ##########################################################################制作一个w5500驱动库##########################################################################
 set(W5500_DRV_SRC
     ${CMAKE_CURRENT_LIST_DIR}/01_Core/W5500/Ethernet/socket.c
@@ -146,7 +181,7 @@ target_include_directories(w5500 PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/01_Core/W5500/Internet/DHCP
 )
 
-target_compile_options(elog 
+target_compile_options(w5500 
     PUBLIC
     -mcpu=cortex-m4
     -mthumb
@@ -200,6 +235,10 @@ target_include_directories(${EXECUTABLE} PRIVATE
     03_Middlewares/Third_Party/FatFS/Src 
     03_Middlewares/STM32_USB_Device_Library/Class/MSC/Inc
     03_Middlewares/STM32_USB_Device_Library/Core/Inc
+    # TinyUSB 公开头文件（tusb_config.h 已在 App/Inc 中，其余由 tinyusb 库 PUBLIC 继承）
+    03_Middlewares/Third_Party/TinyUsb/src
+    03_Middlewares/Third_Party/TinyUsb/src/class/msc
+    03_Middlewares/Third_Party/TinyUsb/src/device
 )
 
 # 设置编译选项
@@ -210,10 +249,11 @@ target_compile_options(${EXECUTABLE} PRIVATE
     -mfloat-abi=hard
     -ffunction-sections
     -fdata-sections
+    -fdiagnostics-color=always
     -g
     -O2
     -Wall
-    -Wextra 
+    -Wextra
     -Wpedantic
     -Wunused-function
     $<$<CONFIG:Debug>:-Og>
@@ -233,8 +273,8 @@ target_link_options(${EXECUTABLE} PRIVATE
     -Wl,-Map=${PROJECT_NAME}.map,--cref,--gc-sections,--print-memory-usage
 )
 
-# 在此链接上方两个库
-target_link_libraries(${EXECUTABLE} elog w5500)
+# 链接静态库：elog、w5500、tinyusb
+target_link_libraries(${EXECUTABLE} elog w5500 tinyusb)
 
 # Print executable size，打印可执行文件大小
 add_custom_command(TARGET ${EXECUTABLE}

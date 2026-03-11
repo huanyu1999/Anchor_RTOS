@@ -25,6 +25,7 @@
 #include "stm32f4xx_it.h"
 #include "cmsis_os.h"
 #include "elog.h"
+#include "tusb.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -288,7 +289,7 @@ void DMA2_Stream2_IRQHandler(void)
 }
 #endif 
 
-// void OTG_FS_IRQHandler(void)
-// {
-//     HAL_PCD_IRQHandler(&hpcd);
-// }
+void OTG_FS_IRQHandler(void)
+{
+    tud_int_handler(0);     /* TinyUSB DWC2，OTG FS = rhport 0 */
+}

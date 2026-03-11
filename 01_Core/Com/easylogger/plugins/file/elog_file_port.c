@@ -43,7 +43,7 @@ ElogErrCode elog_file_port_init(void)
         1. 创建一个逻辑驱动号，链接IO操作，然后f_mount，然后f_mkfs
         2. 进行异常情况处理，SD卡插拔，系统突然断电，系统突然重启
     */
-    result = app_sdFileSystemInit();
+    // result = app_sdFileSystemInit();
     return result;
 }
 

@@ -31,15 +31,18 @@ set (STARTUP_FILE
     startup4gcc/startup_stm32f405xx.s
 )
 
-# 收集源文件
+# 收集源文件 —— 自己的代码
 file(GLOB_RECURSE 01_CORE_SRC_FILES
     01_Core/App/*.c
     01_Core/Board/*.c
-    01_Core/Com/*.c
     01_Core/Dev/*.c
     01_Core/Drv/*.c
+)
+
+# 收集源文件 —— 01_Core 下的第三方代码（DW1000 vendor driver、Com 组件）
+file(GLOB_RECURSE 01_CORE_THIRDPARTY_SRC_FILES
+    01_Core/Com/*.c
     01_Core/DW1000/*.c
-    # 01_Core/W5500/*.c
 )
 
 file(GLOB 02_VENDOR_SRC_FILES
@@ -47,26 +50,19 @@ file(GLOB 02_VENDOR_SRC_FILES
     02_Vendor_Lib/STM32F4xx_HAL_Driver/Src/*.c
 )
 
-file(GLOB 03_MIDDLEWARE_RTOS_SRC_FILES
-    03_Middlewares/Third_Party/FreeRTOS/Source/*.c
-    03_Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/*.c
-    03_Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/*.c
-    03_Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/*.c
-)
-
-file(GLOB_RECURSE 04_MIDDLEWARE_OTHER_SRC_FILES
-    03_Middlewares/Third_Party/FatFS/Src/*.c
-    # 03_Middlewares/STM32_USB_Device_Library/Class/MSC/Src/*.c
-    # 03_Middlewares/STM32_USB_Device_Library/Core/Src/*.c
+# 主目标中的第三方源文件关闭所有警告（-w）
+set_source_files_properties(
+    ${01_CORE_THIRDPARTY_SRC_FILES}
+    ${02_VENDOR_SRC_FILES}
+    PROPERTIES COMPILE_OPTIONS "-w"
 )
 
 # 添加可执行目标源文件
-add_executable(${EXECUTABLE} 
-    ${STARTUP_FILE} 
-    ${01_CORE_SRC_FILES} 
-    ${02_VENDOR_SRC_FILES} 
-    ${03_MIDDLEWARE_RTOS_SRC_FILES} 
-    ${04_MIDDLEWARE_OTHER_SRC_FILES}
+add_executable(${EXECUTABLE}
+    ${STARTUP_FILE}
+    ${01_CORE_SRC_FILES}
+    ${01_CORE_THIRDPARTY_SRC_FILES}
+    ${02_VENDOR_SRC_FILES}
 )
 
 ##########################################################################制作一个elog 库##########################################################################
@@ -91,8 +87,7 @@ target_include_directories(elog
     ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source/include 
 )
 
-target_compile_options(elog 
-    PUBLIC
+target_compile_options(elog PRIVATE
     -mcpu=cortex-m4
     -mthumb
     -mfpu=fpv4-sp-d16
@@ -101,10 +96,7 @@ target_compile_options(elog
     -fdata-sections
     -g
     -O2
-    -Wall
-    -Wextra 
-    -Wno-pedantic
-    -Wno-unused-function
+    -w                  # 第三方代码，关闭所有警告
 )
 
 ##########################################################################制作一个 TinyUSB 库（MSC device over USB OTG FS / DWC2）##########################################################################
@@ -148,21 +140,16 @@ target_compile_definitions(tinyusb
         STM32F405xx
 )
 
-target_compile_options(tinyusb
-    PRIVATE
-        -mcpu=cortex-m4
-        -mthumb
-        -mfpu=fpv4-sp-d16
-        -mfloat-abi=hard
-        -ffunction-sections
-        -fdata-sections
-        -g
-        -O2
-        -Wall
-        -Wextra
-        -Wno-pedantic           # TinyUSB 源码有部分非 strict-pedantic 写法
-        -Wno-unused-parameter
-        -Wno-cast-qual
+target_compile_options(tinyusb PRIVATE
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+    -ffunction-sections
+    -fdata-sections
+    -g
+    -O2
+    -w                  # 第三方代码，关闭所有警告
 )
 
 ##########################################################################制作一个w5500驱动库##########################################################################
@@ -181,8 +168,7 @@ target_include_directories(w5500 PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/01_Core/W5500/Internet/DHCP
 )
 
-target_compile_options(w5500 
-    PUBLIC
+target_compile_options(w5500 PRIVATE
     -mcpu=cortex-m4
     -mthumb
     -mfpu=fpv4-sp-d16
@@ -191,11 +177,94 @@ target_compile_options(w5500
     -fdata-sections
     -g
     -O2
-    -Wall
-    -Wextra 
-    -Wno-pedantic
-    -Wno-unused-function
+    -w                  # 第三方代码，关闭所有警告
 )
+
+##########################################################################制作一个 FreeRTOS 库##########################################################################
+set(FREERTOS_DIR ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FreeRTOS/Source)
+
+file(GLOB FREERTOS_SRC
+    ${FREERTOS_DIR}/*.c
+    ${FREERTOS_DIR}/portable/GCC/ARM_CM4F/*.c
+    ${FREERTOS_DIR}/portable/MemMang/*.c
+    ${FREERTOS_DIR}/CMSIS_RTOS_V2/*.c
+)
+
+add_library(freertos STATIC ${FREERTOS_SRC})
+
+target_include_directories(freertos
+    PUBLIC
+        ${FREERTOS_DIR}/include
+        ${FREERTOS_DIR}/portable/GCC/ARM_CM4F
+        ${FREERTOS_DIR}/CMSIS_RTOS_V2
+    PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/01_Core/App/Inc        # FreeRTOSConfig.h
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc/Legacy
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Core/Include   # cmsis_compiler.h
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Device/ST/STM32F4xx/Include
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Include
+)
+
+target_compile_definitions(freertos PRIVATE
+    USE_HAL_DRIVER
+    STM32F405xx
+)
+
+target_compile_options(freertos PRIVATE
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+    -ffunction-sections
+    -fdata-sections
+    -g
+    -O2
+    -w                  # 第三方代码，关闭所有警告
+)
+
+##########################################################################制作一个 FatFS 库##########################################################################
+set(FATFS_DIR ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Third_Party/FatFS/Src)
+
+add_library(fatfs STATIC
+    ${FATFS_DIR}/ff.c
+    ${FATFS_DIR}/diskio.c
+)
+
+target_include_directories(fatfs
+    PUBLIC
+        ${FATFS_DIR}
+    PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/01_Core/Dev/Inc        # dev_emmc.h, dev_linkFatFs.h
+        ${CMAKE_CURRENT_LIST_DIR}/01_Core/Drv/Inc
+        ${CMAKE_CURRENT_LIST_DIR}/01_Core/App/Inc
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc/Legacy
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Device/ST/STM32F4xx/Include
+        ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib/CMSIS/Core/Include
+)
+
+target_compile_definitions(fatfs PRIVATE
+    USE_HAL_DRIVER
+    STM32F405xx
+)
+
+target_compile_options(fatfs PRIVATE
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+    -ffunction-sections
+    -fdata-sections
+    -g
+    -O2
+    -w                  # 第三方代码，关闭所有警告
+)
+
+# diskio.c 间接依赖 FreeRTOS 头文件（通过 dev_emmc.h -> cmsis_os.h）
+target_link_libraries(fatfs PRIVATE freertos)
 
 # 设置宏定义编译选项
 target_compile_definitions(${EXECUTABLE} PRIVATE
@@ -229,12 +298,7 @@ target_include_directories(${EXECUTABLE} PRIVATE
     02_Vendor_Lib/CMSIS/Core/Include 
     02_Vendor_Lib/CMSIS/Device/ST/STM32F4xx/Include 
     02_Vendor_Lib/CMSIS/Include 
-    03_Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F 
-    03_Middlewares/Third_Party/FreeRTOS/Source/include 
-    03_Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2 
-    03_Middlewares/Third_Party/FatFS/Src 
-    03_Middlewares/STM32_USB_Device_Library/Class/MSC/Inc
-    03_Middlewares/STM32_USB_Device_Library/Core/Inc
+    # FreeRTOS、FatFS 头文件由各自库的 PUBLIC include 提供
     # TinyUSB 公开头文件（tusb_config.h 已在 App/Inc 中，其余由 tinyusb 库 PUBLIC 继承）
     03_Middlewares/Third_Party/TinyUsb/src
     03_Middlewares/Third_Party/TinyUsb/src/class/msc
@@ -254,7 +318,7 @@ target_compile_options(${EXECUTABLE} PRIVATE
     -O2
     -Wall
     -Wextra
-    -Wpedantic
+    -Wno-pedantic       # 避免第三方 PUBLIC 头文件（elog __FUNCTION__、TinyUSB 匿名 union）触发大量噪音
     -Wunused-function
     $<$<CONFIG:Debug>:-Og>
 )
@@ -273,8 +337,8 @@ target_link_options(${EXECUTABLE} PRIVATE
     -Wl,-Map=${PROJECT_NAME}.map,--cref,--gc-sections,--print-memory-usage
 )
 
-# 链接静态库：elog、w5500、tinyusb
-target_link_libraries(${EXECUTABLE} elog w5500 tinyusb)
+# 链接静态库
+target_link_libraries(${EXECUTABLE} elog w5500 tinyusb freertos fatfs)
 
 # Print executable size，打印可执行文件大小
 add_custom_command(TARGET ${EXECUTABLE}

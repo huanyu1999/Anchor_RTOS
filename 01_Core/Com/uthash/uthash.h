@@ -58,7 +58,9 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #if defined (__CC_ARM)   // uthash调用了exit()函数，重写该函数，来应对使用keil5 AC5 编译工具链的情况
-#define SELF_EXIT(x)     do { (void)(x); while (1) {} } while (0);
+#define SELF_EXIT(x)     do { (void)(x); while (1) {} } while (0)
+#elif defined (__GNUC__) // arm-none-eabi-gcc 同样需要避免调用 exit()
+#define SELF_EXIT(x)     do { (void)(x); while (1) {} } while (0)
 #endif
 
 #ifdef NO_DECLTYPE

@@ -1,3 +1,4 @@
+#include <string.h>
 #include "main.h"
 #include "usart.h"
 #include "dev_jq8400.h"

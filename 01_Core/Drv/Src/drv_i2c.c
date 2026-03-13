@@ -77,9 +77,6 @@ void drv_i2cError(void)
 
 void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c)
 {
-    static DMA_HandleTypeDef hdma_tx;
-    static DMA_HandleTypeDef hdma_rx;
-
     GPIO_InitTypeDef GPIO_InitStructure = {0};
 
     __HAL_RCC_GPIOB_CLK_ENABLE();

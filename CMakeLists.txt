@@ -10,6 +10,9 @@ set(CMAKE_C_STANDARD 99)
 # 显示详细编译命令
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
+# 生成 compile_commands.json，供 clangd 代码补全使用
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 set(CMAKE_TOOLCHAIN_FILE 
     ${CMAKE_CURRENT_LIST_DIR}/toolchain.cmake
     CACHE FILEPATH "Toolchain file"    
@@ -119,8 +122,8 @@ target_include_directories(tinyusb
         ${TINYUSB_SRC_DIR}/device
         ${TINYUSB_SRC_DIR}/class/msc
         ${TINYUSB_SRC_DIR}/portable/synopsys/dwc2
-        # tusb_config.h 由 App/Inc 提供（PUBLIC 可被主目标继承引用）
-        ${CMAKE_CURRENT_LIST_DIR}/01_Core/App/Inc
+        
+        ${CMAKE_CURRENT_LIST_DIR}/01_Core/App/Inc          # tusb_config.h 由 App/Inc 提供（PUBLIC 可被主目标继承引用）
     PRIVATE
         # TinyUSB 内部需要 STM32F4 HAL 头和 FreeRTOS 头
         ${CMAKE_CURRENT_LIST_DIR}/02_Vendor_Lib
@@ -272,7 +275,7 @@ target_compile_definitions(${EXECUTABLE} PRIVATE
     -DSTM32F405xx
 )
 
-# 设置头文件目录
+# 设置总体头文件目录
 target_include_directories(${EXECUTABLE} PRIVATE
     01_Core/App/dw1000_application 
     01_Core/App/Inc 
@@ -282,23 +285,18 @@ target_include_directories(${EXECUTABLE} PRIVATE
     01_Core/Com/min_heap 
     01_Core/Com/multi_timer 
     01_Core/Com/multi_button 
-    # 01_Core/Com/easylogger/inc 
-    # 01_Core/Com/easylogger/plugins/file
     01_Core/Com/uthash
     01_Core/Dev/Inc 
     01_Core/Drv/Inc 
     01_Core/DW1000/decadriver 
     01_Core/DW1000/platform 
-    # 01_Core/W5500/Ethernet 
-    # 01_Core/W5500/Ethernet/W5500 
-    # 01_Core/W5500/Internet/DHCP 
     02_Vendor_Lib 
     02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc 
     02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc/Legacy 
     02_Vendor_Lib/CMSIS/Core/Include 
     02_Vendor_Lib/CMSIS/Device/ST/STM32F4xx/Include 
     02_Vendor_Lib/CMSIS/Include 
-    # FreeRTOS、FatFS 头文件由各自库的 PUBLIC include 提供
+    # W5500、FreeRTOS、FatFS 头文件由各自库的 PUBLIC include 提供
     # TinyUSB 公开头文件（tusb_config.h 已在 App/Inc 中，其余由 tinyusb 库 PUBLIC 继承）
     03_Middlewares/Third_Party/TinyUsb/src
     03_Middlewares/Third_Party/TinyUsb/src/class/msc

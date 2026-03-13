@@ -27,7 +27,7 @@
 #include "dev_rx8130ce.h"
 #include "dw_instance.h"        /* anc_id */
 
-#define LOG_TAG "LOG_MGR"
+// #define LOG_TAG "LOG_MGR"
 
 /* ============================================================
  *  配置

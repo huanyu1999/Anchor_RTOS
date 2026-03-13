@@ -43,7 +43,8 @@ static const osThreadAttr_t s_task_usb_attr = {
 static void task_usbMsc(void *arg)
 {
     (void)arg;
-    for (;;) {
+    for (;;)
+    {
         tud_task();     /* OPT_OS_FREERTOS 下无事件时自动阻塞，不空转 */
     }
 }
@@ -56,6 +57,7 @@ void app_usbMscInit(void)
     /* 1. 使能时钟 */
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
+    tusb_rhport_init_t msc_dev_init = { .role  = TUSB_ROLE_DEVICE, .speed = TUSB_SPEED_FULL };
 
     /* 2. 配置 PA11(D-) / PA12(D+) 为 USB OTG FS 复用功能 */
     GPIO_InitTypeDef gpio = {0};
@@ -72,7 +74,7 @@ void app_usbMscInit(void)
     HAL_NVIC_SetPriority(OTG_FS_IRQn, 0xAU, 0U);
 
     /* 4. 初始化 TinyUSB device stack（OTG FS = rhport 0） */
-    tud_init(BOARD_TUD_RHPORT);
+    tusb_init(BOARD_TUD_RHPORT, &msc_dev_init);
 
     /* 5. 创建事件处理任务 */
     osThreadNew(task_usbMsc, NULL, &s_task_usb_attr);

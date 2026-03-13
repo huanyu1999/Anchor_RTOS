@@ -325,6 +325,7 @@ void HAL_SD_TxCpltCallback(SD_HandleTypeDef *hsd)
   */
 void HAL_SD_RxCpltCallback(SD_HandleTypeDef *hsd)
 {
+    UNUSED(hsd);
     dev_SD_ReadCpltCallback();
 }
 

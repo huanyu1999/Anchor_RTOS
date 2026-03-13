@@ -5,7 +5,8 @@ MMC_HandleTypeDef emmc_handle;
 DMA_HandleTypeDef rxHandle;
 DMA_HandleTypeDef txHandle;
 
-uint8_t drv_emmcInit(void) {
+uint8_t drv_emmcInit(void) 
+{
     uint8_t emmc_state = EMMC_OK;
     
     emmc_handle.Instance = SDIO;
@@ -16,21 +17,27 @@ uint8_t drv_emmcInit(void) {
     emmc_handle.Init.HardwareFlowControl = SDIO_HARDWARE_FLOW_CONTROL_DISABLE;
     emmc_handle.Init.ClockDiv = 1;                            // 初始化时钟
 
-    if(HAL_MMC_Init(&emmc_handle) != HAL_OK) {
+    if(HAL_MMC_Init(&emmc_handle) != HAL_OK) 
+    {
         emmc_state = EMMC_ERROR; 
     }
 
-    if(emmc_state == EMMC_OK) {
-        if(HAL_MMC_ConfigWideBusOperation(&emmc_handle, SDIO_BUS_WIDE_8B) != HAL_OK) {
+    if(emmc_state == EMMC_OK) 
+    {
+        if(HAL_MMC_ConfigWideBusOperation(&emmc_handle, SDIO_BUS_WIDE_8B) != HAL_OK) 
+        {
             emmc_state = EMMC_ERROR;
-        } else {
+        } 
+        else 
+        {
             emmc_state = EMMC_OK;
         }
     }
     return emmc_state;
 }
 
-void HAL_MMC_MspInit(MMC_HandleTypeDef *hmmc) {
+void HAL_MMC_MspInit(MMC_HandleTypeDef *hmmc) 
+{
     GPIO_InitTypeDef GPIO_InitStructure;
     
     __HAL_RCC_SDMMC1_CLK_ENABLE();
@@ -98,45 +105,63 @@ void HAL_MMC_MspInit(MMC_HandleTypeDef *hmmc) {
     HAL_NVIC_EnableIRQ(DMA2_Stream6_IRQn);
 }
 
-uint8_t drv_emmcGetInfo(HAL_MMC_CardInfoTypeDef* emmcInfo, HAL_MMC_CardCIDTypeDef* emmcCID) {
+uint8_t drv_emmcGetInfo(HAL_MMC_CardInfoTypeDef* emmcInfo, HAL_MMC_CardCIDTypeDef* emmcCID) 
+{
     HAL_MMC_GetCardInfo(&emmc_handle, emmcInfo);
     HAL_MMC_GetCardCID(&emmc_handle, emmcCID);
 
     return 0;
 }
 
-uint8_t drv_emmcReadBlocks(uint32_t *pData, uint32_t readAddr, uint32_t numOfBlocks) {
-    if(HAL_MMC_ReadBlocks_DMA(&emmc_handle, (uint8_t *)pData, readAddr, numOfBlocks) != HAL_OK) {
+uint8_t drv_emmcReadBlocks(uint32_t *pData, uint32_t readAddr, uint32_t numOfBlocks) 
+{
+    if(HAL_MMC_ReadBlocks_DMA(&emmc_handle, (uint8_t *)pData, readAddr, numOfBlocks) != HAL_OK) 
+    {
         return EMMC_ERROR;
-    } else {
+    }
+    else
+    {
         return EMMC_OK;
     }
 }
 
-uint8_t drv_emmcWriteBlocks(uint32_t *pData, uint32_t writeAddr, uint32_t numOfBlocks) {
-    if(HAL_MMC_WriteBlocks_DMA(&emmc_handle, (uint8_t *)pData, writeAddr, numOfBlocks) != HAL_OK) {
+uint8_t drv_emmcWriteBlocks(uint32_t *pData, uint32_t writeAddr, uint32_t numOfBlocks) 
+{
+    if(HAL_MMC_WriteBlocks_DMA(&emmc_handle, (uint8_t *)pData, writeAddr, numOfBlocks) != HAL_OK) 
+    {
         return EMMC_ERROR;
-    } else {
+    } 
+    else 
+    {
         return EMMC_OK;
     }
 }
 
-uint8_t drv_emmcErase(uint32_t startAddr, uint32_t endAddr) {
-    if(HAL_MMC_Erase(&emmc_handle, startAddr, endAddr) != HAL_OK) {
+uint8_t drv_emmcErase(uint32_t startAddr, uint32_t endAddr) 
+{
+    if(HAL_MMC_Erase(&emmc_handle, startAddr, endAddr) != HAL_OK) 
+    {
         return EMMC_ERROR;
-    } else {
+    } 
+    else 
+    {
         return EMMC_OK;
     }
 }
 
-uint8_t drv_emmcGetState(void) {
+uint8_t drv_emmcGetState(void) 
+{
     return ((HAL_MMC_GetCardState(&emmc_handle) == HAL_MMC_CARD_TRANSFER) ? EMMC_TRANSFER_OK : EMMC_TRANSFER_BUSY);
 }
 
-void HAL_MMC_TxCpltCallback(MMC_HandleTypeDef *hmmc) {
+void HAL_MMC_TxCpltCallback(MMC_HandleTypeDef *hmmc) 
+{
+    UNUSED(hmmc);
     dev_eMMC_WriteCpltCallback();
 }
 
-void HAL_MMC_RxCpltCallback(MMC_HandleTypeDef *hmmc) {
+void HAL_MMC_RxCpltCallback(MMC_HandleTypeDef *hmmc)
+{
+    UNUSED(hmmc);
     dev_eMMC_ReadCpltCallback();
 }

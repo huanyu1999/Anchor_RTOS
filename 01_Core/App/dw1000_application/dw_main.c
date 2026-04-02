@@ -63,7 +63,7 @@ static dwt_config_t uwb_config_channel5[7] = {
         .phrMode = DWT_PHRMODE_STD,
         .sfdTO = (513 + DW_NS_SFD_LEN_850K - 16)
     },
-    {   /* uwb_config2，channel5 脉冲频率64M 前导码长度1024 数据率 850K ，该配置人体遮挡情况下，表现较好，偶有距离大跳情况，考虑软件优化 */
+    {   /* uwb_config2，channel5 脉冲频率64M 前导码长度1024 数据率 850K ，该配置人体遮挡情况下，表现较好，偶有距离大跳情况，考虑软件优化，主要使用 */
         .chan = 5,
         .prf = DWT_PRF_64M,
         .txPreambLength = DWT_PLEN_1024,
@@ -375,8 +375,8 @@ void task_getMinDis(void *arg)
         osStatus_t status = osSemaphoreAcquire(sema_tagDistClear, osWaitForever); // 周期获取最小距离
         if (status == osOK)
         {
-            disManager_purgeExpired(&task_dis_manage, osKernelGetTickCount());
-            min_dis_node = disManager_getMin(&task_dis_manage); // 获取堆顶算是改写吗
+            disManager_purgeExpired(&task_dis_manage, osKernelGetTickCount());       // 获取最小距离前先清除过期距离，获取当前tick，将超时的标签清除
+            min_dis_node = disManager_getMin(&task_dis_manage); 
             if (min_dis_node == NULL)
             {
                 // 什么都不处理，没有标签通信的情况

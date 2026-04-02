@@ -28,7 +28,6 @@
 #include "os_event.h"
 #include "app_gnss.h"
 #include "app_network.h"
-#include "app_emmc.h"
 // #include "app_usb_msc.h"
 #include "board_dw1000.h"
 #include "board_w5500.h"
@@ -545,7 +544,7 @@ void task_eventHandler(void *arg)
 void task_emmcTest(void *arg)
 {
     UNUSED(arg);
-    app_emmcReadWriteDemo();
+    // app_emmcReadWriteDemo();
     // app_usbMscInit();
     for (;;)
     {

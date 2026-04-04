@@ -216,6 +216,7 @@ void port_wakeup_IC(void)
 void port_set_dw1000_slowrate(void)
 {
     hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+    // hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
     HAL_SPI_Init(&hspi1);
 }
 
@@ -223,9 +224,10 @@ void port_set_dw1000_slowrate(void)
  * @brief   set 18MHz
  *          note: hspi1 is clocked from 32MHz
  * */
-void port_set_dw1000_fastrate(void)
+void port_set_dw1000_fastrate(void )
 {
     hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+    // hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
     HAL_SPI_Init(&hspi1);
 }
 

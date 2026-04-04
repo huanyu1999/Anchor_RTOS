@@ -9,15 +9,26 @@
 #include <stdint.h>
 #include <math.h>
 
+#if defined(USE_DW3000)
+#pragma message_1("Building for dw3000")
+#include "board_dw3000.h"
+#include "port.h"
+/* DW1000 deca_types.h 定义了 uint16/uint32/int32，DW3000 没有，补上兼容定义 */
+typedef uint16_t uint16;
+typedef uint32_t uint32;
+typedef int32_t  int32;
+#elif defined(USE_DW1000)
+#pragma message_2("Building for dw1000")
 #include "board_dw1000.h"
-// #include "com_MultiTimer.h"
-// #include "com_heap.h"
-// #include "uthash.h"
+#include "deca_port.h"
+#else
+#error "Please define USE_DW1000 or USE_DW3000"
+#endif
+
 #include "dev_led_buzzer_dip.h"
 #include "drv_timer.h"
 #include "iwdg.h"
 
-#include "deca_port.h"
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include "deca_types.h"
@@ -234,6 +245,9 @@ typedef enum {
 /* TWR测距状态 */
 typedef enum { RANGE_NULL, RANGE_TWR_OK, RANGE_ERROR } twrStatus;
 
+/* UWB 芯片类型 */
+typedef enum { UWB_CHIP_DW1000, UWB_CHIP_DW3000 } uwbChipType;
+
 /* 系统运行角色 */
 typedef enum { TAG, ANCHOR, ANCHOR_RNG, NUM_MODES } instanceModes;
 
@@ -341,8 +355,10 @@ void task_uwb(void *arg);
 void task_twrRun(void *arg);
 void task_minHeapManage(void *arg);
 void task_getMinDis(void *arg);
+#if defined(USE_DW1000)
 float uwb_isInNLOS_power(dwt_rxdiag_t *rx_diag, uint8_t receive_functionCode);
 uint16_t uwb_isInNLOS_index(uint8_t receive_functionCode);
+#endif
 int check_twr_quality(uint16_t indexDiff_poll, uint16_t indexDiff_final);
 dwDistance_t* get_the_local_structure_of_dis(void);
 dwDevice_t* get_the_local_structure_of_dev(void);

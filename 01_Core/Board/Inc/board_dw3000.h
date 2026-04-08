@@ -14,12 +14,12 @@
 #define Dw3000_NSS_Pin          GPIO_PIN_4
 #define Dw3000_NSS_GPIO_Port    GPIOA
 
-/* TODO: 填入实际的 WAKEUP 和 MEAS_TIME 引脚 */
-// #define Dw3000_WAKEUP_Pin       GPIO_PIN_0
-// #define Dw3000_WAKEUP_GPIO_Port GPIOB
+/* TODO: 确认实际的 WAKEUP 和 MEAS_TIME 引脚 */
+#define Dw3000_WAKEUP_Pin       GPIO_PIN_0
+#define Dw3000_WAKEUP_GPIO_Port GPIOB
 
-// #define Dw3000_MEAS_TIME_Pin       GPIO_PIN_0
-// #define Dw3000_MEAS_TIME_GPIO_Port GPIOC
+#define Dw3000_MEAS_TIME_Pin       GPIO_PIN_0
+#define Dw3000_MEAS_TIME_GPIO_Port GPIOC
 
 typedef enum {
     dw3000_reset = 0,

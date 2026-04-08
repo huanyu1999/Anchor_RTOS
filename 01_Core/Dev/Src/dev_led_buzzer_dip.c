@@ -36,9 +36,18 @@ void dev_ledOn(gpioBoard_enum_t led)
         board_gpioSetLevel(led, io_LevelHigh);
         break;
 
+    case RT9013_EN:
+    case SWITCH_KEY:
+    case PAUSE_KEY:
+    case BUZZER:
+    case ANCHOR_ID0:
+    case ANCHOR_ID1:
+    case ANCHOR_ID2:
+    case ANCHOR_ID3:
+    case IO_NUM:
     default:
         break;
-    } 
+    }
 }
 
 void dev_ledOff(gpioBoard_enum_t led) {
@@ -50,9 +59,18 @@ void dev_ledOff(gpioBoard_enum_t led) {
         board_gpioSetLevel(led, io_LevelLow);
         break;
 
+    case RT9013_EN:
+    case SWITCH_KEY:
+    case PAUSE_KEY:
+    case BUZZER:
+    case ANCHOR_ID0:
+    case ANCHOR_ID1:
+    case ANCHOR_ID2:
+    case ANCHOR_ID3:
+    case IO_NUM:
     default:
         break;
-    } 
+    }
 }
 
 /*************************************buzzer************************************** */

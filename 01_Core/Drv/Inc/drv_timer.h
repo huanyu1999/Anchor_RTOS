@@ -7,7 +7,7 @@ extern "C" {
 
 
 #include "main.h"
-#include "com_Multitimer.h"
+// #include "com_Multitimer.h"
 
 void MX_TIM2_Init(uint32_t period_ms);
 void MX_TIM3_Init(void);

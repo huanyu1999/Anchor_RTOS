@@ -121,6 +121,7 @@ DSTATUS dev_emmcStatus(BYTE lun) {
   */
 DRESULT dev_emmcRead(BYTE lun, BYTE *buff, DWORD sector, UINT count)
 {
+    (void)lun;
     DRESULT res = RES_ERROR;
     uint32_t timer;  
     osStatus status;
@@ -155,7 +156,7 @@ DRESULT dev_emmcRead(BYTE lun, BYTE *buff, DWORD sector, UINT count)
   */
 #if _USE_WRITE == 1
 DRESULT dev_emmcWrite(BYTE lun, const BYTE *buff, DWORD sector, UINT count) {
-    // osEvent event;
+    (void)lun;
     DRESULT res = RES_ERROR;
     uint32_t timer;
     osStatus status;
@@ -189,6 +190,7 @@ DRESULT dev_emmcWrite(BYTE lun, const BYTE *buff, DWORD sector, UINT count) {
 #if _USE_IOCTL == 1
 DRESULT dev_emmcIoCtl(BYTE lun, BYTE cmd, void *buff)
 {
+    (void)lun;
     DRESULT res = RES_ERROR;
     HAL_MMC_CardInfoTypeDef emmcCardInfo;
     HAL_MMC_CardCIDTypeDef  emmcCardCID;
@@ -300,6 +302,7 @@ void dev_eMMC_ReadCpltCallback(void)
 
 static DSTATUS dev_emmcCheckStatus(BYTE lun)
 {
+    (void)lun;
     Stat = STA_NOINIT;
 
     if(drv_emmcGetState() == EMMC_OK) // 判断SDCard 的状态

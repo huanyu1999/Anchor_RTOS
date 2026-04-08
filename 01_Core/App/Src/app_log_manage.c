@@ -279,7 +279,7 @@ int log_mgr_init(void)
     return 0;
 }
 
-void log_mgr_write(log_mgr_type_t type, uint8_t tag_id, const char *fmt, ...)
+void log_mgr_write(log_mgr_type_t type, uint8_t tid, const char *fmt, ...)
 {
     if (queue_logMgr == NULL)
     {
@@ -301,9 +301,9 @@ void log_mgr_write(log_mgr_type_t type, uint8_t tag_id, const char *fmt, ...)
 
     /* 组装 body：先写标签标识，再写用户内容 */
     int offset = 0;
-    if (tag_id != LOG_MGR_NO_TAG)
+    if (tid != LOG_MGR_NO_TAG)
     {
-        offset = snprintf(entry.body, sizeof(entry.body), "[T%02d] ", tag_id);
+        offset = snprintf(entry.body, sizeof(entry.body), "[T%02d] ", tid);
     }
 
     va_list ap;

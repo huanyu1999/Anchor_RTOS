@@ -49,10 +49,11 @@ int log_mgr_init(void);
 /**
  * @brief  写入一条业务日志（线程安全，通过队列异步写入）
  * @param  type    日志分类
- * @param  tag_id  相关标签ID（0x00-0xFE），LOG_MGR_NO_TAG 表示无关标签
+ * @param  tid     相关标签ID（0x00-0xFE），LOG_MGR_NO_TAG 表示无关标签
  * @param  fmt     printf 风格格式串
  */
-void log_mgr_write(log_mgr_type_t type, uint8_t tag_id, const char *fmt, ...);
+void log_mgr_write(log_mgr_type_t type, uint8_t tid, const char *fmt, ...)
+    __attribute__((format(printf, 3, 4)));
 
 /**
  * @brief  通知日志模块 USB MSC 已挂载，暂停写入并卸载 FatFS

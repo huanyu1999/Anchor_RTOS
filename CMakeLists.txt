@@ -26,27 +26,34 @@ endif()
 # 配置项目名称以及使用的语言
 project(Anchor C CXX ASM)
 
-# 设置输出的可执行文件名称
-set(EXECUTABLE ${PROJECT_NAME}.elf)
+# 两个可执行目标：分别对应 DW1000 和 DW3000
+set(TARGETS Anchor_Dw1000 Anchor_Dw3000)
 
 # 收集启动文件
-set (STARTUP_FILE
+set(STARTUP_FILE
     startup4gcc/startup_stm32f405xx.s
 )
 
-# 收集源文件 —— 自己的代码
+# 收集源文件 —— 自己的代码（App / Board / Dev / Drv，不含 DW 相关 board 文件）
 file(GLOB_RECURSE 01_CORE_SRC_FILES
     01_Core/App/*.c
     01_Core/Board/*.c
     01_Core/Dev/*.c
     01_Core/Drv/*.c
 )
+# 从公共源文件中排除 board_dw*.c，这些按目标分别添加
+list(FILTER 01_CORE_SRC_FILES EXCLUDE REGEX "board_dw[0-9]+\\.c$")
 
-# 收集源文件 —— 01_Core 下的第三方代码（DW1000 vendor driver、Com 组件）
+# 收集源文件 —— 01_Core 下的第三方代码（Com 组件，不含 easylogger 和 DW 厂家驱动）
+# easylogger 已作为独立静态库 libelog.a 编译，此处排除避免重复
 file(GLOB_RECURSE 01_CORE_THIRDPARTY_SRC_FILES
     01_Core/Com/*.c
-    01_Core/DW1000/*.c
 )
+list(FILTER 01_CORE_THIRDPARTY_SRC_FILES EXCLUDE REGEX "easylogger/")
+
+# 收集 DW1000 / DW3000 厂家驱动源文件
+file(GLOB_RECURSE DW1000_VENDOR_SRC_FILES  01_Core/Dw1000/*.c)
+file(GLOB_RECURSE DW3000_VENDOR_SRC_FILES  01_Core/Dw3000/*.c)
 
 file(GLOB 02_VENDOR_SRC_FILES
     02_Vendor_Lib/*.c
@@ -56,16 +63,29 @@ file(GLOB 02_VENDOR_SRC_FILES
 # 主目标中的第三方源文件关闭所有警告（-w）
 set_source_files_properties(
     ${01_CORE_THIRDPARTY_SRC_FILES}
+    ${DW1000_VENDOR_SRC_FILES}
+    ${DW3000_VENDOR_SRC_FILES}
     ${02_VENDOR_SRC_FILES}
     PROPERTIES COMPILE_OPTIONS "-w"
 )
 
-# 添加可执行目标源文件
-add_executable(${EXECUTABLE}
+# 添加两个可执行目标
+add_executable(Anchor_Dw1000.elf
     ${STARTUP_FILE}
     ${01_CORE_SRC_FILES}
     ${01_CORE_THIRDPARTY_SRC_FILES}
+    ${DW1000_VENDOR_SRC_FILES}
     ${02_VENDOR_SRC_FILES}
+    01_Core/Board/Src/board_dw1000.c
+)
+
+add_executable(Anchor_Dw3000.elf
+    ${STARTUP_FILE}
+    ${01_CORE_SRC_FILES}
+    ${01_CORE_THIRDPARTY_SRC_FILES}
+    ${DW3000_VENDOR_SRC_FILES}
+    ${02_VENDOR_SRC_FILES}
+    01_Core/Board/Src/board_dw3000.c
 )
 
 ##########################################################################制作一个elog 库##########################################################################
@@ -269,33 +289,24 @@ target_compile_options(fatfs PRIVATE
 # diskio.c 间接依赖 FreeRTOS 头文件（通过 dev_emmc.h -> cmsis_os.h）
 target_link_libraries(fatfs PRIVATE freertos)
 
-# 设置宏定义编译选项
-target_compile_definitions(${EXECUTABLE} PRIVATE
-    -DUSE_HAL_DRIVER
-    -DSTM32F405xx
-)
-
-# 设置总体头文件目录
-target_include_directories(${EXECUTABLE} PRIVATE
-    01_Core/App/dw1000_application 
-    01_Core/App/Inc 
-    01_Core/Board/Inc 
-    01_Core/Com/compiler 
-    01_Core/Com/kalmanfilter 
-    01_Core/Com/min_heap 
-    01_Core/Com/multi_timer 
-    01_Core/Com/multi_button 
+# 公共头文件目录（不含 DW 厂家驱动）
+set(COMMON_INCLUDE_DIRS
+    01_Core/App/Inc
+    01_Core/Board/Inc
+    01_Core/Com/compiler
+    01_Core/Com/kalmanfilter
+    01_Core/Com/min_heap
+    01_Core/Com/multi_timer
+    01_Core/Com/multi_button
     01_Core/Com/uthash
-    01_Core/Dev/Inc 
-    01_Core/Drv/Inc 
-    01_Core/DW1000/decadriver 
-    01_Core/DW1000/platform 
-    02_Vendor_Lib 
-    02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc 
-    02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc/Legacy 
-    02_Vendor_Lib/CMSIS/Core/Include 
-    02_Vendor_Lib/CMSIS/Device/ST/STM32F4xx/Include 
-    02_Vendor_Lib/CMSIS/Include 
+    01_Core/Dev/Inc
+    01_Core/Drv/Inc
+    02_Vendor_Lib
+    02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc
+    02_Vendor_Lib/STM32F4xx_HAL_Driver/Inc/Legacy
+    02_Vendor_Lib/CMSIS/Core/Include
+    02_Vendor_Lib/CMSIS/Device/ST/STM32F4xx/Include
+    02_Vendor_Lib/CMSIS/Include
     # W5500、FreeRTOS、FatFS 头文件由各自库的 PUBLIC include 提供
     # TinyUSB 公开头文件（tusb_config.h 已在 App/Inc 中，其余由 tinyusb 库 PUBLIC 继承）
     03_Middlewares/Third_Party/TinyUsb/src
@@ -303,8 +314,8 @@ target_include_directories(${EXECUTABLE} PRIVATE
     03_Middlewares/Third_Party/TinyUsb/src/device
 )
 
-# 设置编译选项
-target_compile_options(${EXECUTABLE} PRIVATE
+# 公共编译选项
+set(COMMON_COMPILE_OPTIONS
     -mcpu=cortex-m4
     -mthumb
     -mfpu=fpv4-sp-d16
@@ -321,8 +332,8 @@ target_compile_options(${EXECUTABLE} PRIVATE
     $<$<CONFIG:Debug>:-Og>
 )
 
-# 设置链接选项
-target_link_options(${EXECUTABLE} PRIVATE
+# 公共链接选项
+set(COMMON_LINK_OPTIONS
     -T${CMAKE_SOURCE_DIR}/STM32F405XX_FLASH.ld
     -mcpu=cortex-m4
     -mthumb
@@ -332,25 +343,62 @@ target_link_options(${EXECUTABLE} PRIVATE
     -lc
     -lm
     # -lnosys
-    -Wl,-Map=${PROJECT_NAME}.map,--cref,--gc-sections,--print-memory-usage
+    -Wl,--cref,--gc-sections,--print-memory-usage
 )
 
-# 链接静态库
-target_link_libraries(${EXECUTABLE} elog w5500 tinyusb freertos fatfs)
+# 为两个目标分别配置
+foreach(TGT IN LISTS TARGETS)
+    set(ELF ${TGT}.elf)
 
-# Print executable size，打印可执行文件大小
-add_custom_command(TARGET ${EXECUTABLE}
-    POST_BUILD
-    COMMAND arm-none-eabi-size ${EXECUTABLE}
-)
+    # 宏定义：HAL + 芯片选择
+    target_compile_definitions(${ELF} PRIVATE
+        USE_HAL_DRIVER
+        STM32F405xx
+    )
 
-# Create hex file，生成hex和bin文件
-add_custom_command(TARGET ${EXECUTABLE}
-    POST_BUILD
-    COMMAND arm-none-eabi-objcopy -O ihex ${EXECUTABLE} ${PROJECT_NAME}.hex
-    COMMAND arm-none-eabi-objcopy -O binary ${EXECUTABLE} ${PROJECT_NAME}.bin
-)
+    # 头文件：公共 + 对应 DW 厂家驱动
+    if(TGT STREQUAL "Anchor_Dw1000")
+        target_compile_definitions(${ELF} PRIVATE USE_DW1000)
+        target_include_directories(${ELF} PRIVATE
+            ${COMMON_INCLUDE_DIRS}
+            01_Core/Dw1000/decadriver
+            01_Core/Dw1000/platform
+        )
+    else()
+        target_compile_definitions(${ELF} PRIVATE USE_DW3000)
+        target_include_directories(${ELF} PRIVATE
+            ${COMMON_INCLUDE_DIRS}
+            01_Core/Dw3000/decadriver
+            01_Core/Dw3000/platform
+        )
+    endif()
 
-# Improve clean target，清除target时顺带清除bin hex map文件
-set_target_properties(${EXECUTABLE} PROPERTIES ADDITIONAL_CLEAN_FILES
-        "${PROJECT_NAME}.bin;${PROJECT_NAME}.hex;${PROJECT_NAME}.map")
+    # 编译选项
+    target_compile_options(${ELF} PRIVATE ${COMMON_COMPILE_OPTIONS})
+
+    # 链接选项（各自生成 .map 文件）
+    target_link_options(${ELF} PRIVATE
+        ${COMMON_LINK_OPTIONS}
+        -Wl,-Map=${TGT}.map
+    )
+
+    # 链接静态库
+    target_link_libraries(${ELF} elog w5500 tinyusb freertos fatfs)
+
+    # 打印可执行文件大小
+    add_custom_command(TARGET ${ELF}
+        POST_BUILD
+        COMMAND arm-none-eabi-size ${ELF}
+    )
+
+    # 生成 hex 和 bin 文件
+    add_custom_command(TARGET ${ELF}
+        POST_BUILD
+        COMMAND arm-none-eabi-objcopy -O ihex ${ELF} ${TGT}.hex
+        COMMAND arm-none-eabi-objcopy -O binary ${ELF} ${TGT}.bin
+    )
+
+    # 清除 target 时顺带清除 bin hex map 文件
+    set_target_properties(${ELF} PROPERTIES ADDITIONAL_CLEAN_FILES
+        "${TGT}.bin;${TGT}.hex;${TGT}.map")
+endforeach()

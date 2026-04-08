@@ -20,6 +20,7 @@
 #include <stdarg.h>
 
 #include "main.h"
+#include "app_config.h"
 #include "app_usb_msc.h"
 #include "app_log_manage.h"
 #include "dwt_delay.h"
@@ -56,7 +57,7 @@ const osThreadAttr_t task_swoOutput_attr = {
 };
 
 osThreadId_t task_main_handle;
-static uint8_t task_main_buffer[256];
+static uint8_t task_main_buffer[512];
 StaticTask_t task_main_cb;
 const osThreadAttr_t task_main_attr = {
     .name      = "task_main",
@@ -172,27 +173,40 @@ void task_mainProcess(void* arg)
 {
     UNUSED(arg);
     // the Initializes sequence can not be changed
-    dev_canInit();              // 调用了CAN1的底层初始化
-    dev_ledAndRT9013Init();     // dw1000初始化能够通过，说明此处没有问题
+#if MODULE_CAN_ENABLE
+    dev_canInit();
+#endif
+    dev_ledAndRT9013Init();
+#if MODULE_ALARM_ENABLE
     dev_buzzerInit(BUZZER);
+#endif
+    dev_jq8400Init();
+    dev_jq8400RandomPathPlay(JQ8X00_FLASH, "jzkj");   // 开机语音
     dev_buttonInit(SWITCH_KEY);
     dev_buttonInit(PAUSE_KEY);
-    dev_rx8130ceInit();         // 初始化外部实时时钟芯片
-    dev_canStartRx();           // can接收中断考虑放到can收发任务中开头       
-    dev_gnssModInit();        
-    dev_jq8400Init();
     dev_buttonMultiInit();
+    dev_rx8130ceInit();
+#if MODULE_CAN_ENABLE
+    dev_canStartRx();
+#endif
+#if MODULE_GNSS_ENABLE
+    dev_gnssModInit();
+#endif
     dev_dipInit(ANCHOR_ID0);
     dev_dipInit(ANCHOR_ID1);
     dev_dipInit(ANCHOR_ID2);
     dev_dipInit(ANCHOR_ID3);
-    MX_FREERTOS_Init();     // call init function for freertos objects (in freertos.c)
+    MX_FREERTOS_Init();
 
-    elog_componentInit();   //（create streambuffer，set elog format, start the elog function.），将该初始化及log任务移到main process执行最后
+    elog_componentInit();
     task_swoOutput_handle = osThreadNew(&task_swoOutPut, NULL, &task_swoOutput_attr);
-    app_usbMscInit();       // 初始化USB MSC功能，创建USB事件处理任务
-    log_mgr_init();          // 初始化日志管理模块，创建日志写入任务
-    osThreadExit();         // after init the RTOS, delete the task.
+#if MODULE_USB_MSC_ENABLE
+    app_usbMscInit();
+#endif
+#if MODULE_LOG_MANAGE_ENABLE
+    log_mgr_init();
+#endif
+    osThreadExit();
 }
 
 /************************************************* swo log **************************************************/

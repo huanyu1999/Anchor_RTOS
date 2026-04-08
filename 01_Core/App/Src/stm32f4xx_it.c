@@ -97,14 +97,50 @@ void NMI_Handler(void)
   */
 void HardFault_Handler(void)
 {
-  /* USER CODE BEGIN HardFault_IRQn 0 */
+  volatile uint32_t cfsr  = SCB->CFSR;   /* Configurable Fault Status */
+  volatile uint32_t hfsr  = SCB->HFSR;   /* HardFault Status */
+  volatile uint32_t mmfar = SCB->MMFAR;  /* MemManage Fault Address */
+  volatile uint32_t bfar  = SCB->BFAR;   /* BusFault Address */
+  volatile uint32_t lr;                  /* EXC_RETURN（判断使用 MSP/PSP） */
 
-  /* USER CODE END HardFault_IRQn 0 */
-  while (1)
+  __asm volatile ("MOV %0, LR" : "=r" (lr));
+
+  /* 根据 EXC_RETURN bit2 判断故障时使用的栈指针 */
+  volatile uint32_t *sp;
+  if (lr & 0x04)
   {
-    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
-    /* USER CODE END W1_HardFault_IRQn 0 */
+    __asm volatile ("MRS %0, PSP" : "=r" (sp));   /* 任务栈 */
   }
+  else
+  {
+    __asm volatile ("MRS %0, MSP" : "=r" (sp));   /* 主栈 */
+  }
+
+  /* 从栈帧中读取故障现场寄存器 */
+  volatile uint32_t stacked_r0  = sp[0];
+  volatile uint32_t stacked_r1  = sp[1];
+  volatile uint32_t stacked_r2  = sp[2];
+  volatile uint32_t stacked_r3  = sp[3];
+  volatile uint32_t stacked_r12 = sp[4];
+  volatile uint32_t stacked_lr  = sp[5];  /* 故障前的返回地址 */
+  volatile uint32_t stacked_pc  = sp[6];  /* 故障指令地址 */
+  volatile uint32_t stacked_psr = sp[7];
+
+  /*
+   * 在 Keil 调试器中暂停后，Locals / Watch 窗口可直接查看：
+   *   stacked_pc  — 故障指令地址，对照 .map 文件定位函数
+   *   stacked_lr  — 调用者返回地址
+   *   cfsr        — bit[15:0] MemManage+BusFault, bit[31:16] UsageFault
+   *   hfsr        — bit30=FORCED 表示升级为 HardFault
+   *   mmfar/bfar  — 如果 cfsr 对应 valid 位置位，则为故障地址
+   */
+
+  (void)cfsr; (void)hfsr; (void)mmfar; (void)bfar;
+  (void)stacked_r0; (void)stacked_r1; (void)stacked_r2; (void)stacked_r3;
+  (void)stacked_r12; (void)stacked_lr; (void)stacked_pc; (void)stacked_psr;
+
+  while (1)
+  {}
 }
 
 /**
@@ -112,14 +148,11 @@ void HardFault_Handler(void)
   */
 void MemManage_Handler(void)
 {
-  /* USER CODE BEGIN MemoryManagement_IRQn 0 */
-
-  /* USER CODE END MemoryManagement_IRQn 0 */
+  volatile uint32_t cfsr  = SCB->CFSR;
+  volatile uint32_t mmfar = SCB->MMFAR;
+  (void)cfsr; (void)mmfar;
   while (1)
-  {
-    /* USER CODE BEGIN W1_MemoryManagement_IRQn 0 */
-    /* USER CODE END W1_MemoryManagement_IRQn 0 */
-  }
+  {}
 }
 
 /**
@@ -127,14 +160,11 @@ void MemManage_Handler(void)
   */
 void BusFault_Handler(void)
 {
-  /* USER CODE BEGIN BusFault_IRQn 0 */
-
-  /* USER CODE END BusFault_IRQn 0 */
+  volatile uint32_t cfsr = SCB->CFSR;
+  volatile uint32_t bfar = SCB->BFAR;
+  (void)cfsr; (void)bfar;
   while (1)
-  {
-    /* USER CODE BEGIN W1_BusFault_IRQn 0 */
-    /* USER CODE END W1_BusFault_IRQn 0 */
-  }
+  {}
 }
 
 /**

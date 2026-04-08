@@ -1,5 +1,5 @@
 #include "drv_timer.h"
-#include "com_MultiTimer.h"
+// #include "com_MultiTimer.h"
 
 TIM_HandleTypeDef htimer2;
 TIM_HandleTypeDef htimer3;
@@ -105,6 +105,7 @@ void MX_TIM3_Init(void)
   */
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef *htim)
 {
+    UNUSED(htim);
     /*##-1- Enable peripherals and GPIO Clocks #################################*/
     /* TIMx Peripheral clock enable */
     __HAL_RCC_TIM2_CLK_ENABLE();

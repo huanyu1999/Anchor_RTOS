@@ -336,6 +336,10 @@ static void anch_txRespOrRxReEnable(void)
         {
             resp_tx_time = (poll_rx_ts + (FIRST_RESP_SEND_850K + anc_id * inst_data_interval) * UUS_TO_DWT_TIME + (ANC_RESP_SEND_BACK_850K * UUS_TO_DWT_TIME));
         }
+        else
+        {
+            return ;
+        }
 
         resp_tx_time = resp_tx_time >> 8;
         dwt_setdelayedtrxtime((uint32)resp_tx_time);
@@ -385,6 +389,8 @@ static void anch_txRespOrRxReEnable(void)
 
             else if (inst_dataRate == DWT_BR_850K)
                 resp_rx_time = (poll_rx_ts + ((FIRST_RESP_SEND_850K + (MAX_AHCHOR_NUMBER - handleResp_times) * inst_data_interval) * UUS_TO_DWT_TIME));
+            else 
+                return ;
 
             resp_rx_time = resp_rx_time >> 8;
             dwt_setdelayedtrxtime(resp_rx_time);          // 设置接收机开启延时时间

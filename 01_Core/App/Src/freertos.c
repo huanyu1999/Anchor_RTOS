@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "main.h"
+#include "app_config.h"
 #include "dw_sort.h"
 #include "dw_instance.h"
 #include "os_event.h"
@@ -58,8 +59,7 @@ volatile uint32_t ulHighFrequencyTimerTicks = 0UL;
 #endif
 
 /*********************************************************Tag Distance Management**********************************************************/
-#define TAG_DIS_CHANGE_THRESHOLD    3000        // 标签距离减小阈值，单位mm，一旦距离减小程度越过该值，就恢复声音警报
-#define TAG_DIS_ALARM_THRESHOLD     0      // 标签距离报警最小有效值，单位mm，大于该值的最小距离就不会报警，暂时先设为0，调试
+#define TAG_DIS_CHANGE_THRESHOLD    3000        // 标签距离减小阈值，单位mm，静音后距离减小超过该值恢复报警
 
 /**************************************************************CAN Communication**********************************************************/
 static CAN_RxHeaderTypeDef RxHeader;
@@ -70,10 +70,10 @@ static const uint8_t can_alarm[5] = {'C', 'A', 'N', 'A', '0'};
 /**************************************************************alarm Output**************************************************************/
 static int32_t voiceOutputDis = -1;
 static uint8_t voiceOutputIndex = 0xFF;
-static alarm_state_t cur_alarmState = ALARM_IDLE;
+static alarm_state_t cur_alarmState = ALARM_LEVEL_0;
 static bool voicePlaying = false;
 static uint32_t voiceStartTick = 0;
-static const uint32_t VOICE_PLAY_MIN_MS = 1700;  // 报警声音最短播放时间，单位ms，后续可以根据实际语音文件长度调整
+static uint32_t voiceIntervalMs = VOICE_INTERVAL_L1;  // 当前等级对应的语音播报间隔
 
 /**************************************************************Semaphore****************************************************************/
 osSemaphoreId_t sema_w5500Int;
@@ -209,7 +209,7 @@ const osThreadAttr_t task_gnssSyncTime_attr = {
 };
 
 osThreadId_t task_eth_handle;
-static uint8_t task_eth_buf[512];
+static uint8_t task_eth_buf[1024];
 StaticTask_t task_eth_cb;
 const osThreadAttr_t task_eth_attr = {
     .name      = "task_eth",
@@ -218,7 +218,7 @@ const osThreadAttr_t task_eth_attr = {
 };
 
 osThreadId_t task_rtosMonitor_handle;
-static uint8_t task_rtosMonitor_buf[768];
+static uint8_t task_rtosMonitor_buf[1280];
 StaticTask_t task_rtosMonitor_cb;
 const osThreadAttr_t task_rtosMonitor_attr = {
     .name      = "task_rtosMonitor",
@@ -238,6 +238,8 @@ void task_Test(void *arg);
 void task_rtosMonitor(void *arg);
 
 static void outputVoiceBuildAndPlay(uint8_t closetTagId, int32_t closetTagDis, char buffer[10]);
+static alarm_state_t alarm_levelFromDist(int32_t dist_mm);
+static void alarm_applyLevel(alarm_state_t level, char *voice_buf);
 /* USER CODE END FunctionPrototypes */
 
 /**
@@ -248,30 +250,35 @@ static void outputVoiceBuildAndPlay(uint8_t closetTagId, int32_t closetTagDis, c
 void MX_FREERTOS_Init(void)
 {
     /* USER CODE BEGIN RTOS_QUEUES */
-    /* add queues, ... */
     queue_minimalDis = osMessageQueueNew(16, sizeof(outDistance_t), &queue_minimalDis_attr);
     queue_canRxDis   = osMessageQueueNew(16, sizeof(outDistance_t), &canRxDisQueue_attr);
     queue_alarm      = osMessageQueueNew(18, sizeof(alarm_event_t), &queue_alarm_attr);
     sema_w5500Int    = osSemaphoreNew(1, 0, &sema_w5500Int_attr);
-    sema_elogLock    = osSemaphoreNew(1, 1, &sema_elogLock_attr);                 // 该二值信号量初始值必须设置为1，用于log写入时上锁
-    sema_gnssReceive  = osSemaphoreNew(1, 0, &sema_gnssReceive_attr);
+    sema_elogLock    = osSemaphoreNew(1, 1, &sema_elogLock_attr);
+    sema_gnssReceive = osSemaphoreNew(1, 0, &sema_gnssReceive_attr);
+#if MODULE_EMMC_ENABLE
     dev_emmcSemaInit();
-    // sema_canReceive = osSemaphoreNew(1, 0, &sema_caReceive_attr);
-    // uart_dmaLockSem = osSemaphoreNew(1, 0, &uart_dmaLockSem_attr);   
-    // elog_asyncSem   = osSemaphoreNew(1, 1, &elog_asyncSem_attr); 
+#endif
     /* USER CODE END RTOS_QUEUES */
 
     /* USER CODE BEGIN RTOS_THREADS */
-    /* add threads, ... */
+#if MODULE_UWB_ENABLE
     task_uwb_handle               = osThreadNew(task_uwb, NULL, &task_uwb_attr);
     task_twrRun_handle            = osThreadNew(task_twrRun, NULL, &task_twrRun_attr);
     task_anchorDisHandling_handle = osThreadNew(task_anchorDisHandling, NULL, &task_anchorDisHandling_attr);
     task_minHeapManage_handle     = osThreadNew(task_minHeapManage, NULL, &task_minHeapManage_attr);
     task_getMinDis_handle         = osThreadNew(task_getMinDis, NULL, &task_getMinDis_attr);
+#endif
+#if MODULE_ALARM_ENABLE
     task_tagDisMonitor_handle     = osThreadNew(task_tagDisMonitor, NULL, &task_tagDisMonitor_attr);
     task_eventProcess_handle      = osThreadNew(task_eventHandler, NULL, &task_eventProcess_attr);
+#endif
+#if MODULE_GNSS_ENABLE
     task_gnssSyncTime_handle      = osThreadNew(task_gnssSyncTime, NULL, &task_gnssSyncTime_attr);
+#endif
+#if MODULE_W5500_ENABLE
     task_eth_handle               = osThreadNew(task_eth, NULL, &task_eth_attr);
+#endif
     task_rtosMonitor_handle       = osThreadNew(task_rtosMonitor, NULL, &task_rtosMonitor_attr);
     
 #ifdef TASK_DEBUG_INFO
@@ -397,74 +404,142 @@ void task_tagDisMonitor(void* arg)
 }
 
 /**
-  * @brief  this task used by can transmit or f
+ * @brief  根据距离值计算报警等级
+ */
+static alarm_state_t alarm_levelFromDist(int32_t dist_mm)
+{
+    if (dist_mm <= 0 || dist_mm >= ALARM_DIST_FAR)
+    {
+        return ALARM_LEVEL_0;
+    }
+    if (dist_mm < ALARM_DIST_DANGER)
+    {
+        return ALARM_LEVEL_3;
+    }
+    if (dist_mm < ALARM_DIST_NEAR)
+    {
+        return ALARM_LEVEL_2;
+    }
+    return ALARM_LEVEL_1;
+}
+
+/**
+ * @brief  根据等级执行对应的报警输出（语音 + 蜂鸣器 + LED）
+ */
+static void alarm_applyLevel(alarm_state_t level, char *voice_buf)
+{
+    switch (level)
+    {
+    case ALARM_LEVEL_0:
+        dev_buzzerClose(BUZZER);
+        if (voicePlaying)
+        {
+            dev_jq8400DeInit();
+            voicePlaying = false;
+        }
+        break;
+
+    case ALARM_LEVEL_1:
+        dev_buzzerClose(BUZZER);
+        voiceIntervalMs = VOICE_INTERVAL_L1;
+        if (!voicePlaying)
+        {
+            dev_jq8400Init();
+            outputVoiceBuildAndPlay(voiceOutputIndex, voiceOutputDis, voice_buf);
+            voiceStartTick = osKernelGetTickCount();
+            voicePlaying = true;
+        }
+        break;
+
+    case ALARM_LEVEL_2:
+        dev_buzzerClose(BUZZER);
+        voiceIntervalMs = VOICE_INTERVAL_L2;
+        if (!voicePlaying)
+        {
+            dev_jq8400Init();
+            outputVoiceBuildAndPlay(voiceOutputIndex, voiceOutputDis, voice_buf);
+            voiceStartTick = osKernelGetTickCount();
+            voicePlaying = true;
+        }
+        break;
+
+    case ALARM_LEVEL_3:
+        dev_buzzerOpen(BUZZER);
+        voiceIntervalMs = VOICE_INTERVAL_L3;
+        if (!voicePlaying)
+        {
+            dev_jq8400Init();
+            outputVoiceBuildAndPlay(voiceOutputIndex, voiceOutputDis, voice_buf);
+            voiceStartTick = osKernelGetTickCount();
+            voicePlaying = true;
+        }
+        break;
+
+    case ALARM_MUTED:
+        dev_buzzerClose(BUZZER);
+        if (voicePlaying)
+        {
+            dev_jq8400DeInit();
+            voicePlaying = false;
+        }
+        break;
+    }
+}
+
+/**
+  * @brief  报警事件处理任务：接收事件队列，执行分级报警
   * @param  void *arg
   * @retval none
   */
 void task_eventHandler(void *arg)
 {
     UNUSED(arg);
-    // static uint32_t voicePlayStartTick = 0;
-    static char voice_buf[10]; 
-    static outDistance_t tmp_dis = {0};
-    static uint8_t can_buf[5] = {0};
+    static char voice_buf[10];
     static outDistance_t rxMsg = {0};
-    static int32_t anchorReceiveDis = 2000000;  // 用于储存基站接收到的距离
-    
+    static int32_t anchorReceiveDis = 2000000;
+
     for (;;)
     {
         alarm_event_t alarm_event;
         osMessageQueueGet(queue_alarm, &alarm_event, 0, osWaitForever);
-        switch(alarm_event)
+        switch (alarm_event)
         {
         case final_minDistance_get:
             if (cur_alarmState != ALARM_MUTED)
             {
-                cur_alarmState = ALARM_ACTIVE;
-                if (!voicePlaying)
+                alarm_state_t newLevel = alarm_levelFromDist(voiceOutputDis);
+                if (newLevel != cur_alarmState)
                 {
-                    if (voiceOutputDis < TAG_DIS_ALARM_THRESHOLD)
-                    {
-                        dev_buzzerOpen(BUZZER);
-                    }
-                    dev_jq8400Init();           // Init 声音 UART
-                    outputVoiceBuildAndPlay(voiceOutputIndex, voiceOutputDis, voice_buf);
-                    voiceStartTick = osKernelGetTickCount();
-                    voicePlaying  = true;
+                    log_d("alarm level %d -> %d, dis=%d",
+                           cur_alarmState, newLevel, voiceOutputDis);
                 }
+                cur_alarmState = newLevel;
+                alarm_applyLevel(cur_alarmState, voice_buf);
             }
             break;
-        
+
         case no_final_minDistance:
-            cur_alarmState = ALARM_IDLE;
-            dev_buzzerClose(BUZZER);
-            if (voicePlaying)
-            {
-                dev_jq8400DeInit();  
-                voicePlaying = false;
-            }
+            cur_alarmState = ALARM_LEVEL_0;
+            alarm_applyLevel(ALARM_LEVEL_0, voice_buf);
+            dev_ledOff(ONSIDE_LED);
+            dev_ledOff(ACROSS_LED);
             break;
 
         case pauseButton_longPress_alarm:
         case switchButton_alarm:
         case dis_changed_alarm:
-            if (voiceOutputIndex == 0xff)
+            if (voiceOutputIndex == 0xFF)
             {
-                // 如果语音输出当前的id为默认0xff，说明没有有效距离输入，不进行报警，什么也不处理
+                /* 无有效标签，不处理 */
             }
-            else // 如果有有效距离输入，才进行报警处理
+            else
             {
-                if (cur_alarmState != ALARM_ACTIVE)
+                /* 从静音中恢复，根据当前距离重新判定等级 */
+                alarm_state_t newLevel = alarm_levelFromDist(voiceOutputDis);
+                if (newLevel != ALARM_LEVEL_0)
                 {
-                    cur_alarmState = ALARM_ACTIVE;
-                    if (voiceOutputDis < TAG_DIS_ALARM_THRESHOLD)
-                    {
-                        dev_buzzerOpen(BUZZER);
-                    }
-                    dev_jq8400Init();
-                    outputVoiceBuildAndPlay(voiceOutputIndex, voiceOutputDis, voice_buf);
-                    voiceStartTick = osKernelGetTickCount();
-                    voicePlaying  = true;
+                    cur_alarmState = newLevel;
+                    alarm_applyLevel(cur_alarmState, voice_buf);
                 }
             }
             break;
@@ -472,15 +547,10 @@ void task_eventHandler(void *arg)
         case pauseButton_click_mute:
         case switchButton_mute:
             cur_alarmState = ALARM_MUTED;
-            dev_buzzerClose(BUZZER);
-            if (voicePlaying)
-            {
-                dev_jq8400DeInit();  
-                voicePlaying = false;
-            }
+            alarm_applyLevel(ALARM_MUTED, voice_buf);
             break;
 
-        case switchButton_left_rotation: {        // send open alarm voice signal
+        case switchButton_left_rotation: {
             uint8_t can_tmp1[5];
             memcpy(can_tmp1, can_alarm, 5);
             dev_canSendMsg(CAN_EXT_ID_BUTTON, can_tmp1, ARRAY_LENGTH(can_alarm));
@@ -488,36 +558,36 @@ void task_eventHandler(void *arg)
             break;
         }
 
-        case switchButton_right_rotation: {       // send mute alarm voice signal
+        case switchButton_right_rotation: {
             uint8_t can_tmp2[5];
             memcpy(can_tmp2, can_mute, 5);
             dev_canSendMsg(CAN_EXT_ID_BUTTON, can_tmp2, ARRAY_LENGTH(can_mute));
             log_d("get msg switchButton_right_rotation");
-            break;    
+            break;
         }
 
         case can_received:
-            if ((RxHeader.ExtId == CAN_EXT_ID_DIS) && (RxHeader.IDE == CAN_ID_EXT))  // run normally no error
+            if ((RxHeader.ExtId == CAN_EXT_ID_DIS) && (RxHeader.IDE == CAN_ID_EXT))
             {
-                anchorReceiveDis = combine8to32(RxData);                // CAN正确接收，填充距离
+                anchorReceiveDis = combine8to32(RxData);
                 rxMsg.dis_class = ANCHOR_OTHER_DIS;
                 rxMsg.dis_value = anchorReceiveDis;
-                rxMsg.dis_index = RxData[4];                            // 获取存储的标签ID
+                rxMsg.dis_index = RxData[4];
                 osMessageQueuePut(queue_canRxDis, &rxMsg, 0, 0);
                 dev_ledBlink(CAN_RX_LED);
             }
-            else if ((RxHeader.ExtId == CAN_EXT_ID_BUTTON) && (RxHeader.IDE == CAN_ID_EXT)) // 接收到的为旋钮控制信息，校验两侧旋钮键值，播报还是静音
-            {  
+            else if ((RxHeader.ExtId == CAN_EXT_ID_BUTTON) && (RxHeader.IDE == CAN_ID_EXT))
+            {
                 if (RxData[0] == 'C')
                 {
                     if (RxData[3] == 'A')
-                    {   // 两侧键值相同，打开播报
+                    {
                         alarm_event_t event = switchButton_alarm;
                         osMessageQueuePut(queue_alarm, &event, 0, 0);
                         log_d("receive can_alarm, open voice");
                     }
                     else if (RxData[3] == 'M')
-                    {   // 两侧键值不相同，关闭播报
+                    {
                         alarm_event_t event = switchButton_mute;
                         osMessageQueuePut(queue_alarm, &event, 0, 0);
                         log_d("receive can_mute, close voice");
@@ -525,14 +595,15 @@ void task_eventHandler(void *arg)
                 }
             }
             break;
-            
+
         default:
             break;
         }
 
-        if (voicePlaying)   // 确保语音能有1.5s播放时间
+        /* 语音播报间隔控制：播放时长达到当前等级间隔后停止，等待下次事件重新播报 */
+        if (voicePlaying)
         {
-            if ((osKernelGetTickCount() - voiceStartTick) >= VOICE_PLAY_MIN_MS)
+            if ((osKernelGetTickCount() - voiceStartTick) >= voiceIntervalMs)
             {
                 dev_jq8400DeInit();
                 voicePlaying = false;
@@ -884,3 +955,4 @@ static void outputVoiceBuildAndPlay(uint8_t cloestTagId, int32_t cloestTagDis, c
 //         }
 //     }
 // }
+

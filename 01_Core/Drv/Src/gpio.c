@@ -113,6 +113,7 @@ void drv_gpioClkEn(gpio_clkPort_t io_port)
         __HAL_RCC_GPIOI_CLK_ENABLE();
         break;
 
+    case GPIO_PORT_NUM:
     default:
         break;
     }

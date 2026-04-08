@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "dwt_delay.h"
 #include "dev_w5500.h"
 #include "board_w5500.h"
@@ -10,6 +11,7 @@
 #include "w5500.h"
 #include "dhcp.h"
 #include "elog.h"
+#include "net_protocol.h"
 
 #define W5500_VERSION 0x04
 #define KEEPALIVE_ENABLE 1
@@ -17,7 +19,8 @@
 
 TIM_HandleTypeDef dhcp_oneSecondHandle;
 
-w5500_device dev_w5500 = { 0, 0, 0, 0, 0, 0, 0 };
+w5500_device dev_w5500 = { 0 };
+static net_parser_t net_parser = {0};
 
 dev_w5500Handler dev_w5500TcpServer = {
     .init = dev_w5500TcpServerInit,
@@ -229,21 +232,20 @@ void dev_w5500TcpServerHandler(w5500_device* dev, w5500_event event) {
         break;
         
     case EVENT_RECV:
-        if ((len = getSn_RX_RSR(dev->socket_num)) > 0) { // 读取接收数据的大小
-            if (len > DATA_BUF_SIZE) {
+        if ((len = getSn_RX_RSR(dev->socket_num)) > 0)
+        {
+            if (len > DATA_BUF_SIZE)
+            {
                 len = DATA_BUF_SIZE;
             }
             recv(dev->socket_num, dev->buffer, len);
-            dev->buffer[len] = 0x00;
-            log_d("recv_data:%s", dev->buffer);
-            int ret = send(dev->socket_num, dev->buffer, len);
-            if (ret != len) {
-                log_d("sent failed, ret : %d, len : %d", ret, len);
-            }
+            net_protocol_feed(&net_parser, dev->buffer, len);
         }
         break;
 
     case EVENT_CON:
+        /* 新连接建立，重置帧解析器 */
+        memset(&net_parser, 0, sizeof(net_parser));
 #ifdef _LOOPBACK_DEBUG_
         getSn_DIPR(dev->socket_num, destip);
         destport = getSn_DPORT(dev->socket_num);

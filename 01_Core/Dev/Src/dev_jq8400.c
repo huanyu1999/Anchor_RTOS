@@ -12,6 +12,7 @@ uint8_t voice_up[4]     = { 0xAA, 0x14, 0x00, 0xBE };               // 音量增
 void dev_jq8400Init(void)
 {
     MX_UART3_Init();
+    dev_jq8400VoiceOut(voice_shezhi, sizeof(voice_shezhi));   // 设置音量为最大（30）
 }
 
 void dev_jq8400DeInit(void)
@@ -50,7 +51,7 @@ void dev_jq8400CommandData(UartCommandData Command, uint8_t DATA)
         DataLen = 6;
     }
     
-#if JQ8x00_BusyCheck
+#ifdef JQ8x00_BusyCheck
     while(JQ8x00_BUSY_Read);        // JQ8400 忙检测
 #endif
     dev_jq8400VoiceOut(Buffer, DataLen);
@@ -108,7 +109,7 @@ void dev_jq8400CombinePlay(char *data, uint8_t len)
     }
     Buffer[i] = crc_data;
     i++;
-#if JQ8x00_BusyCheck
+#ifdef JQ8x00_BusyCheck
     while(JQ8x00_BUSY_Read);
 #endif
     dev_jq8400VoiceOut(Buffer, i);

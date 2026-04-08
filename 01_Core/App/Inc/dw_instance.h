@@ -13,12 +13,17 @@
 #pragma message_1("Building for dw3000")
 #include "board_dw3000.h"
 #include "port.h"
-/* DW1000 deca_types.h 定义了 uint16/uint32/int32，DW3000 没有，补上兼容定义 */
+/* DW1000 deca_types.h 定义了 uint8/uint16/uint32/int32，DW3000 没有，补上兼容定义 */
+typedef uint8_t  uint8;
 typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef int32_t  int32;
+/* DW3000 SDK 不提供 UUS_TO_DWT_TIME，值与 DW1000 相同 */
+#ifndef UUS_TO_DWT_TIME
+#define UUS_TO_DWT_TIME 65536
+#endif
 #elif defined(USE_DW1000)
-#pragma message_2("Building for dw1000")
+// #pragma message_2("Building for dw1000")
 #include "board_dw1000.h"
 #include "deca_port.h"
 #else

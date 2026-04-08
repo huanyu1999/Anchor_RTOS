@@ -50,7 +50,7 @@ portGetTickCnt(void)
  * @brief precise usleep() delay
  * */
 #pragma GCC optimize ("O0")
-int usleep(useconds_t usec)
+int usleep(unsigned int usec)
 {
     unsigned int i;
 

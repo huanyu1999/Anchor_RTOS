@@ -85,7 +85,7 @@ void port_set_dwic_isr(port_dwic_isr_t isr);
  *
  *******************************************************************************/
 
-int usleep(useconds_t usec);
+int usleep(unsigned int usec);
 
 void Sleep(uint32_t Delay);
 unsigned long portGetTickCnt(void);

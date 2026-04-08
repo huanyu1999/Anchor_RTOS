@@ -117,11 +117,13 @@ void ParseSingleNMEA(char *line)
     //     PrintTimeUTCtoCST(year, month, day, hh, mm, ss);
     // } else if (strncmp(line, "$GNRMC", 6) == 0 || strncmp(line, "$GPRMC", 6) == 0) {
     if (strncmp(line, "$GNRMC", 6) == 0 || strncmp(line, "$GPRMC", 6) == 0) {
-        char *token, *saveptr;
+        // char *token, *saveptr;
+        char *token;
         int field = 0;
         int hh = 0, mm = 0, ss = 0, day = 0, month = 0, year = 0;
         char status = 'V';
-        token = strtok_r(line, ",", &saveptr);
+        // token = strtok_r(line, ",", &saveptr);
+        token = strtok(line, ",");
         while (token) {
             field++;
             if (field == 2 && strlen(token) >= 6) {
@@ -135,7 +137,8 @@ void ParseSingleNMEA(char *line)
                 month = (token[2] - '0') * 10 + (token[3] - '0');
                 year  = (token[4] - '0') * 10 + (token[5] - '0') + 2000;
             }
-            token = strtok_r(NULL,",",&saveptr);
+            // token = strtok_r(NULL,",",&saveptr);
+            token = strtok(NULL,",");
         }
         if (status == 'A') {
             PrintTimeUTCtoCST(year, month, day, hh, mm, ss);

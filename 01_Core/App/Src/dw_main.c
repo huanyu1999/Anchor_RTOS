@@ -500,6 +500,11 @@ void task_twrRun(void *arg)
 static tag_hashNode_t recv_processedDis = {0};
 static distance_manager_t task_dis_manage = {0};
 
+distance_manager_t *disManager_getHandle(void)
+{
+    return &task_dis_manage;
+}
+
 /**
  * @brief 最小堆管理任务，插入，更新，删除
  * @param  void *arg RTOS要求参数为空指针类型

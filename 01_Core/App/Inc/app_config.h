@@ -11,7 +11,7 @@
 
 /* ======================== 核心功能 ======================== */
 #define MODULE_UWB_ENABLE           1   /* UWB 测距（DW1000/DW3000） */
-#define MODULE_ALARM_ENABLE         1   /* 分级报警（语音 + 蜂鸣器 + LED） */
+#define MODULE_ALARM_ENABLE         0   /* 分级报警（语音 + 蜂鸣器 + LED） */
 #define MODULE_CAN_ENABLE           1   /* CAN 总线通信（双基站联动） */
 
 /* ======================== 存储 & 日志 ======================== */

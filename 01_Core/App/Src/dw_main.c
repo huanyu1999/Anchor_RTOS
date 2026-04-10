@@ -544,10 +544,16 @@ void task_getMinDis(void *arg)
         if (status == osOK)
         {
             disManager_purgeExpired(&task_dis_manage, osKernelGetTickCount());       // 获取最小距离前先清除过期距离，获取当前tick，将超时的标签清除
-            min_dis_node = disManager_getMin(&task_dis_manage); 
+            min_dis_node = disManager_getMin(&task_dis_manage);
+            extern osMessageQueueId_t queue_minimalDis;
             if (min_dis_node == NULL)
             {
-                // 什么都不处理，没有标签通信的情况
+                // 没有标签通信，也推一条无效距离消息，让 task_anchorDisHandling
+                // 唤醒后能走"无有效标签"分支去关闭报警 LED
+                min_selfDis.dis_value = 2000000;
+                min_selfDis.dis_index = 0xFF;
+                min_selfDis.dis_class = ANCHOR_SELF_DIS;
+                osMessageQueuePut(queue_minimalDis, &min_selfDis, 0, 0);
             }
             else
             {
@@ -556,7 +562,6 @@ void task_getMinDis(void *arg)
                 min_selfDis.dis_index = min_dis_node->tag_id;
                 min_selfDis.dis_class = ANCHOR_SELF_DIS;
 
-                extern osMessageQueueId_t queue_minimalDis; 
                 osMessageQueuePut(queue_minimalDis, &min_selfDis, 0, 0);
                 log_d("cur tag num : %d*tag-%d*local min dis : %.2f.", cur_tagNum, min_selfDis.dis_index, (float)(min_selfDis.dis_value) / 1000.0f);
             }

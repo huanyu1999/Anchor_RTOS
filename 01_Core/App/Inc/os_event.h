@@ -32,9 +32,9 @@ typedef enum {
 #define ALARM_DIST_NEAR      20000    // 20m — 近距离警告门限
 #define ALARM_DIST_DANGER    10000    // 10m — 危险距离（安全绕行红线）
 
-/* 语音播报间隔，单位 ms */
-#define VOICE_INTERVAL_L1    3000     // LEVEL_1：3s 间隔
-#define VOICE_INTERVAL_L2    1500     // LEVEL_2：1.5s 间隔
-#define VOICE_INTERVAL_L3    800      // LEVEL_3：0.8s 连续紧急
+/* 语音播报间隔，单位 ms（须 ≥ 单条语音实际播放时长） */
+#define VOICE_INTERVAL_L1    3600     // LEVEL_1：3.6s 间隔
+#define VOICE_INTERVAL_L2    2400     // LEVEL_2：2.4s 间隔
+#define VOICE_INTERVAL_L3    800      // LEVEL_3：0.8s 连续紧急（<10m，只报距离不报ID）
 
 #endif

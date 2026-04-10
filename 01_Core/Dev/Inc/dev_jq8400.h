@@ -24,7 +24,7 @@ typedef enum {
 
 void dev_jq8400ConvertDis(float dis);
 void dev_jq8400Init(void);
-void dev_jq8400DeInit(void);
+void dev_jq8400Stop(void);
 void dev_jq8400VoiceOut(uint8_t *pVoiceBuf, int len);
 void dev_jq8400CommandData(UartCommandData Command, uint8_t DATA);
 void dev_jq8400RandomPathPlay(jq8400SystemSymbol symbol, char *data);

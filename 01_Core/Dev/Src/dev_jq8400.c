@@ -1,23 +1,25 @@
 #include <string.h>
 #include "main.h"
+#include "cmsis_os.h"
 #include "usart.h"
 #include "dev_jq8400.h"
 
 #define ZH_MAX  32          // 定义组合播放最大容量
 
-uint8_t voice_next[4]   = { 0xAA, 0x06, 0x00, 0xB0 };               // 下一曲 
-uint8_t voice_shezhi[5] = { 0xAA, 0x13, 0x01, 0x1E,0xDC };          // 设置声音等级
-uint8_t voice_up[4]     = { 0xAA, 0x14, 0x00, 0xBE };               // 音量增加命令
+static const uint8_t cmd_stop[4]   = { 0xAA, 0x04, 0x00, 0xAE };    // 停止播放
+static const uint8_t cmd_volMax[5] = { 0xAA, 0x13, 0x01, 0x1E, 0xDC }; // 设置音量最大（30）
 
 void dev_jq8400Init(void)
 {
     MX_UART3_Init();
-    dev_jq8400VoiceOut(voice_shezhi, sizeof(voice_shezhi));   // 设置音量为最大（30）
+    osDelay(1500);  // 等 JQ8400 芯片上电就绪（约 1.5-2s），否则后续命令会被丢弃
+    dev_jq8400VoiceOut((uint8_t *)cmd_volMax, sizeof(cmd_volMax));
+    osDelay(50);    // 让芯片完成音量设置再接下一条命令
 }
 
-void dev_jq8400DeInit(void)
+void dev_jq8400Stop(void)
 {
-    HAL_UART_DeInit(&huart3);
+    dev_jq8400VoiceOut((uint8_t *)cmd_stop, sizeof(cmd_stop));
 }
 
 void dev_jq8400VoiceOut(uint8_t *pVoiceBuf, int len)

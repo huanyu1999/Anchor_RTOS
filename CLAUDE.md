@@ -49,14 +49,31 @@ The toolchain (`toolchain.cmake`) auto-discovers `arm-none-eabi-gcc` via `where`
 
 ### FreeRTOS Task Map
 
-Defined in `01_Core/App/Src/main.c` and `freertos.c`:
-- `task_swoOutput` — SWO debug output (Realtime5, 1024B stack)
-- `task_main` — Main process entry (Realtime4, 256B stack), starts all subsystems
-- Subtasks for GNSS, W5500/network, DW1000 ranging, alarm state machine, CAN, audio
+主任务定义在 `01_Core/App/Src/freertos.c`，优先级从高到低：
+
+| 任务 | 优先级 | 栈 | 职责 |
+|---|---|---|---|
+| `task_twrRun` | ISR | 2048 | TWR 状态机（onEvent → dwt_starttx/rxenable） |
+| `task_uwb` | ISR | 1280 | DW1000 IRQ → process_deca_irq → post queue_uwbEvent |
+| `task_minHeapManage` | Realtime5 | 1024 | 距离 hash+minheap 插入/更新/purge |
+| `task_anchorDisHandling` | Realtime4 | 1280 | 本/对侧距离融合，LED 控制，post queue_alarm |
+| `task_getMinDis` | Realtime4 | 1024 | TIM2(20ms) 周期取堆顶，post queue_minimalDis |
+| `task_eventHandler` | Realtime3 | 1024 | 分级报警状态机，JQ8400 语音，CAN 发送 |
+| `task_tagDisMonitor` | Normal | 1024 | 1500ms 周期检测距离跳变，触发重播 |
+| `task_gnssSyncTime` | Normal | 768 | GNSS 时间同步 |
+| `task_eth` | Normal | 1024 | W5500 以太网收发（sema_w5500Int 唤醒） |
+| `task_rtosMonitor` | Low | 1280 | 10s 周期输出栈水位和运行时统计 |
+| `task_swoOutput` | Realtime5 | 1024 | SWO 调试输出（定义在 main.c） |
+| `task_main` | Realtime4 | 256 | 系统启动入口（定义在 main.c） |
+
+**设计原则**：task_uwb 与 task_twrRun 共同独占 ISR 最高级，任何其他任务不得与其同级，保护 TWR 延时发送时间窗口不被抢占。
 
 Key RTOS primitives (`01_Core/App/Inc/os_event.h`):
 - `queue_alarm` (`osMessageQueueId_t`) — carries `alarm_event_t` enum values between tasks
-- Semaphores: `sema_w5500Int`, `sema_elogLock`, `sema_gnssReceive`
+- `queue_minimalDis` — 本侧最小距离，task_getMinDis → task_anchorDisHandling
+- `queue_processDis` — 单次 TWR 成功后的距离，task_twrRun → task_minHeapManage
+- `queue_uwbEvent` — DW1000 IRQ 事件，task_uwb → task_twrRun
+- Semaphores: `sema_uwbInt`（DW IRQ）, `sema_tagDistClear`（TIM2 20ms）, `sema_w5500Int`, `sema_elogLock`, `sema_gnssReceive`
 
 ### UWB Ranging (`dw1000_application/`)
 
@@ -69,13 +86,20 @@ Radio configs are channel-5 presets (850K baud, variable preamble lengths). Acti
 
 ### Alarm State Machine
 
-States: `ALARM_IDLE → ALARM_ACTIVE → ALARM_MUTED` (defined in `os_event.h`).
+States（`os_event.h`）：`ALARM_LEVEL_0`（无报警）→ `ALARM_LEVEL_1/2/3`（分级）→ `ALARM_MUTED`（静音）
 
-Thresholds in `freertos.c`:
-- `TAG_DIS_CHANGE_THRESHOLD = 3000` mm — distance change that re-triggers alarm
-- `VOICE_PLAY_MIN_MS = 1700` ms — debounce for audio output
+距离门限（`os_event.h`）：
+- `ALARM_DIST_FAR = 50000` mm — 50m，Level 1 触发
+- `ALARM_DIST_NEAR = 20000` mm — 20m，Level 2 触发
+- `ALARM_DIST_DANGER = 10000` mm — 10m，Level 3 触发（同时开蜂鸣器）
 
-Events that drive transitions are `alarm_event_t` values posted to `queue_alarm`.
+语音播报（`freertos.c`）：
+- `TAG_DIS_CHANGE_THRESHOLD = 3000` mm — 静音后距离减小超过此值重新触发
+- 语音间隔：L1=3600ms / L2=2400ms / L3=800ms（须 ≥ 单条语音实际播放时长）
+- <10m 紧急场景只播距离，不播 Tag ID
+- JQ8400 UART3 常驻初始化，停播发 Stop 命令，不做 DeInit
+
+Events 通过 `queue_alarm` 以 `alarm_event_t` 传递给 `task_eventHandler`。
 
 ### Key Constants / IDs
 

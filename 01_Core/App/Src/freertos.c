@@ -142,9 +142,9 @@ osThreadId_t task_uwb_handle;
 static uint8_t task_uwb_buf[1280];
 StaticTask_t task_uwb_cb;
 const osThreadAttr_t task_uwb_attr = {
-    .name      = "task_uwb", 
-    .stack_mem = task_uwb_buf, .stack_size = sizeof(task_uwb_buf), .cb_mem = &task_uwb_cb, .cb_size = sizeof(task_uwb_cb), 
-    .priority  = (osPriority_t) osPriorityRealtime7,
+    .name      = "task_uwb",
+    .stack_mem = task_uwb_buf, .stack_size = sizeof(task_uwb_buf), .cb_mem = &task_uwb_cb, .cb_size = sizeof(task_uwb_cb),
+    .priority  = (osPriority_t) osPriorityISR,          // TWR核心：与task_twrRun同级独占最高优先级
 };
 
 osThreadId_t task_twrRun_handle;
@@ -162,7 +162,7 @@ StaticTask_t task_anchorDisHandling_cb;
 const osThreadAttr_t task_anchorDisHandling_attr = {
     .name      = "task_anchorDisHandling",
     .stack_mem = task_anchorDisHandling_buf, .stack_size = sizeof(task_anchorDisHandling_buf), .cb_mem = &task_anchorDisHandling_cb, .cb_size = sizeof(task_anchorDisHandling_cb),
-    .priority  = (osPriority_t) osPriorityRealtime6
+    .priority  = (osPriority_t) osPriorityRealtime4     // 距离融合 + LED + 投递 alarm 事件
 };
 
 osThreadId_t task_eventProcess_handle;
@@ -171,7 +171,7 @@ StaticTask_t task_eventProcess_cb;
 const osThreadAttr_t task_eventProcess_attr = {
     .name      = "task_eventProcess",
     .stack_mem = task_eventProcess_buf, .stack_size = sizeof(task_eventProcess_buf), .cb_mem = &task_eventProcess_cb, .cb_size = sizeof(task_eventProcess_cb),
-    .priority  = (osPriority_t) osPriorityRealtime7
+    .priority  = (osPriority_t) osPriorityRealtime3     // 语音/蜂鸣器/CAN，人耳时间尺度，无需高优先级
 };
 
 osThreadId_t task_minHeapManage_handle;
@@ -180,7 +180,7 @@ StaticTask_t task_minHeapManage_cb;
 const osThreadAttr_t task_minHeapManage_attr = {
     .name      = "task_minHeapManage",
     .stack_mem = task_minHeapManage_buf, .stack_size = sizeof(task_minHeapManage_buf), .cb_mem = &task_minHeapManage_cb, .cb_size = sizeof(task_minHeapManage_cb),
-    .priority  = (osPriority_t) osPriorityRealtime7
+    .priority  = (osPriority_t) osPriorityRealtime5     // hash+heap 操作，TWR 回调产生数据后异步处理
 };
 
 osThreadId_t task_getMinDis_handle;
@@ -189,16 +189,16 @@ StaticTask_t task_getMinDis_cb;
 const osThreadAttr_t task_getMinDis_attr = {
     .name      = "task_getMinDis",
     .stack_mem = task_getMinDis_buf, .stack_size = sizeof(task_getMinDis_buf), .cb_mem = &task_getMinDis_cb, .cb_size = sizeof(task_getMinDis_cb),
-    .priority  = (osPriority_t) osPriorityISR,
+    .priority  = (osPriority_t) osPriorityRealtime4,    // 周期性扫描，不得与 TWR 抢占
 };
 
 osThreadId_t task_tagDisMonitor_handle;
 static uint8_t task_tagDisMonitor_buf[1024];
 StaticTask_t task_tagDisMonitor_cb;
 const osThreadAttr_t task_tagDisMonitor_attr = {
-    .name       = "task_tagDisMonitor", 
+    .name       = "task_tagDisMonitor",
     .stack_mem  = task_tagDisMonitor_buf, .stack_size = sizeof(task_tagDisMonitor_buf), .cb_mem = &task_tagDisMonitor_cb, .cb_size = sizeof(task_tagDisMonitor_cb),
-    .priority   = (osPriority_t) osPriorityRealtime6
+    .priority   = (osPriority_t) osPriorityNormal       // 1500ms 周期，人感知时间尺度
 };
 
 osThreadId_t task_gnssSyncTime_handle;
@@ -207,7 +207,7 @@ StaticTask_t task_gnssSyncTime_cb;
 const osThreadAttr_t task_gnssSyncTime_attr = {
     .name       = "task_gnssSyncTime",
     .stack_mem  = task_gnssSyncTime_buf, .stack_size = sizeof(task_gnssSyncTime_buf), .cb_mem = &task_gnssSyncTime_cb, .cb_size = sizeof(task_gnssSyncTime_cb),
-    .priority   = (osPriority_t) osPriorityRealtime5
+    .priority   = (osPriority_t) osPriorityNormal       // 秒级同步，不影响 TWR
 };
 
 osThreadId_t task_eth_handle;
@@ -216,7 +216,7 @@ StaticTask_t task_eth_cb;
 const osThreadAttr_t task_eth_attr = {
     .name      = "task_eth",
     .stack_mem = task_eth_buf, .stack_size = sizeof(task_eth_buf), .cb_mem = &task_eth_cb, .cb_size = sizeof(task_eth_cb),
-    .priority  = (osPriority_t) osPriorityRealtime5
+    .priority  = (osPriority_t) osPriorityNormal        // W5500 中断 sema 唤醒，网络收发不影响 TWR
 };
 
 osThreadId_t task_rtosMonitor_handle;
@@ -225,7 +225,7 @@ StaticTask_t task_rtosMonitor_cb;
 const osThreadAttr_t task_rtosMonitor_attr = {
     .name      = "task_rtosMonitor",
     .stack_mem = task_rtosMonitor_buf, .stack_size = sizeof(task_rtosMonitor_buf), .cb_mem = &task_rtosMonitor_cb, .cb_size = sizeof(task_rtosMonitor_cb),
-    .priority  = (osPriority_t) osPriorityRealtime4
+    .priority  = (osPriority_t) osPriorityLow           // 10s 周期调试统计，最低优先级
 };
 
 /* USER CODE END Variables */

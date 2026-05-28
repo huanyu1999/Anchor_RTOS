@@ -289,6 +289,30 @@ target_compile_options(fatfs PRIVATE
 # diskio.c 间接依赖 FreeRTOS 头文件（通过 dev_emmc.h -> cmsis_os.h）
 target_link_libraries(fatfs PRIVATE freertos)
 
+##########################################################################制作一个 Segger RTT 库##########################################################################
+set(SEGGER_RTT_DIR ${CMAKE_CURRENT_LIST_DIR}/03_Middlewares/Segger_RTT)
+
+add_library(segger_rtt STATIC
+    ${SEGGER_RTT_DIR}/SEGGER_RTT.c
+    ${SEGGER_RTT_DIR}/SEGGER_RTT_printf.c
+)
+
+target_include_directories(segger_rtt PUBLIC
+    ${SEGGER_RTT_DIR}
+)
+
+target_compile_options(segger_rtt PRIVATE
+    -mcpu=cortex-m4
+    -mthumb
+    -mfpu=fpv4-sp-d16
+    -mfloat-abi=hard
+    -ffunction-sections
+    -fdata-sections
+    -g
+    -O2
+    -w                  # 第三方代码，关闭所有警告
+)
+
 # 公共头文件目录（不含 DW 厂家驱动）
 set(COMMON_INCLUDE_DIRS
     01_Core/App/Inc
@@ -383,7 +407,7 @@ foreach(TGT IN LISTS TARGETS)
     )
 
     # 链接静态库
-    target_link_libraries(${ELF} elog w5500 tinyusb freertos fatfs)
+    target_link_libraries(${ELF} elog w5500 tinyusb freertos fatfs segger_rtt)
 
     # 打印可执行文件大小
     add_custom_command(TARGET ${ELF}

@@ -43,6 +43,7 @@
 
 #include "cmsis_os.h"
 #include "elog.h"
+#include "SEGGER_RTT.h"
 
 /* Private includes ----------------------------------------------------------*/
 
@@ -99,7 +100,9 @@ int main(void)
     HAL_Init();                 // Reset of all peripherals, Initializes the Flash interface and the Systick.
     DWT_Init();                 // 初始化 DWT，用于延时功能
     SystemClock_Config();       // Configure the system clock
-    swo_init();                 // SWO LOG 输出端口初始化
+    // swo_init();              // SWO LOG 输出端口初始化（改用 SEGGER RTT，保留函数体方便回滚）
+    SEGGER_RTT_Init();          // 主动初始化 RTT 控制块（魔术字立即写入 BSS，便于 OpenOCD/Cortex-Debug 上电搜索）
+    SEGGER_RTT_WriteString(0, "\r\n[RTT] boot\r\n");
     MX_SPI1_Init();             // 初始化SPI1 配置，读写DMA通道，DMA中断，供uwb模组传输
     MX_UART4_Init();            // 初始化UART4 配置，读DMA通道，串口中断，供jq8400语音模组传输
 
@@ -163,7 +166,7 @@ void Error_Handler(void)
     /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
     __disable_irq();
-    log_e("111");      // 计划在此打印出问题的文件名以及行数
+    // log_e("111");      // 计划在此打印出问题的文件名以及行数
     while (1)
     {}
     /* USER CODE END Error_Handler_Debug */
@@ -233,27 +236,30 @@ void task_swoOutPut(void *arg)
     UNUSED(arg);
     static uint8_t temp_buf[1024];
     size_t num_bytes;
-    
+
     for (;;)
     {
         extern StreamBufferHandle_t log_streamBufferHandle;
-        size_t idx = 0;
-        // 阻塞等待接收streambuffer中的数据，发送到ITM端口
+        // 阻塞等待 streambuffer 数据，转发到 SEGGER RTT 通道 0
         num_bytes = xStreamBufferReceive(log_streamBufferHandle, temp_buf, sizeof(temp_buf), portMAX_DELAY);
-        while (idx < num_bytes)
-        {
-            if (ITM->TCR & ITM_TCR_ITMENA_Msk)
-            {
-                if (ITM->PORT[0].u32 & 1)
-                {
-                    ITM->PORT[0].u8 = temp_buf[idx++];
-                }
-                else
-                {
-                    taskYIELD();        // buffer满了就让出CPU，但是不丢状态 if buffer is fulled, 
-                }
-            }
-        }
+        SEGGER_RTT_Write(0, temp_buf, num_bytes);
+
+        // --- 原 SWO/ITM 输出路径（保留以便回滚）---
+        // size_t idx = 0;
+        // while (idx < num_bytes)
+        // {
+        //     if (ITM->TCR & ITM_TCR_ITMENA_Msk)
+        //     {
+        //         if (ITM->PORT[0].u32 & 1)
+        //         {
+        //             ITM->PORT[0].u8 = temp_buf[idx++];
+        //         }
+        //         else
+        //         {
+        //             taskYIELD();
+        //         }
+        //     }
+        // }
     }
 }
 

@@ -74,7 +74,7 @@ void elog_port_deinit(void)
 void elog_port_output(const char *log, size_t size)
 {
     /* add your code here */
-    size_t written = xStreamBufferSend(log_streamBufferHandle, log, size, 0);// 在这里朝streambuffer写入数据，传递给SWO端口
+    size_t written = xStreamBufferSend(log_streamBufferHandle, log, size, 0);// 在这里朝streambuffer写入数据，传递给日志输出端口
 
     if (written < size)
     {

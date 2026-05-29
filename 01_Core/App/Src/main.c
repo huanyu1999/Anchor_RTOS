@@ -58,7 +58,7 @@ const osThreadAttr_t task_swoOutput_attr = {
 };
 
 osThreadId_t task_main_handle;
-static uint8_t task_main_buffer[512];
+static uint8_t task_main_buffer[1024];  /* 启动任务：初始化调用链较深，跑完即 osThreadExit 释放 */
 StaticTask_t task_main_cb;
 const osThreadAttr_t task_main_attr = {
     .name      = "task_main",
@@ -102,7 +102,7 @@ int main(void)
     SystemClock_Config();       // Configure the system clock
     // swo_init();              // SWO LOG 输出端口初始化（改用 SEGGER RTT，保留函数体方便回滚）
     SEGGER_RTT_Init();          // 主动初始化 RTT 控制块（魔术字立即写入 BSS，便于 OpenOCD/Cortex-Debug 上电搜索）
-    SEGGER_RTT_WriteString(0, "\r\n[RTT] boot\r\n");
+    SEGGER_RTT_WriteString(0, "\r\nSystem and RTT boot.\r\n");
     MX_SPI1_Init();             // 初始化SPI1 配置，读写DMA通道，DMA中断，供uwb模组传输
     MX_UART4_Init();            // 初始化UART4 配置，读DMA通道，串口中断，供jq8400语音模组传输
 
@@ -198,7 +198,6 @@ void task_mainProcess(void* arg)
     dev_dipInit(ANCHOR_ID0);
     dev_dipInit(ANCHOR_ID1);
     dev_dipInit(ANCHOR_ID2);
-    dev_dipInit(ANCHOR_ID3);
     MX_FREERTOS_Init();
 
     elog_componentInit();

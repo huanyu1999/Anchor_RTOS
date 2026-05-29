@@ -43,7 +43,6 @@ void dev_ledOn(gpioBoard_enum_t led)
     case ANCHOR_ID0:
     case ANCHOR_ID1:
     case ANCHOR_ID2:
-    case ANCHOR_ID3:
     case IO_NUM:
     default:
         break;
@@ -66,7 +65,6 @@ void dev_ledOff(gpioBoard_enum_t led) {
     case ANCHOR_ID0:
     case ANCHOR_ID1:
     case ANCHOR_ID2:
-    case ANCHOR_ID3:
     case IO_NUM:
     default:
         break;
@@ -107,8 +105,7 @@ uint8_t dev_getDipVal(void)
 {
     uint8_t switch_value = 0;
 
-    switch_value =  SWITCH_IS_ON(ANCHOR_ID3) << 3 |
-                    SWITCH_IS_ON(ANCHOR_ID2) << 2 |
+    switch_value = SWITCH_IS_ON(ANCHOR_ID2) << 2 |
                     SWITCH_IS_ON(ANCHOR_ID1) << 1 |
                     SWITCH_IS_ON(ANCHOR_ID0) << 0;
     return switch_value;

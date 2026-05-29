@@ -38,8 +38,6 @@ static gpio_config_t gpio_boardParam[IO_NUM] = {
     { .gpio_port = ANCHORID1_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID1_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
 
     { .gpio_port = ANCHORID2_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID2_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
-
-    { .gpio_port = ANCHORID3_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID3_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 }
 };
 
 void board_gpioInit(gpioBoard_enum_t io_index)

@@ -49,6 +49,7 @@
 
 #include "com_multiButton.h"
 #include "elog.h"
+#include "SEGGER_RTT.h"
 
 #include "dhcp.h"
 // #include "socket.h"
@@ -64,8 +65,8 @@ volatile uint32_t ulHighFrequencyTimerTicks = 0UL;
 /**************************************************************CAN Communication**********************************************************/
 static CAN_RxHeaderTypeDef RxHeader;
 static uint8_t RxData[5] = {0};
-static const uint8_t can_mute[5]  = {'C', 'A', 'N', 'M', '0'};
-static const uint8_t can_alarm[5] = {'C', 'A', 'N', 'A', '0'};
+static const uint8_t can_mute[5]  = {'C', 'A', 'N', 'M', '0'};  // MUTE Cmd, transmitted by CAN when remote alarm cleared, used to mute remote side alarm
+static const uint8_t can_alarm[5] = {'C', 'A', 'N', 'A', '0'};  // ALRM Cmd, transmitted by CAN when remote alarm triggered, used to trigger remote side alarm
 
 /**************************************************************alarm Output**************************************************************/
 static int32_t voiceOutputDis = -1;
@@ -90,17 +91,17 @@ const osSemaphoreAttr_t sema_elogLock_attr = {
     .name = "sema_elogLock", .cb_mem = &sema_elogLock_cb, .cb_size = sizeof(sema_elogLock_cb)
 };
 
-// osSemaphoreId_t elog_asyncSem;                              // 用于elog_async
-// StaticSemaphore_t elog_asyncSemCB;
-// const osSemaphoreAttr_t elog_asyncSem_attr = {
-//     .name = "elog_async", .cb_mem = &elog_asyncSemCB, .cb_size = sizeof(StaticSemaphore_t)
-// };
-
 osSemaphoreId_t sema_gnssReceive;                             // 用于GNSS接收完成同步
 StaticSemaphore_t sema_gnssReceive_cb;
 const osSemaphoreAttr_t sema_gnssReceive_attr = {
     .name = "sema_gnssReceive", .cb_mem = &sema_gnssReceive_cb, .cb_size = sizeof(sema_gnssReceive_cb)
 };
+
+// osSemaphoreId_t elog_asyncSem;                              // 用于elog_async
+// StaticSemaphore_t elog_asyncSemCB;
+// const osSemaphoreAttr_t elog_asyncSem_attr = {
+//     .name = "elog_async", .cb_mem = &elog_asyncSemCB, .cb_size = sizeof(StaticSemaphore_t)
+// };
 
 // osSemaphoreId_t sema_canReceive;
 // StaticSemaphore_t sema_canReceive_cb;
@@ -144,7 +145,7 @@ StaticTask_t task_uwb_cb;
 const osThreadAttr_t task_uwb_attr = {
     .name      = "task_uwb",
     .stack_mem = task_uwb_buf, .stack_size = sizeof(task_uwb_buf), .cb_mem = &task_uwb_cb, .cb_size = sizeof(task_uwb_cb),
-    .priority  = (osPriority_t) osPriorityISR,          // TWR核心：与task_twrRun同级独占最高优先级
+    .priority  = (osPriority_t) osPriorityISR,   // TWR State machine core task
 };
 
 osThreadId_t task_twrRun_handle;
@@ -180,7 +181,7 @@ StaticTask_t task_minHeapManage_cb;
 const osThreadAttr_t task_minHeapManage_attr = {
     .name      = "task_minHeapManage",
     .stack_mem = task_minHeapManage_buf, .stack_size = sizeof(task_minHeapManage_buf), .cb_mem = &task_minHeapManage_cb, .cb_size = sizeof(task_minHeapManage_cb),
-    .priority  = (osPriority_t) osPriorityRealtime5     // hash+heap 操作，TWR 回调产生数据后异步处理
+    .priority  = (osPriority_t) osPriorityRealtime5     // hash+heap 操作，TWR回调产生数据后异步处理
 };
 
 osThreadId_t task_getMinDis_handle;
@@ -296,6 +297,38 @@ void MX_FREERTOS_Init(void)
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
+
+/* 栈溢出/堆分配失败诊断现场，调试器暂停后可直接查看 */
+volatile char    *g_overflow_task_name = NULL;   /* 溢出任务名 */
+volatile uint32_t g_overflow_task      = 0;       /* 溢出任务句柄 */
+
+/**
+  * @brief  FreeRTOS 栈溢出回调（configCHECK_FOR_STACK_OVERFLOW=2 时启用）
+  * @note   在任务切换上下文中被调用，pcTaskName 指向溢出任务名
+  */
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+{
+    g_overflow_task      = (uint32_t)xTask;
+    g_overflow_task_name = pcTaskName;
+    SEGGER_RTT_printf(0, "STACK OVERFLOW in task: %s", pcTaskName);
+    taskDISABLE_INTERRUPTS();
+    for (;;)
+    {}
+}
+
+/**
+  * @brief  FreeRTOS 堆分配失败回调（configUSE_MALLOC_FAILED_HOOK=1 时启用）
+  * @note   heap_4 仅 4KB，pvPortMalloc 返回 NULL 时进入此处
+  */
+void vApplicationMallocFailedHook(void)
+{
+    size_t freeHeap = xPortGetFreeHeapSize();
+    log_e("MALLOC FAILED, free heap = %u", (unsigned)freeHeap);
+    taskDISABLE_INTERRUPTS();
+    for (;;)
+    {}
+}
+
 /**
   * @brief  最小距离获取，收发处理，此任务需要跟堆清除无效距离处理任务配合同步，按照一个TDMA的周期算
   * @param  void *arg
@@ -775,7 +808,21 @@ extern osSemaphoreId_t sema_uwbInt;
  * */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    if (GPIO_Pin == Dw1000_RSTn_Pin)
+    if (GPIO_Pin == W5500_INT_PIN)
+    {
+        osSemaphoreRelease(sema_w5500Int);
+    }
+#if defined(USE_DW3000)
+    else if (GPIO_Pin == Dw3000_RSTn_Pin)
+    {
+        board_dw3000SetSignalReset();
+    }
+    else if (GPIO_Pin == Dw3000_IRQ_Pin)
+    {
+        osSemaphoreRelease(sema_uwbInt);
+    }
+#else
+    else if (GPIO_Pin == Dw1000_RSTn_Pin)
     {
         board_dw1000SetSignalReset();
     }
@@ -783,10 +830,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     {
         osSemaphoreRelease(sema_uwbInt);
     }
-    else if (GPIO_Pin == W5500_INT_PIN)
-    {
-        osSemaphoreRelease(sema_w5500Int);
-    }
+#endif
 }
 /*************************************************static function*************************************************/
 /**
@@ -847,154 +891,3 @@ static void outputVoiceBuildAndPlay(uint8_t cloestTagId, int32_t cloestTagDis, c
 }
 #endif /* MODULE_ALARM_ENABLE */
 /* USER CODE END Application */
-
-
-/**
-  * @brief  此任务用于本侧基站接收对侧基站的旋钮编码，并做出对应的处理 
-  * @param  void *arg
-  * @retval none
-  */
-// void task_canReceive(void *arg)                 // 尝试将can收发整合为一个任务
-// {
-//     UNUSED(arg);
-//     static outDistance_t rxMsg = {0};
-//     static int32_t anchorReceiveDis = 2000000;  // 用于储存基站接收到的距离
-//     for (;;)
-//     {
-//         // osThreadFlagsWait(0x01, osFlagsWaitAll, osWaitForever);
-//         osSemaphoreAcquire(sema_canReceive, osWaitForever);
-
-//         // log_d("can receive task.");
-//         if ((RxHeader.ExtId == CAN_EXT_ID_DIS) && (RxHeader.IDE == CAN_ID_EXT))
-//         {
-//             anchorReceiveDis = combine8to32(RxData);                // CAN正确接收，填充距离
-//             rxMsg.dis_class = ANCHOR_OTHER_DIS;
-//             rxMsg.dis_value = anchorReceiveDis;
-//             rxMsg.dis_index = RxData[4];                            // 获取存储的标签ID
-//             osMessageQueuePut(canRxDisQueue, &rxMsg, 0, 0);
-//             log_d("can receive dis, put in msg.");
-//             dev_ledBlink(CAN_RX_LED);
-//         }
-//         else if ((RxHeader.ExtId == CAN_EXT_ID_BUTTON) && (RxHeader.IDE == CAN_ID_EXT)) // 接收到的为旋钮控制信息，校验两侧旋钮键值，播报还是静音
-//         {  
-//             uint8_t rxbutton_val = RxData[0];
-//             uint8_t selfButton_val =  dev_buttonRead(BUTTON_ID_SWITCH);
-
-//             if (rxbutton_val == selfButton_val)
-//             {   // 两侧键值相同，打开播报
-//                 alarm_event_t event = switchButton_alarm;
-//                 osMessageQueuePut(queue_alarm, &event, 0, 0);
-//                 log_d("receive button_val same, open voice");
-//                 // osThreadFlagsSet(task2_voiceOutControl_handle, FLAG_S_BUTTON_ALARM);
-//             }
-//             else
-//             {   // 两侧键值不相同，关闭播报
-//                 alarm_event_t event = switchButton_mute;
-//                 osMessageQueuePut(queue_alarm, &event, 0, 0);
-//                 log_d("receive button_val not same, close voice");
-//                 // osThreadFlagsSet(task2_voiceOutControl_handle, FLAG_S_BUTTON_MUTE);
-//             }
-//         }
-//     }
-// }
-
-// uint8_t voice_buf_kj[18]={ 0xAA, 0x08, 0x0E, 0x02, 0x2F, 0xBB, 0xF9, 0xD5, 0xBE, 0xBF, 0xAA, 0xBB, 0xFA, 0x2A, 0x3F, 0x3F, 0x3F, 0x3D };
-// /**
-//   * @brief  此任务用于基站语音输出当前实时最小距离
-//   * @param  void *arg
-//   * @retval none
-//   */
-// void task_voiceOutContorl(void *arg)
-// {
-//     UNUSED(arg);
-//     static uint32_t voicePlayStartTick = 0;
-//     char voiceBuffer[10];    // 用于存储语音播放数据
-//     // char buf1[] = "/jzkj";
-//     // dev_jq8400CommandData(SetVolume, 23);       // 音量控制也可以通过上位机来确定
-//     // dev_jq8400RandomPathPlay(JQ8X00_FLASH, buf1);
-    
-//     for (;;)
-//     {
-//         uint32_t flags = osThreadFlagsWait( FLAG_DIS_ALARM | 
-//                                             FLAG_P_BUTTON_ALARM | 
-//                                             FLAG_S_BUTTON_ALARM | 
-//                                             FLAG_DIS_THRELOD_ALARM | 
-//                                             FLAG_DIS_INVAILD_ALARM |    
-//                                             FLAG_P_BUTTON_MUTE | 
-//                                             FLAG_S_BUTTON_MUTE, 
-//                                             osFlagsWaitAny, osWaitForever );
-
-//         switch (voice_state) 
-//         {
-//         case VOICE_OFF: // 空闲状态，收到有效距离后进入播报状态，根据输出距离是否进入报警阈值选择是否打开蜂鸣器
-//             if (flags & FLAG_DIS_ALARM)
-//             {
-//                 voice_state = VOICE_PLAYING;
-//                 if (voiceOutputDis < TAG_DIS_ALARM_THRESHOLD)
-//                 {
-//                     dev_buzzerOpen(BUZZER);
-//                 }
-//                 dev_jq8400Init();           // Init 声音 UART
-//                 voicePlayStartTick = osKernelGetTickCount();
-//                 outputVoiceBuildAndPlay(voiceOutputIndex, voiceOutputDis, voiceBuffer);
-//             }
-//             break;
-
-//         case VOICE_PLAYING:  // 播报状态下，按键及旋钮静音才会进入静音状态
-//             if (flags & FLAG_P_BUTTON_MUTE || flags & FLAG_S_BUTTON_MUTE)
-//             {
-//                 voice_state = VOICE_MUTED;
-//                 dev_buzzerClose(BUZZER);
-//                 dev_jq8400DeInit();                 // DeInit 声音 UART
-//                 log_d("mute voice.");
-//             }
-//             else if (flags & FLAG_DIS_INVAILD_ALARM)   // 没有收到有效的距离，报警关闭
-//             {
-//                 voice_state = VOICE_OFF;
-//                 dev_buzzerClose(BUZZER);
-//                 dev_jq8400DeInit();                 // DeInit 声音 UART
-//                 // log_d("shutdown voice.");
-//             }
-//             else
-//             {   
-//                 uint32_t voicePlayingTime = 0U;     //  针对三位数距离，播放时间 1790U ，针对三位数以下距离，播放时间
-//                 if (voiceOutputDis <= 20000)        // 播报距离小于10m，1s播报完成
-//                 {
-//                     voicePlayingTime = 1600U;
-//                 }
-//                 else if (voiceOutputDis < 100000 && voiceOutputDis > 20000)         // 播报距离小于10m，1s播报完成
-//                 {
-//                     voicePlayingTime = 1600U;
-//                 }
-//                 else if (voiceOutputDis >= 100000)   // 播报距离大于10m小于100m，1.3s播报完成
-//                 {
-//                     voicePlayingTime = 1900U;
-//                 }
-
-//                 // 播报状态下，延迟个1s的时间确保扬声器能够完整地报出距离
-//                 if (osKernelGetTickCount() - voicePlayStartTick >= voicePlayingTime)
-//                 {
-//                     dev_buzzerClose(BUZZER);
-//                     voice_state = VOICE_OFF;    
-//                 }
-//             }
-//             break;
-
-//         case VOICE_MUTED:  // 被静音状态下，只有按键，旋钮，距离减小超过阈值才会重新开启声音
-//             if (flags & FLAG_P_BUTTON_ALARM || flags & FLAG_S_BUTTON_ALARM || flags & FLAG_DIS_THRELOD_ALARM)
-//             {
-//                 log_d("re-open voice alarm.");
-//                 voice_state = VOICE_PLAYING;
-//                 if (voiceOutputDis < TAG_DIS_ALARM_THRESHOLD)
-//                 {
-//                     dev_buzzerOpen(BUZZER);
-//                 }
-//                 dev_jq8400Init();           // Init 声音 UART
-//                 voicePlayStartTick = osKernelGetTickCount();
-//                 outputVoiceBuildAndPlay(voiceOutputIndex, voiceOutputDis, voiceBuffer);
-//             }
-//             break;
-//         }
-//     }
-// }
-

@@ -15,7 +15,7 @@
 #include "main.h"
 #include "deca_spi.h"
 #include "deca_device_api.h"
-#include "deca_port.h"
+#include "port_dw1000.h"
 #include "cmsis_os.h"
 
 #define DW1000_USE_SPI_DMA 1

@@ -4,6 +4,7 @@
 #include "uthash.h"
 #include "cmsis_os.h"
 #include "elog.h"
+#include "SEGGER_RTT.h"
 
 #define ANCHOR_DEV_ID 0x00
 uint8_t group_id;                   // 组ID，后续会有用处，不同车务段的人员共同施工，各自跟各自的基站通信？？？？
@@ -97,6 +98,28 @@ static dwt_config_t uwb_config_channel9[] = {
         .pdoaMode = DWT_PDOA_M0
     },
 };
+
+/* dw3000 rf 配置 channel5（6.5GHz，与 DW1000 ch5 设备互通）
+ * channel5 @ PRF64M 合法前导码为 9~12，取规范默认值 9
+ * 其余参数与 channel9 保持一致
+ */
+static dwt_config_t uwb_config_channel5[] = {
+    {   /* uwb_config0，channel5 PRF64M 前导码1024 数据率 850K，主要使用 */
+        .chan = 5,
+        .txPreambLength = DWT_PLEN_1024,
+        .rxPAC = DWT_PAC32,
+        .txCode = 9,
+        .rxCode = 9,
+        .sfdType = 1,
+        .dataRate = DWT_BR_850K,
+        .phrMode = DWT_PHRMODE_STD,
+        .phrRate = DWT_PHRRATE_STD,
+        .sfdTO = (1025 + DWT_SFD_LEN8 - 32),
+        .stsMode = DWT_STS_MODE_OFF,
+        .stsLength = DWT_STS_LEN_64,
+        .pdoaMode = DWT_PDOA_M0
+    },
+};
 #elif defined(USE_DW1000)
 /* dw1000 rf 配置 channel5 */
 static dwt_config_t uwb_config_channel5[7] = {
@@ -143,7 +166,6 @@ static dwt_config_t uwb_config_channel5[7] = {
 static uwbAlgorithm_t dummy_Algorithm;
 static uwbAlgorithm_t *current_Algorithm = &dummy_Algorithm;
 extern uwbAlgorithm_t uwbTwr_AnchorAlgorithm;
-extern uwbAlgorithm_t uwbTwr_Dw3000AnchorAlgorithm;
 static dwDevice_t   dw1000_dev;      // 定义dw1000设备，twr使用
 static dwDistance_t distance_data;   // 定义距离管理
 
@@ -154,8 +176,8 @@ typedef struct {
 } uwbAlgorithmEntry_t;
 
 const uwbAlgorithmEntry_t availableAlgorithms[] = {
-    {.algorithm = &uwbTwr_AnchorAlgorithm,       .chipType = UWB_CHIP_DW1000, .name = "TWR ANCHOR DW1000"},
-    {.algorithm = &uwbTwr_Dw3000AnchorAlgorithm, .chipType = UWB_CHIP_DW3000, .name = "TWR ANCHOR DW3000"},
+    {.algorithm = &uwbTwr_AnchorAlgorithm, .chipType = UWB_CHIP_DW1000, .name = "TWR ANCHOR DW1000"},
+    {.algorithm = &uwbTwr_AnchorAlgorithm, .chipType = UWB_CHIP_DW3000, .name = "TWR ANCHOR DW3000"},
     {NULL, 0, NULL}
 };
 
@@ -210,7 +232,7 @@ static int32_t prev_rangeTagDis[MAX_TAG_LIST_SIZE];
 /*******************************************************静态函数声明********************************************************/
 static int get_rxPeakIndex(uint16_t start_index, uint16_t num_samples);
 static void distance_init(dwDistance_t *data);
-static void dw1000Device_init(dwDevice_t *dev);
+static void dwDevice_init(dwDevice_t *dev);
 static void txcallback(const dwt_cb_data_t *cb_data);
 static void rxcallback(const dwt_cb_data_t *cb_data);
 static void rxTimeoutCallback(const dwt_cb_data_t *cb_data);
@@ -231,7 +253,7 @@ static uwbAlgorithm_t* findAlgorithmByChip(uwbChipType chip)
 static void dev_uwbCommonPreInit(dwDevice_t *dev)
 {
     distance_init(get_the_local_structure_of_dis());
-    dw1000Device_init(dev);
+    dwDevice_init(dev);
 
 #if defined(USE_DW3000)
     current_Algorithm = findAlgorithmByChip(UWB_CHIP_DW3000);
@@ -276,25 +298,21 @@ static void dev_uwbCommonPostInit(dwDevice_t *dev)
 #if defined(USE_DW3000)
 static void dev_dw3000Init(dwDevice_t *dev)
 {
-    dwt_config_t *current_rfConfig = &uwb_config_channel9[2];
+    dwt_config_t *current_rfConfig = &uwb_config_channel5[0];
 
+    port_set_dw_ic_spi_fastrate();
+    uint32_t chip_id = dwt_readdevid();
+    SEGGER_RTT_printf(0, "[DW3000] chip_id=0x%08lx (expect 0xDECA0302 or 0xDECA0312)\r\n", chip_id);    
     board_dw3000Rst();
-    port_set_dw_ic_spi_slowrate();
-    if ((dwt_readdevid() & 0xFFFF0000) != 0xDECA0000)
-    {
-        wakeup_device_with_io();
-        dwt_softreset();
-    }
-    board_dw3000Rst();
+    while (!dwt_checkidlerc()) // Need to make sure DW IC is in IDLE_RC before proceeding
+    { };
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR)
     {
         Error_Handler();
     }
-    port_set_dw_ic_spi_fastrate();
-
-    inst_slot_number = MAX_TAG_NUMBER;
-
     dwt_configure(current_rfConfig);
+    
+    inst_slot_number = MAX_TAG_NUMBER;
     inst_dataRate = current_rfConfig->dataRate;
     inst_ch       = current_rfConfig->chan;
 
@@ -329,13 +347,17 @@ static void dev_dw3000Init(dwDevice_t *dev)
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
-    dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT
-                   | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO, 0, DWT_ENABLE_INT);
-
+    // // dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT
+    //                | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO, 0, DWT_ENABLE_INT);
+    
     if (dev->device_mode == ANCHOR)
     {
         dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback, NULL, NULL);
     }
+    dwt_setinterrupt(SYS_ENABLE_LO_TXFRS_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFCG_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFTO_ENABLE_BIT_MASK |
+                     SYS_ENABLE_LO_RXPTO_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXPHE_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFCE_ENABLE_BIT_MASK |
+                     SYS_ENABLE_LO_RXFSL_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXSTO_ENABLE_BIT_MASK, 0, DWT_ENABLE_INT);
+    port_set_dwic_isr(dwt_isr);
 }
 #elif defined(USE_DW1000)
 static void dev_dw1000Init(dwDevice_t *dev)
@@ -665,12 +687,15 @@ static void distance_init(dwDistance_t *data)
 }
 
 /******************************************************Dw1000 Device************************************************************/
-static void dw1000Device_init(dwDevice_t *dev)
+static void dwDevice_init(dwDevice_t *dev)
 {
     dev->device_mode = ANCHOR;
     dev->twr_mode = LISTENER;
+#if defined(USE_DW3000)
+    dev->device_id = dev_getDipVal();
+#elif defined(USE_DW1000)
     dev->device_id = ANCHOR_DEV_ID;
-    // dev->device_id = dev_getDipVal();
+#endif
     dev->remainingRespToRx = -1;     // 初始化为 -1
     dev->rxOtherResp = 0;            // 接收其他基站resp帧计数
     dev->respTxIndex = 0;            // 该变量用于决定基站发送resp帧的位置，跟基站自身ID相关
@@ -679,6 +704,7 @@ static void dw1000Device_init(dwDevice_t *dev)
 #elif defined(USE_DW1000)
     board_dw1000Init();
 #endif
+    SEGGER_RTT_printf(0, "\r\nThe Anchor ID : %d.\r\n", dev->device_id);  
 }
 
 /******************************************************interrupt use callback function************************************************************/
@@ -712,130 +738,6 @@ static void rxfailedcallback(const dwt_cb_data_t *cb_data)
 }
 
 /****************************************************备用配置***********************************************************/
-// {    /* uwb_config3，channel5 脉冲频率64M 前导码长度128 数据率 6M8 */
-    //     .chan = 5,
-    //     .prf = DWT_PRF_64M,
-    //     .txPreambLength = DWT_PLEN_128,
-    //     .rxPAC = DWT_PAC8,
-    //     .txCode = 10,
-    //     .rxCode = 10,
-    //     .nsSFD = 1,
-    //     .dataRate = DWT_BR_6M8,
-    //     .phrMode = DWT_PHRMODE_STD,
-    //     .sfdTO = (129 + DW_NS_SFD_LEN_6M8 - 8)
-    // }, 
-    // {    /* uwb_config4，channel5 脉冲频率64M 前导码长度256 数据率 6M8 */
-    //     .chan = 5,
-    //     .prf = DWT_PRF_64M,
-    //     .txPreambLength = DWT_PLEN_256,
-    //     .rxPAC = DWT_PAC16,
-    //     .txCode = 10,
-    //     .rxCode = 10,
-    //     .nsSFD = 1,
-    //     .dataRate = DWT_BR_6M8,
-    //     .phrMode = DWT_PHRMODE_STD,
-    //     .sfdTO = (257 + DW_NS_SFD_LEN_6M8 - 16)
-    // }, 
-    // {    /* uwb_config5，channel5 脉冲频率64M 前导码长度1024 数据率 110K */
-    //     .chan = 5,
-    //     .prf = DWT_PRF_64M,
-    //     .txPreambLength = DWT_PLEN_1024,
-    //     .rxPAC = DWT_PAC32,
-    //     .txCode = 10,
-    //     .rxCode = 10,
-    //     .nsSFD = 1,
-    //     .dataRate = DWT_BR_110K,
-    //     .phrMode = DWT_PHRMODE_STD,
-    //     .sfdTO = (1025 + DW_NS_SFD_LEN_110K - 32)
-    // }, 
-    // {    /* uwb_config6，channel5 脉冲频率64M 前导码长度2048 数据率 110K */
-    //     .chan = 5,
-    //     .prf = DWT_PRF_64M,
-    //     .txPreambLength = DWT_PLEN_2048,
-    //     .rxPAC = DWT_PAC64,
-    //     .txCode = 10,
-    //     .rxCode = 10,
-    //     .nsSFD = 1,
-    //     .dataRate = DWT_BR_110K,
-    //     .phrMode = DWT_PHRMODE_STD,
-    //     .sfdTO = (2049 + DW_NS_SFD_LEN_110K - 64)
-    // }, 
-
-//static dwt_config_t uwb_config_channel2[6] = {
-//    {   /* uwb_config0，channel2 脉冲频率64M 前导码长度1024 数据率 850K */
-//        .chan = 2,
-//        .prf = DWT_PRF_64M,
-//        .txPreambLength = DWT_PLEN_1024,
-//        .rxPAC = DWT_PAC32,
-//        .txCode = 10,
-//        .rxCode = 10,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_850K,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (1025 + DW_NS_SFD_LEN_850K - 32)
-//    },
-//    {   /* uwb_config1，channel2 脉冲频率64M 前导码长度512 数据率 850K */
-//        .chan = 2,
-//        .prf = DWT_PRF_64M,
-//        .txPreambLength = DWT_PLEN_512,
-//        .rxPAC = DWT_PAC16,
-//        .txCode = 10,
-//        .rxCode = 10,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_850K,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (513 + DW_NS_SFD_LEN_850K - 16)
-//    }, 
-//    {   /* uwb_config2，channel2 脉冲频率64M 前导码长度256 数据率 850K */
-//        .chan = 2,
-//        .prf = DWT_PRF_64M,
-//        .txPreambLength = DWT_PLEN_256,
-//        .rxPAC = DWT_PAC16,
-//        .txCode = 10,
-//        .rxCode = 10,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_850K,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (257 + DW_NS_SFD_LEN_850K - 16)
-//    },
-//    {   /* uwb_config3，channel2 脉冲频率16M 前导码长度1024 数据率 850K */
-//        .chan = 2,
-//        .prf = DWT_PRF_16M,
-//        .txPreambLength = DWT_PLEN_1024,
-//        .rxPAC = DWT_PAC32,
-//        .txCode = 3,
-//        .rxCode = 3,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_850K,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (1025 + DW_NS_SFD_LEN_850K - 32)
-//    },
-//    {   /* uwb_config4，channel2 脉冲频率64M 前导码长度1024 数据率 110K */
-//        .chan = 2,
-//        .prf = DWT_PRF_64M,
-//        .txPreambLength = DWT_PLEN_1024,
-//        .rxPAC = DWT_PAC32,
-//        .txCode = 10,
-//        .rxCode = 10,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_110K,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (1025 + DW_NS_SFD_LEN_110K - 32)
-//    },
-//    {   /* uwb_config5，channel2 脉冲频率64M 前导码长度2048 数据率 110K */
-//        .chan = 2,
-//        .prf = DWT_PRF_64M,
-//        .txPreambLength = DWT_PLEN_2048,
-//        .rxPAC = DWT_PAC64,
-//        .txCode = 10,
-//        .rxCode = 10,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_110K,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (2049 + DW_NS_SFD_LEN_110K - 64)
-//    },
-//};
-
 //static dwt_config_t uwb_config_channel7[] = {
 //    {   /* uwb_config0，channel7 脉冲频率64M 前导码长度128 数据率 6M8 */
 //        .chan = 7,

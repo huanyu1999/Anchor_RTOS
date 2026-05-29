@@ -13,7 +13,7 @@
 
 #include <deca_spi.h>
 #include <deca_device_api.h>
-#include <port.h>
+#include "port_dw3000.h"
 #include <stm32f4xx_hal_def.h>
 
 extern  SPI_HandleTypeDef hspi1;    /*clocked from 72MHz*/

@@ -18,7 +18,7 @@ void task_gnssSyncTime(void* arg)
         // 检测GNSS 定位有效引脚电平，
         dev_gnssModReceiveAndParse();
         dev_gnssModStartRx();
-        tick += 10000;                                  // 固定10s钟进行一次同步
+        tick += 10000;                                      // 固定10s钟进行一次同步
         osDelayUntil(tick);
     }
 }

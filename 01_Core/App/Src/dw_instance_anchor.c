@@ -44,19 +44,18 @@ static inline uint64_t get_rx_timestamp_u64(void);
 static inline void final_msg_get_ts(const uint8_t *ts_field, uint32_t *ts);
 static inline void final_msg_set_ts(uint8_t *ts_field, uint64_t ts);
 
-uwbAlgorithm_t uwbTwr_AnchorAlgorithm = { .init = twrAnchor_Init, .onEvent = twrAnchor_onEvent };   // DW1000 TWR 算法接口
-
-/****************************************************DW3000 TWR stub****************************************************/
-static int twrDw3000Anchor_Init(dwDevice_t *dev);
-static uint32_t twrDw3000Anchor_onEvent(dwDevice_t *dev, uwbEvent_t event);
-
-uwbAlgorithm_t uwbTwr_Dw3000AnchorAlgorithm = { .init = twrDw3000Anchor_Init, .onEvent = twrDw3000Anchor_onEvent };  // DW3000 TWR 算法接口
+// 单套 TWR anchor 算法，DW1000/DW3000 通过函数内 USE_DW1000/USE_DW3000 条件编译区分
+uwbAlgorithm_t uwbTwr_AnchorAlgorithm = { .init = twrAnchor_Init, .onEvent = twrAnchor_onEvent };
 
 /*******************************************DW1000 event function********************************************/
 static int twrAnchor_Init(dwDevice_t *dev)
 {
     dev = get_the_local_structure_of_dev();
+#if defined(USE_DW3000)
+    dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
+#else
     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  // 设置帧过滤模式开启
+#endif
     dwt_setpreambledetecttimeout(0);                        // 清除前导码超时，一直接收
     dwt_setrxtimeout(0);                                    // 清除接收数据超时，一直接收
     int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);         // 打开接收机，等待接收数据，初始接收，进行一次buffer对齐
@@ -97,21 +96,6 @@ static uint32_t twrAnchor_onEvent(dwDevice_t *dev, uwbEvent_t event)
 /* DW3000 算法与 DW1000 共享 rx_buffer、send_processeDis 等静态变量，
  * 后续实现时可直接复用，无需重复定义 */
 
-static int twrDw3000Anchor_Init(dwDevice_t *dev)
-{
-    UNUSED(dev);
-    /* TODO: DW3000 TWR anchor 算法初始化 */
-    return 0;
-}
-
-static uint32_t twrDw3000Anchor_onEvent(dwDevice_t *dev, uwbEvent_t event)
-{
-    UNUSED(dev);
-    UNUSED(event);
-    /* TODO: DW3000 TWR anchor 事件处理 */
-    return 0;
-}
-
 /****************************************************interrupt handle function************************************************/
 static void twrAnchor_rxOkHandle(void)
 {
@@ -119,8 +103,13 @@ static void twrAnchor_rxOkHandle(void)
     dwDistance_t* distance =  get_the_local_structure_of_dis();
     
     uint32 frame_len;
+#if defined(USE_DW3000)
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
+    frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_BIT_MASK;
+#else
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);                          /* Clear good RX frame event in the DW1000 status register. */
     frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFL_MASK_1023;          /* A frame has been received, read it into the local buffer. */
+#endif
     
     if (frame_len < FRAME_LEN_MAX)
     {
@@ -148,7 +137,9 @@ static void twrAnchor_rxOkHandle(void)
         dev->respTxIndex = 0x01 << anc_id;        // 该标志位标识当前基站发送resp帧的位置，先右移，0号基站接收poll帧后，直接发送，1号基站延后一位
         anch_perpareAnc2TagResp();                // 可以在这里就将要发送的resp帧写入发送缓存
         anch_txRespOrRxReEnable();                // 判断是否发送resp帧，还是重新打开接收，接收其他基站的resp帧，还是重新打开接收，接收标签final帧
+#if defined(USE_DW1000)
         dev->indexDiff_poll = uwb_isInNLOS_index(FUNC_CODE_POLL);
+#endif
         break;
 
     case FUNC_CODE_FINAL:                        // 基站每接收到一个标签的final帧，就进行一次TOF计算
@@ -195,11 +186,14 @@ static void twrAnchor_rxOkHandle(void)
                 }
                 tof = tof_dtu * DWT_TIME_UNITS;
                 distance_now_m = tof * SPEED_OF_LIGHT;      // 计算本次TWR测距的结果，单位为m
+#if defined(USE_DW1000)
                 distance_now_m = distance_now_m - dwt_getrangebias(inst_ch, (float)distance_now_m, inst_prf);
-                if(distance_now_m > 20000.000)              // 如果测距结果大于20km，则认为测距失败 
+#endif
+                if(distance_now_m > 20000.000)              // 如果测距结果大于20km，则认为测距失败
                 {
                     distance_now_m = -1;
                 }
+#if defined(USE_DW1000)
                 dev->indexDiff_final = uwb_isInNLOS_index(FUNC_CODE_FINAL);
                 int twr_quality = check_twr_quality(dev->indexDiff_poll, dev->indexDiff_final);
                 dev->indexDiff_poll = 0;
@@ -214,17 +208,18 @@ static void twrAnchor_rxOkHandle(void)
                 {
                     log_d("TWR C, tag %d dis : %.2f", recv_tag_id, (float)(distance_now_m));
                 }
-                else if (twr_quality == 0)               
+                else if (twr_quality == 0)
                 {
-                    prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m                     
+                    prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m
                     log_d("TWR A, tag %d dis : %.2f", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
-                } 
+                }
                 else if (twr_quality == 1)
                 {
-                    prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m，                      
+                    prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m，
                     log_d("TWR B, tag %d dis : %.2f", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
                 }
-#endif 
+#endif
+#endif  // USE_DW1000
                 // send_processeDis.distance = prev_range[recv_tag_id];
                 send_processeDis.distance = distance_now_m * 1000;
                 send_processeDis.tag_id   = recv_tag_id;
@@ -324,11 +319,15 @@ static void anch_txRespOrRxReEnable(void)
     {
         // 轮到该基站发送resp帧
         uint64_t resp_tx_time;
+#if defined(USE_DW1000)
         if (inst_dataRate == DWT_BR_110K)
         {
             resp_tx_time = (poll_rx_ts + (FIRST_RESP_SEND_110K + anc_id * inst_data_interval) * UUS_TO_DWT_TIME + (ANC_RESP_SEND_BACK_110K * UUS_TO_DWT_TIME));
         }
         else if (inst_dataRate == DWT_BR_6M8)
+#else
+        if (inst_dataRate == DWT_BR_6M8)
+#endif
         {
             resp_tx_time = (poll_rx_ts + (FIRST_RESP_SEND_6P8M + anc_id * inst_data_interval) * UUS_TO_DWT_TIME + (ANC_RESP_SEND_BACK_6P8M * UUS_TO_DWT_TIME));
         }
@@ -377,19 +376,27 @@ static void anch_txRespOrRxReEnable(void)
         // }
         else                                                           // 打开延迟接收，用于接收resp帧
         {
+#if defined(USE_DW3000)
+            dwt_configureframefilter(0, 0);                     // 关闭帧过滤，能够接收所有数据
+#else
             dwt_enableframefilter(DWT_FF_NOTYPE_EN);            // 关闭帧过滤，能够接收所有数据
+#endif
 
             //设置resp数据接收机开启时间
             uint64_t resp_rx_time;
+#if defined(USE_DW1000)
             if (inst_dataRate == DWT_BR_110K)
                 resp_rx_time = (poll_rx_ts + ((FIRST_RESP_SEND_110K + (MAX_AHCHOR_NUMBER - handleResp_times) * inst_data_interval) * UUS_TO_DWT_TIME));
 
             else if (inst_dataRate == DWT_BR_6M8)
+#else
+            if (inst_dataRate == DWT_BR_6M8)
+#endif
                 resp_rx_time = (poll_rx_ts + ((FIRST_RESP_SEND_6P8M + (MAX_AHCHOR_NUMBER - handleResp_times) * inst_data_interval) * UUS_TO_DWT_TIME));
 
             else if (inst_dataRate == DWT_BR_850K)
                 resp_rx_time = (poll_rx_ts + ((FIRST_RESP_SEND_850K + (MAX_AHCHOR_NUMBER - handleResp_times) * inst_data_interval) * UUS_TO_DWT_TIME));
-            else 
+            else
                 return ;
 
             resp_rx_time = resp_rx_time >> 8;
@@ -412,7 +419,11 @@ static void anch_txRespOrRxReEnable(void)
 static void anch_rxRenableImmdiate(dwDevice_t *dev)
 {
     dev = get_the_local_structure_of_dev();
+#if defined(USE_DW3000)
+    dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
+#else
     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  // 设置帧过滤模式开启
+#endif
     dwt_setpreambledetecttimeout(0);                        // 清除前导码超时，一直接收
     dwt_setrxtimeout(0);                                       // 清除接收数据超时，一直接收
     int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);            // 打开接收机，等待接收数据    

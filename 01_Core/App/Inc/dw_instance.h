@@ -3,7 +3,6 @@
 
 #include <stdio.h>
 #include <string.h>
-// #include <__clang_hip_stdlib.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -12,20 +11,39 @@
 #if defined(USE_DW3000)
 #pragma message_1("Building for dw3000")
 #include "board_dw3000.h"
-#include "port.h"
+#include "port_dw3000.h"
 /* DW1000 deca_types.h 定义了 uint8/uint16/uint32/int32，DW3000 没有，补上兼容定义 */
 typedef uint8_t  uint8;
 typedef uint16_t uint16;
 typedef uint32_t uint32;
 typedef int32_t  int32;
-/* DW3000 SDK 不提供 UUS_TO_DWT_TIME，值与 DW1000 相同 */
+/* DW3000 SDK 不提供以下常量/宏，值取自 DW1000 deca_device_api.h，TWR 算法共用 */
 #ifndef UUS_TO_DWT_TIME
 #define UUS_TO_DWT_TIME 65536
+#endif
+#ifndef FRAME_LEN_MAX
+#define FRAME_LEN_MAX (127)
+#endif
+#ifndef SPEED_OF_LIGHT
+#define SPEED_OF_LIGHT (299702547.0)
+#endif
+#ifndef FINAL_MSG_TS_LEN
+#define FINAL_MSG_TS_LEN 4
+#include "../01_Core/Dw3000/decadriver/deca_device_api.h"
+#include "../01_Core/Dw3000/decadriver/deca_regs.h"
+#include "../01_Core/Dw3000/decadriver/deca_types.h"
+#include "../01_Core/Dw3000/platform/port_dw3000.h"
+#include "../01_Core/Dw3000/platform/deca_spi.h"
 #endif
 #elif defined(USE_DW1000)
 // #pragma message_2("Building for dw1000")
 #include "board_dw1000.h"
-#include "deca_port.h"
+#include "port_dw1000.h"
+#include "../01_Core/Dw1000/decadriver/deca_device_api.h"
+#include "../01_Core/Dw1000/decadriver/deca_regs.h"
+#include "../01_Core/Dw1000/decadriver/deca_types.h"
+#include "../01_Core/Dw3000/platform/port_dw1000.h"
+#include "../01_Core/Dw1000/platform/deca_spi.h"
 #else
 #error "Please define USE_DW1000 or USE_DW3000"
 #endif
@@ -34,10 +52,7 @@ typedef int32_t  int32;
 #include "drv_timer.h"
 #include "iwdg.h"
 
-#include "deca_device_api.h"
-#include "deca_regs.h"
-#include "deca_types.h"
-#include "deca_spi.h"
+
 
 
 /***********************************************************************************************/

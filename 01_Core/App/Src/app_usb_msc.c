@@ -29,14 +29,14 @@
 /* ============================================================
  *  FreeRTOS task — 驱动 TinyUSB 事件循环
  * ============================================================ */
-static uint8_t      s_task_usb_buf[512];
-static StaticTask_t s_task_usb_cb;
+static uint8_t      task_usb_buf[1024];
+static StaticTask_t task_usb_cb;
 static const osThreadAttr_t s_task_usb_attr = {
     .name       = "task_usbMsc",
-    .stack_mem  = s_task_usb_buf,
-    .stack_size = sizeof(s_task_usb_buf),
-    .cb_mem     = &s_task_usb_cb,
-    .cb_size    = sizeof(s_task_usb_cb),
+    .stack_mem  = task_usb_buf,
+    .stack_size = sizeof(task_usb_buf),
+    .cb_mem     = &task_usb_cb,
+    .cb_size    = sizeof(task_usb_cb),
     .priority   = (osPriority_t)osPriorityHigh,
 };
 

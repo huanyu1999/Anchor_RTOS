@@ -27,17 +27,14 @@
 #define BUZZER_PIN              GPIO_PIN_10
 #define BUZZER_GPIO_PORT        GPIOE
 
-#define ANCHORID0_PIN           GPIO_PIN_5
+#define ANCHORID0_PIN           GPIO_PIN_2
 #define ANCHORID0_GPIO_PORT     GPIOE
 
-#define ANCHORID1_PIN           GPIO_PIN_4
+#define ANCHORID1_PIN           GPIO_PIN_3
 #define ANCHORID1_GPIO_PORT     GPIOE
 
-#define ANCHORID2_PIN           GPIO_PIN_3
+#define ANCHORID2_PIN           GPIO_PIN_4
 #define ANCHORID2_GPIO_PORT     GPIOE
-
-#define ANCHORID3_PIN           GPIO_PIN_2
-#define ANCHORID3_GPIO_PORT     GPIOE
 
 typedef enum {
     RT9013_EN,
@@ -51,7 +48,6 @@ typedef enum {
     ANCHOR_ID0,
     ANCHOR_ID1,
     ANCHOR_ID2,
-    ANCHOR_ID3,
     IO_NUM
 } gpioBoard_enum_t;
 

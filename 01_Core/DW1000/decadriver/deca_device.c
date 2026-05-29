@@ -17,7 +17,7 @@
 #include "deca_param_types.h"
 #include "deca_regs.h"
 #include "deca_device_api.h"
-#include "deca_port.h"
+#include "port_dw1000.h"
 #include "dw_instance.h"
 #include <math.h>
 

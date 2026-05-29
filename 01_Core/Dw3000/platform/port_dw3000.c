@@ -11,7 +11,9 @@
  * @author DecaWave
  */
 
-#include <port.h>
+#include "port_dw3000.h"
+#include "elog.h"
+#include "cmsis_os.h"
 
 /****************************************************************************//**
  *
@@ -40,10 +42,18 @@ static port_dwic_isr_t port_dwic_isr = NULL;
  *        CLOCKS_PER_SEC frequency.
  *        The resolution of time32_incr is usually 1/1000 sec.
  * */
-__INLINE uint32_t
-portGetTickCnt(void)
+// __INLINE uint32_t
+// portGetTickCnt(void)
+// {
+//     return HAL_GetTick();
+// }
+
+unsigned long portGetTickCnt(void)
 {
-    return HAL_GetTick();
+	// return HAL_GetTick() - sys_time_diff;
+	// 暂时先不用TIM6的中断计数，采用RTOS时基计数
+    uint32_t tick = osKernelGetTickCount();
+    return tick;
 }
 
 /* @fn    usleep
@@ -132,8 +142,8 @@ void make_very_short_wakeup_io(void)
 }
 
 /* @fn      port_set_dw_ic_spi_slowrate
- * @brief   set 4.5MHz
- *          note: hspi1 is clocked from 72MHz
+ * @brief   set 5.25MHz
+ *          note: hspi1 is clocked from 84MHz
  * */
 void port_set_dw_ic_spi_slowrate(void)
 {
@@ -142,12 +152,13 @@ void port_set_dw_ic_spi_slowrate(void)
 }
 
 /* @fn      port_set_dw_ic_spi_fastrate
- * @brief   set 18MHz
- *          note: hspi1 is clocked from 72MHz
+ * @brief   set 21MHz
+ *          note: hspi1 is clocked from 84MHz
  * */
 void port_set_dw_ic_spi_fastrate(void)
 {
-    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+    // hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
     HAL_SPI_Init(&hspi1);
 }
 
@@ -234,3 +245,11 @@ void port_set_dwic_isr(port_dwic_isr_t dwic_isr)
         port_EnableEXT_IRQ();
     }
 }
+
+#if defined(USE_DW3000) && !defined(NDEBUG)
+void __aeabi_assert(const char *expr, const char *file, int line)
+{
+    log_e("ASSERT: %s at %s:%d", expr, file, line);
+    while (1) { }
+}
+#endif

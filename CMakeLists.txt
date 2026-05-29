@@ -378,6 +378,7 @@ foreach(TGT IN LISTS TARGETS)
     target_compile_definitions(${ELF} PRIVATE
         USE_HAL_DRIVER
         STM32F405xx
+        USE_DW3000
     )
 
     # 头文件：公共 + 对应 DW 厂家驱动

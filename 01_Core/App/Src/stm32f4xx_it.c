@@ -95,52 +95,58 @@ void NMI_Handler(void)
 /**
   * @brief This function handles Hard fault interrupt.
   */
-void HardFault_Handler(void)
+/*
+ * 用 C 上报故障现场。由下面的 naked HardFault_Handler 传入正确的 SP 和
+ * EXC_RETURN —— 必须在汇编里第一时间抓取 LR(=EXC_RETURN)，不能在 C 函数
+ * 序言执行之后再读 LR（那时 LR 已被改写，会导致选错栈、读出垃圾栈帧）。
+ */
+void hardfault_report(uint32_t *sp, uint32_t exc_return)
 {
-  volatile uint32_t cfsr  = SCB->CFSR;   /* Configurable Fault Status */
-  volatile uint32_t hfsr  = SCB->HFSR;   /* HardFault Status */
-  volatile uint32_t mmfar = SCB->MMFAR;  /* MemManage Fault Address */
-  volatile uint32_t bfar  = SCB->BFAR;   /* BusFault Address */
-  volatile uint32_t lr;                  /* EXC_RETURN（判断使用 MSP/PSP） */
+    volatile uint32_t cfsr  = SCB->CFSR;   /* Configurable Fault Status */
+    volatile uint32_t hfsr  = SCB->HFSR;   /* HardFault Status */
+    volatile uint32_t mmfar = SCB->MMFAR;  /* MemManage Fault Address */
+    volatile uint32_t bfar  = SCB->BFAR;   /* BusFault Address */
 
-  __asm volatile ("MOV %0, LR" : "=r" (lr));
+    /* 从（正确选中的）栈帧中读取故障现场寄存器 */
+    volatile uint32_t stacked_r0  = sp[0];
+    volatile uint32_t stacked_r1  = sp[1];
+    volatile uint32_t stacked_r2  = sp[2];
+    volatile uint32_t stacked_r3  = sp[3];
+    volatile uint32_t stacked_r12 = sp[4];
+    volatile uint32_t stacked_lr  = sp[5];  /* 故障前的返回地址 */
+    volatile uint32_t stacked_pc  = sp[6];  /* 故障指令地址 */
+    volatile uint32_t stacked_psr = sp[7];
 
-  /* 根据 EXC_RETURN bit2 判断故障时使用的栈指针 */
-  volatile uint32_t *sp;
-  if (lr & 0x04)
-  {
-    __asm volatile ("MRS %0, PSP" : "=r" (sp));   /* 任务栈 */
-  }
-  else
-  {
-    __asm volatile ("MRS %0, MSP" : "=r" (sp));   /* 主栈 */
-  }
+    /*
+    * 调试器暂停后，Locals / Watch 窗口可直接查看：
+    *   stacked_pc  — 故障指令地址，对照 .map 文件定位函数
+    *   stacked_lr  — 调用者返回地址
+    *   exc_return  — bit2=1 PSP(任务栈) / bit2=0 MSP(主栈)
+    *   cfsr        — bit[15:0] MemManage+BusFault, bit[31:16] UsageFault
+    *   hfsr        — bit30=FORCED 表示升级为 HardFault
+    *   mmfar/bfar  — 如果 cfsr 对应 valid 位置位，则为故障地址
+    */
 
-  /* 从栈帧中读取故障现场寄存器 */
-  volatile uint32_t stacked_r0  = sp[0];
-  volatile uint32_t stacked_r1  = sp[1];
-  volatile uint32_t stacked_r2  = sp[2];
-  volatile uint32_t stacked_r3  = sp[3];
-  volatile uint32_t stacked_r12 = sp[4];
-  volatile uint32_t stacked_lr  = sp[5];  /* 故障前的返回地址 */
-  volatile uint32_t stacked_pc  = sp[6];  /* 故障指令地址 */
-  volatile uint32_t stacked_psr = sp[7];
+    (void)cfsr; (void)hfsr; (void)mmfar; (void)bfar; (void)exc_return;
+    (void)stacked_r0; (void)stacked_r1; (void)stacked_r2; (void)stacked_r3;
+    (void)stacked_r12; (void)stacked_lr; (void)stacked_pc; (void)stacked_psr;
 
-  /*
-   * 在 Keil 调试器中暂停后，Locals / Watch 窗口可直接查看：
-   *   stacked_pc  — 故障指令地址，对照 .map 文件定位函数
-   *   stacked_lr  — 调用者返回地址
-   *   cfsr        — bit[15:0] MemManage+BusFault, bit[31:16] UsageFault
-   *   hfsr        — bit30=FORCED 表示升级为 HardFault
-   *   mmfar/bfar  — 如果 cfsr 对应 valid 位置位，则为故障地址
-   */
+    while (1)
+    {}
+}
 
-  (void)cfsr; (void)hfsr; (void)mmfar; (void)bfar;
-  (void)stacked_r0; (void)stacked_r1; (void)stacked_r2; (void)stacked_r3;
-  (void)stacked_r12; (void)stacked_lr; (void)stacked_pc; (void)stacked_psr;
-
-  while (1)
-  {}
+__attribute__((naked)) void HardFault_Handler(void)
+{
+    __asm volatile
+    (
+        "tst lr, #4               \n"  /* 测试 EXC_RETURN bit2 */
+        "ite eq                   \n"
+        "mrseq r0, msp            \n"  /* bit2=0 → 故障时用 MSP（主栈） */
+        "mrsne r0, psp            \n"  /* bit2=1 → 故障时用 PSP（任务栈） */
+        "mov r1, lr               \n"  /* 把真正的 EXC_RETURN 传给 C */
+        "ldr r2, =hardfault_report\n"
+        "bx r2                    \n"
+    );
 }
 
 /**
@@ -148,11 +154,11 @@ void HardFault_Handler(void)
   */
 void MemManage_Handler(void)
 {
-  volatile uint32_t cfsr  = SCB->CFSR;
-  volatile uint32_t mmfar = SCB->MMFAR;
-  (void)cfsr; (void)mmfar;
-  while (1)
-  {}
+    volatile uint32_t cfsr  = SCB->CFSR;
+    volatile uint32_t mmfar = SCB->MMFAR;
+    (void)cfsr; (void)mmfar;
+    while (1)
+    {}
 }
 
 /**
@@ -160,11 +166,11 @@ void MemManage_Handler(void)
   */
 void BusFault_Handler(void)
 {
-  volatile uint32_t cfsr = SCB->CFSR;
-  volatile uint32_t bfar = SCB->BFAR;
-  (void)cfsr; (void)bfar;
-  while (1)
-  {}
+    volatile uint32_t cfsr = SCB->CFSR;
+    volatile uint32_t bfar = SCB->BFAR;
+    (void)cfsr; (void)bfar;
+    while (1)
+    {}
 }
 
 /**

@@ -1,12 +1,12 @@
 #include "board_dw3000.h"
 #include "gpio.h"
-#include "port.h"
+#include "port_dw3000.h"
 
 static volatile uint32_t signalResetDone;
 
 static gpio_config_t dw3000_boardParam[] = {
-    {.gpio_port = Dw3000_RSTn_GPIO_Port, .clk_port = GPIO_PORT_C, .gpio_pin = Dw3000_RSTn_Pin, .gpio_mode = GPIO_MODE_OUTPUT_OD, .gpio_pull = GPIO_NOPULL, .gpio_speed = NULL},
-    {.gpio_port = Dw3000_IRQ_GPIO_Port,  .clk_port = GPIO_PORT_A, .gpio_pin = Dw3000_IRQ_Pin,  .gpio_mode = GPIO_MODE_IT_RISING, .gpio_pull = GPIO_PULLDOWN, .gpio_speed = NULL},
+    {.gpio_port = Dw3000_RSTn_GPIO_Port, .clk_port = GPIO_PORT_C, .gpio_pin = Dw3000_RSTn_Pin, .gpio_mode = GPIO_MODE_OUTPUT_OD, .gpio_pull = GPIO_NOPULL, .gpio_speed = 0},
+    {.gpio_port = Dw3000_IRQ_GPIO_Port,  .clk_port = GPIO_PORT_A, .gpio_pin = Dw3000_IRQ_Pin,  .gpio_mode = GPIO_MODE_IT_RISING, .gpio_pull = GPIO_PULLDOWN, .gpio_speed = 0},
 };
 
 static exti_irq_t exti_config[] = {
@@ -26,6 +26,13 @@ void board_dw3000Init(void)
     GPIO_InitStructure.Mode = GPIO_MODE_IT_RISING;
     GPIO_InitStructure.Pull = GPIO_PULLDOWN;
     HAL_GPIO_Init(Dw3000_IRQ_GPIO_Port, &GPIO_InitStructure);
+
+    /* 必须在 port_set_dwic_isr() 使能 EXTI 之前设好 NVIC 优先级。否则该 IRQ
+     * 会以复位默认优先级 0（高于 configMAX_SYSCALL_INTERRUPT_PRIORITY）被使能，
+     * 中断里调用 osMessageQueuePut(FromISR) 会触发 FreeRTOS 的
+     * configASSERT(ucCurrentPriority >= ucMaxSysCallPriority)。优先级在
+     * board_dw3000IRQInit() 中会再次设为相同值，重复设置无害。 */
+    HAL_NVIC_SetPriority(exti_config[0].irq_name, exti_config[0].irq_priority, 0);
 }
 
 void board_dw3000IRQInit(void)

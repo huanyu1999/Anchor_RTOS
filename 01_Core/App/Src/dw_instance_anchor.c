@@ -273,7 +273,7 @@ static uint8_t twrAnchor_rxErrorOrTimeoutHandle(void)
 {
     dwDevice_t* dev = get_the_local_structure_of_dev();
 
-    // 面对接收超时，分为3种，接收poll帧，接收resp帧，接收final帧
+    // 接收超时有3种情况，接收poll帧超时，接收resp帧超时，接收final帧超时
     // 接收poll异常，重新打开接收
     // 接收final异常，重新打开接收
     // 接收resp异常，继续后续的发送resp或者接收resp，或者接收final

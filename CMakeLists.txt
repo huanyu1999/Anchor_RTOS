@@ -364,6 +364,7 @@ set(COMMON_LINK_OPTIONS
     -mfpu=fpv4-sp-d16
     -mfloat-abi=hard
     -specs=nano.specs
+    -u _printf_float        # nano.specs 默认裁掉 printf/vsnprintf 的浮点支持，需显式拉入，否则 log_d 的 %f 不输出
     -lc
     -lm
     # -lnosys

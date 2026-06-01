@@ -11,15 +11,15 @@
 
 /* ======================== 核心功能 ======================== */
 #define MODULE_UWB_ENABLE           1   /* UWB 测距（DW1000/DW3000） */
-#define MODULE_ALARM_ENABLE         1   /* 分级报警（语音 + 蜂鸣器 + LED） */
+#define MODULE_ALARM_ENABLE         0   /* 分级报警（语音 + 蜂鸣器 + LED） */
 #define MODULE_CAN_ENABLE           1   /* CAN 总线通信（双基站联动） */
 
 /* ======================== 存储 & 日志 ======================== */
 #define MODULE_EMMC_ENABLE          1   /* eMMC + FatFS */
 #define MODULE_LOG_MANAGE_ENABLE    1   /* 业务日志写入 eMMC */
-#define MODULE_USB_MSC_ENABLE       1   /* USB MSC（U盘模式导出日志） */
+#define MODULE_USB_MSC_ENABLE       0   /* USB MSC（U盘模式导出日志） */
 
-/* ======================== 网络 & 定位 ======================== */
+/* ======================== 网络 & 卫星授时 ======================== */
 #define MODULE_W5500_ENABLE         1   /* W5500 以太网 */
 #define MODULE_GNSS_ENABLE          1   /* GNSS 定位 */
 

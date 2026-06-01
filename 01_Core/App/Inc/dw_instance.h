@@ -42,7 +42,7 @@ typedef int32_t  int32;
 #include "../01_Core/Dw1000/decadriver/deca_device_api.h"
 #include "../01_Core/Dw1000/decadriver/deca_regs.h"
 #include "../01_Core/Dw1000/decadriver/deca_types.h"
-#include "../01_Core/Dw3000/platform/port_dw1000.h"
+#include "../01_Core/Dw1000/platform/port_dw1000.h"
 #include "../01_Core/Dw1000/platform/deca_spi.h"
 #else
 #error "Please define USE_DW1000 or USE_DW3000"

@@ -100,21 +100,21 @@ static dwt_config_t uwb_config_channel9[] = {
 };
 
 /* dw3000 rf 配置 channel5（6.5GHz，与 DW1000 ch5 设备互通）
- * channel5 @ PRF64M 合法前导码为 9~12，取规范默认值 9
+ * channel5 @ PRF64M 合法前导码为 9~12，取10
  * 其余参数与 channel9 保持一致
  */
 static dwt_config_t uwb_config_channel5[] = {
-    {   /* uwb_config0，channel5 PRF64M 前导码1024 数据率 850K，主要使用 */
+    {   /* uwb_config0，channel5 PRF64M 前导码长度1024 数据率 850K，主要使用 */
         .chan = 5,
         .txPreambLength = DWT_PLEN_1024,
         .rxPAC = DWT_PAC32,
-        .txCode = 9,
-        .rxCode = 9,
-        .sfdType = 1,
+        .txCode = 10,
+        .rxCode = 10,
+        .sfdType = 2,                   // choose 2 for DW 16-bit
         .dataRate = DWT_BR_850K,
         .phrMode = DWT_PHRMODE_STD,
         .phrRate = DWT_PHRRATE_STD,
-        .sfdTO = (1025 + DWT_SFD_LEN8 - 32),
+        .sfdTO = (1025 + DWT_SFD_LEN16 - 32),
         .stsMode = DWT_STS_MODE_OFF,
         .stsLength = DWT_STS_LEN_64,
         .pdoaMode = DWT_PDOA_M0
@@ -449,10 +449,10 @@ void dev_uwbInit(void)
 
 void logOut_dw1000Config(void)
 {
-    dwDevice_t *dev = get_the_local_structure_of_dev();
+    // dwDevice_t *dev = get_the_local_structure_of_dev();
 
-    log_i("Firmware Ver = %s * Role = %s * addr = %x", SOFTWARE_VER, (dev->device_mode == TAG) ? "TAG" : "AHCHOR",dev->device_id);
-    log_i("Max_anc_num = %d * max_tag_num = %d * sync = 0", MAX_AHCHOR_NUMBER, inst_slot_number);
+    // log_i("Firmware Ver = %s * Role = %s * addr = %x", SOFTWARE_VER, (dev->device_mode == TAG) ? "TAG" : "AHCHOR",dev->device_id);
+    // log_i("Max_anc_num = %d * max_tag_num = %d * sync = 0", MAX_AHCHOR_NUMBER, inst_slot_number);
     // log_i("* baud_rate = %s\r\n* channel = CH%d", (inst_dataRate == DWT_BR_110K) ? "110K" : "850K", inst_ch);
     // log_i("* data_rate = %dHz\r\n* update_time = %dms", 1000 / (inst_slot_number * inst_one_slot_time),
     //       inst_slot_number * inst_one_slot_time);
@@ -474,7 +474,7 @@ void task_uwb(void *arg)
     board_dw1000IRQInit();
 #endif
     for (;;)
-    {   // 遵循先中断，后处理的思路，
+    {   
         osStatus_t status = osSemaphoreAcquire(sema_uwbInt, osWaitForever); // 采用中断触发的方式执行，获取信号量
         if (status == osOK)
         {

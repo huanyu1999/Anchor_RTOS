@@ -111,11 +111,15 @@ uint8_t* dev_rx8130ceGetDateTime(volatile rx8130ce_time_t *time)
     time->minutes = dev_rx8130ceBcd2Bin(temp_data[1]);
     time->seconds = dev_rx8130ceBcd2Bin(temp_data[0]);
 
+    /* WDAY 寄存器为 one-hot 编码（bit0=周日 .. bit6=周六）。
+       若 I2C 读失败或 RTC 未初始化导致读回 0，原本的右移查找会死循环，
+       这里加掩码 + 边界保护，读到非法值时星期记为 0 并直接返回。 */
+    uint8_t wday = temp_data[3] & 0x7F;
     time->week = 0;
-    while ((temp_data[3] & 1) == 0)
+    while (wday != 0 && (wday & 1) == 0 && time->week < 6)
     {
         time->week++;
-        temp_data[3] >>= 1;
+        wday >>= 1;
     }
 
     return temp_data;

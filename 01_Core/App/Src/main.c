@@ -53,7 +53,8 @@ static uint8_t task_swoOutput_buffer[1024];
 StaticTask_t task_swoOutput_cb;
 const osThreadAttr_t task_swoOutput_attr = {
     .name      = "task_swoOutput",
-    .stack_mem = task_swoOutput_buffer, .stack_size = sizeof(task_swoOutput_buffer), .cb_mem = &task_swoOutput_cb, .cb_size = sizeof(task_swoOutput_cb),
+    .stack_mem = task_swoOutput_buffer, .stack_size = sizeof(task_swoOutput_buffer), 
+    .cb_mem = &task_swoOutput_cb, .cb_size = sizeof(task_swoOutput_cb),
     .priority  = (osPriority_t) osPriorityRealtime5,
 };
 
@@ -62,7 +63,8 @@ static uint8_t task_main_buffer[1024];  /* 启动任务：初始化调用链较�
 StaticTask_t task_main_cb;
 const osThreadAttr_t task_main_attr = {
     .name      = "task_main",
-    .stack_mem = task_main_buffer, .stack_size = sizeof(task_main_buffer), .cb_mem = &task_main_cb, .cb_size = sizeof(task_main_cb),
+    .stack_mem = task_main_buffer, .stack_size = sizeof(task_main_buffer), 
+    .cb_mem = &task_main_cb, .cb_size = sizeof(task_main_cb),
     .priority  = (osPriority_t) osPriorityRealtime4,
 };
 
@@ -145,7 +147,8 @@ void SystemClock_Config(void)
     }
     
     /* Initializes the CPU, AHB and APB buses clocks */
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 
+                                | RCC_CLOCKTYPE_PCLK2;
     RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
     RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
@@ -214,20 +217,20 @@ void task_mainProcess(void* arg)
 /************************************************* swo log **************************************************/
 void swo_init(void)
 {
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-    GPIO_InitTypeDef GPIO_InitStructure = {0};
-    GPIO_InitStructure.Pin = SWO_GPIO_PIN;
-    GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStructure.Pull = GPIO_NOPULL;
-    GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
-    GPIO_InitStructure.Alternate = GPIO_AF0_TRACE;
-    HAL_GPIO_Init(SWO_GPIO_PORT, &GPIO_InitStructure);
+    // __HAL_RCC_GPIOB_CLK_ENABLE();
+    // GPIO_InitTypeDef GPIO_InitStructure = {0};
+    // GPIO_InitStructure.Pin = SWO_GPIO_PIN;
+    // GPIO_InitStructure.Mode = GPIO_MODE_AF_PP;
+    // GPIO_InitStructure.Pull = GPIO_NOPULL;
+    // GPIO_InitStructure.Speed = GPIO_SPEED_FREQ_HIGH;
+    // GPIO_InitStructure.Alternate = GPIO_AF0_TRACE;
+    // HAL_GPIO_Init(SWO_GPIO_PORT, &GPIO_InitStructure);
 
-    // 打开 SWO 功能 LAR(Lock Acess reg) TCR(Trace control reg) TER(Trace Enable reg)
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;  // Enable trace
-    ITM->LAR  = 0xC5ACCE55;                          // Unlock ITM
-    ITM->TCR  = ITM_TCR_ITMENA_Msk | ITM_TCR_SYNCENA_Msk | ITM_TCR_TSENA_Msk;
-    ITM->TER  = 0x1;                                 // Enable stimulus port 0   
+    // // 打开 SWO 功能 LAR(Lock Acess reg) TCR(Trace control reg) TER(Trace Enable reg)
+    // CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;  // Enable trace
+    // ITM->LAR  = 0xC5ACCE55;                          // Unlock ITM
+    // ITM->TCR  = ITM_TCR_ITMENA_Msk | ITM_TCR_SYNCENA_Msk | ITM_TCR_TSENA_Msk;
+    // ITM->TER  = 0x1;                                 // Enable stimulus port 0   
 }
 
 void task_swoOutPut(void *arg)
@@ -240,7 +243,8 @@ void task_swoOutPut(void *arg)
     {
         extern StreamBufferHandle_t log_streamBufferHandle;
         // 阻塞等待 streambuffer 数据，转发到 SEGGER RTT 通道 0
-        num_bytes = xStreamBufferReceive(log_streamBufferHandle, temp_buf, sizeof(temp_buf), portMAX_DELAY);
+        num_bytes = xStreamBufferReceive(log_streamBufferHandle, temp_buf, sizeof(temp_buf), 
+                    portMAX_DELAY);
         SEGGER_RTT_Write(0, temp_buf, num_bytes);
 
         // --- 原 SWO/ITM 输出路径（保留以便回滚）---

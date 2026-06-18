@@ -58,8 +58,8 @@ void Error_Handler(void);
 
 /* Private defines -----------------------------------------------------------*/
 /* USER CODE BEGIN Private defines */
-#define SWO_GPIO_PORT   GPIOB
-#define SWO_GPIO_PIN    GPIO_PIN_3   
+// #define SWO_GPIO_PORT   GPIOB
+// #define SWO_GPIO_PIN    GPIO_PIN_3   
 
 #define ARRAY_LENGTH(arr) (sizeof(arr) / sizeof((arr)[0]))
 

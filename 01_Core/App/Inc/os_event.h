@@ -22,8 +22,8 @@ typedef enum {
 typedef enum {
     ALARM_LEVEL_0,       // 安全：> 50m 或无有效距离
     ALARM_LEVEL_1,       // 注意：20~50m，间隔播报
-    ALARM_LEVEL_2,       // 警告：10~20m，连续播报
-    ALARM_LEVEL_3,       // 危险：< 10m，紧急语音 + 蜂鸣器
+    ALARM_LEVEL_2,       // 警告：10~20m，密集播报
+    ALARM_LEVEL_3,       // 危险：< 10m，连续紧急语音 + 蜂鸣器
     ALARM_MUTED,         // 被静音
 } alarm_state_t;
 

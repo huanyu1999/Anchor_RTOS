@@ -82,19 +82,22 @@ static uint32_t voiceIntervalMs = VOICE_INTERVAL_L1;  // 当前等级对应的�
 osSemaphoreId_t sema_w5500Int;
 StaticSemaphore_t sema_w5500Int_cb;
 const osSemaphoreAttr_t sema_w5500Int_attr = {
-    .name = "sema_w5500Int", .cb_mem = &sema_w5500Int_cb, .cb_size = sizeof(sema_w5500Int_cb)
+    .name = "sema_w5500Int", 
+    .cb_mem = &sema_w5500Int_cb, .cb_size = sizeof(sema_w5500Int_cb)
 };
 
 osSemaphoreId_t sema_elogLock;                                // elog_lock output Semaphore
 StaticSemaphore_t sema_elogLock_cb;
 const osSemaphoreAttr_t sema_elogLock_attr = {
-    .name = "sema_elogLock", .cb_mem = &sema_elogLock_cb, .cb_size = sizeof(sema_elogLock_cb)
+    .name = "sema_elogLock", 
+    .cb_mem = &sema_elogLock_cb, .cb_size = sizeof(sema_elogLock_cb)
 };
 
 osSemaphoreId_t sema_gnssReceive;                             // 用于GNSS接收完成同步
 StaticSemaphore_t sema_gnssReceive_cb;
 const osSemaphoreAttr_t sema_gnssReceive_attr = {
-    .name = "sema_gnssReceive", .cb_mem = &sema_gnssReceive_cb, .cb_size = sizeof(sema_gnssReceive_cb)
+    .name = "sema_gnssReceive", 
+    .cb_mem = &sema_gnssReceive_cb, .cb_size = sizeof(sema_gnssReceive_cb)
 };
 
 // osSemaphoreId_t elog_asyncSem;                              // 用于elog_async
@@ -119,7 +122,8 @@ outDistance_t         queue_minimalDis_buf[16];
 StaticQueue_t queue_minimalDis_cb;
 const osMessageQueueAttr_t queue_minimalDis_attr = {
     .name    = "queue_minimalDis",
-    .mq_mem  = &queue_minimalDis_buf, .mq_size = sizeof(queue_minimalDis_buf), .cb_mem  = &queue_minimalDis_cb, .cb_size = sizeof(queue_minimalDis_cb),
+    .mq_mem  = &queue_minimalDis_buf, .mq_size = sizeof(queue_minimalDis_buf), 
+    .cb_mem  = &queue_minimalDis_cb, .cb_size = sizeof(queue_minimalDis_cb),
 };
 
 osMessageQueueId_t    queue_canRxDis;                                 /* Definitions for rxDisQueue */
@@ -127,7 +131,8 @@ outDistance_t         queue_canRxDis_buf[16];
 StaticQueue_t queue_canRxDis_cb;
 const osMessageQueueAttr_t canRxDisQueue_attr = {                    // 之前在这里貌似写错了，将改队列的分配内存赋值给了其他队列
     .name    = "queue_canRxDis",
-    .mq_mem  = &queue_canRxDis_buf, .mq_size = sizeof(queue_canRxDis_buf), .cb_mem  = &queue_canRxDis_cb, .cb_size = sizeof(queue_canRxDis_cb),
+    .mq_mem  = &queue_canRxDis_buf, .mq_size = sizeof(queue_canRxDis_buf), 
+    .cb_mem  = &queue_canRxDis_cb, .cb_size = sizeof(queue_canRxDis_cb),
 };
 
 osMessageQueueId_t queue_alarm;
@@ -668,10 +673,13 @@ void task_eventHandler(void *arg)
         }
 
 #if MODULE_ALARM_ENABLE
-        /* 语音播报间隔控制：等当前语音自然播完，清标志让下次事件可重新播报 */
+        /* 语音播报间隔控制：间隔到、且 BUSY 引脚显示已播完，才清标志让下次事件重新播报。
+           叠加 BUSY 判断可避免上一条语音还没播完就被下一条打断/重叠；
+           PD9 下拉，引脚悬空(未接/异常)时读到空闲，退化为原有纯间隔行为，不会卡住复播。 */
         if (voicePlaying)
         {
-            if ((osKernelGetTickCount() - voiceStartTick) >= voiceIntervalMs)
+            if ((osKernelGetTickCount() - voiceStartTick) >= voiceIntervalMs
+                && !dev_jq8400IsBusy())
             {
                 voicePlaying = false;
             }

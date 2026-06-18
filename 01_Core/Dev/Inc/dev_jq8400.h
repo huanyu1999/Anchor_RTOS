@@ -22,9 +22,14 @@ typedef enum {
     JQ8X00_FLASH                    = 0x02,                 /*FLASH*/
 } jq8400SystemSymbol;
 
+/* JQ8400 BUSY 引脚有效电平：播放时输出高电平、空闲(待机)为低电平。
+   若实测极性相反，改成 0 即可，无需动其它代码。 */
+#define JQ8400_BUSY_ACTIVE_LEVEL    1
+
 void dev_jq8400ConvertDis(float dis);
 void dev_jq8400Init(void);
 void dev_jq8400Stop(void);
+uint8_t dev_jq8400IsBusy(void);
 void dev_jq8400VoiceOut(uint8_t *pVoiceBuf, int len);
 void dev_jq8400CommandData(UartCommandData Command, uint8_t DATA);
 void dev_jq8400RandomPathPlay(jq8400SystemSymbol symbol, char *data);

@@ -36,10 +36,13 @@
 #define ANCHORID2_PIN           GPIO_PIN_4
 #define ANCHORID2_GPIO_PORT     GPIOE
 
+#define JQ8400_BUSY_PIN         GPIO_PIN_9
+#define JQ8400_BUSY_GPIO_PORT   GPIOD
+
 typedef enum {
     RT9013_EN,
     UWB_OK_LED,
-    CAN_RX_LED, 
+    CAN_RX_LED,
     ONSIDE_LED,
     ACROSS_LED,
     SWITCH_KEY,
@@ -48,6 +51,7 @@ typedef enum {
     ANCHOR_ID0,
     ANCHOR_ID1,
     ANCHOR_ID2,
+    JQ8400_BUSY,
     IO_NUM
 } gpioBoard_enum_t;
 

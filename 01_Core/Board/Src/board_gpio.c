@@ -14,6 +14,7 @@
     anchor_id1  PE3
     anchor_id2  PE4
     anchor_id3  PE5
+    jq8400_busy PD9   (输入，JQ8400 播报状态：高=播放中 低=空闲)
 */
 
 static gpio_config_t gpio_boardParam[IO_NUM] = {
@@ -38,6 +39,8 @@ static gpio_config_t gpio_boardParam[IO_NUM] = {
     { .gpio_port = ANCHORID1_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID1_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
 
     { .gpio_port = ANCHORID2_GPIO_PORT, .clk_port = GPIO_PORT_E, .gpio_pin = ANCHORID2_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLUP, .gpio_speed = 0 },
+
+    { .gpio_port = JQ8400_BUSY_GPIO_PORT, .clk_port = GPIO_PORT_D, .gpio_pin = JQ8400_BUSY_PIN, .gpio_mode = GPIO_MODE_INPUT, .gpio_pull = GPIO_PULLDOWN, .gpio_speed = 0 },
 };
 
 void board_gpioInit(gpioBoard_enum_t io_index)

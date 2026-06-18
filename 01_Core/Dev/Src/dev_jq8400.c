@@ -2,6 +2,7 @@
 #include "main.h"
 #include "cmsis_os.h"
 #include "usart.h"
+#include "board_gpio.h"
 #include "dev_jq8400.h"
 
 #define ZH_MAX  32          // 定义组合播放最大容量
@@ -12,6 +13,7 @@ static const uint8_t cmd_volMax[5] = { 0xAA, 0x13, 0x01, 0x1E, 0xDC }; // 设置
 void dev_jq8400Init(void)
 {
     MX_UART3_Init();
+    board_gpioInit(JQ8400_BUSY);   // PD9 读取 JQ8400 播报状态
     osDelay(1500);  // 等 JQ8400 芯片上电就绪（约 1.5-2s），否则后续命令会被丢弃
     dev_jq8400VoiceOut((uint8_t *)cmd_volMax, sizeof(cmd_volMax));
     osDelay(50);    // 让芯片完成音量设置再接下一条命令
@@ -20,6 +22,15 @@ void dev_jq8400Init(void)
 void dev_jq8400Stop(void)
 {
     dev_jq8400VoiceOut((uint8_t *)cmd_stop, sizeof(cmd_stop));
+}
+
+/**
+  * @brief  读取 JQ8400 当前是否正在播报
+  * @retval 1 = 正在播放；0 = 空闲
+  */
+uint8_t dev_jq8400IsBusy(void)
+{
+    return (board_gpioGetLevel(JQ8400_BUSY) == JQ8400_BUSY_ACTIVE_LEVEL) ? 1 : 0;
 }
 
 void dev_jq8400VoiceOut(uint8_t *pVoiceBuf, int len)

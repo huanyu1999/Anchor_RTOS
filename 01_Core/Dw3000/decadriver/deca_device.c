@@ -845,6 +845,22 @@ int dwt_initialise(int mode)
     }
     dwt_write8bitoffsetreg(XTAL_ID, 0, pdw3000local->init_xtrim);
 
+    // 参照 DW1000 dwt_initialise 的做法，在初始化阶段直接打开外部 PA/LNA
+    // {
+    //     uint32_t reg;
+
+    //     // DW3000 GPIO 必须先使能 GPIO 时钟才能工作（DW1000 无此步）
+    //     dwt_or32bitoffsetreg(CLK_CTRL_ID, 0, CLK_CTRL_GPIO_CLK_EN_BIT_MASK);
+
+    //     // Set up GPIO mode - to be used with external PA/LNA
+    //     reg = dwt_read32bitreg(GPIO_MODE_ID);
+    //     reg |= GPIO_PIN6_EXTRX;                     // GPIO6 -> EXTRX，外部 LNA(RX) 控制
+    //     reg |= (GPIO_PIN4_EXTDA | GPIO_PIN5_EXTTX); // GPIO4/5 -> EXTDA/EXTTX，外部 PA(TX) 控制
+    //     dwt_write32bitreg(GPIO_MODE_ID, reg);
+
+    //     // disable fine grain sequencing - this is needed when using PA on the TX
+    //     dwt_write32bitoffsetreg(PWR_UP_TIMES_LO_ID, 2, PMSC_TXFINESEQ_DISABLE);
+    // }
 
     return DWT_SUCCESS ;
 
@@ -1701,8 +1717,8 @@ void dwt_settxantennadelay(uint16_t txDelay)
  *                         The extended PHR mode allows to transmit frames of up to 1023 bytes (including 2 byte CRC)
  *                         if > 127 is programmed, DWT_PHRMODE_EXT needs to be set in the phrMode configuration
  *                         see dwt_configure function
- * @param txDataBytes    - Pointer to the user�s buffer containing the data to send.
- * @param txBufferOffset - This specifies an offset in the DW IC�s TX Buffer at which to start writing data.
+ * @param txDataBytes    - Pointer to the user�s buffer containing the data to send.
+ * @param txBufferOffset - This specifies an offset in the DW IC�s TX Buffer at which to start writing data.
  *
  * output parameters
  *
@@ -3808,7 +3824,7 @@ void dwt_forcetrxoff(void)
  * @param enable - 1 to enable SNIFF mode, 0 to disable. When 0, all other parameters are not taken into account.
  * @param timeOn - duration of receiver ON phase, expressed in multiples of PAC size. The counter automatically adds 1 PAC
  *                 size to the value set. Min value that can be set is 1 (i.e. an ON time of 2 PAC size), max value is 15.
- * @param timeOff - duration of receiver OFF phase, expressed in multiples of 128/125 �s (~1 �s). Max value is 255.
+ * @param timeOff - duration of receiver OFF phase, expressed in multiples of 128/125 �s (~1 �s). Max value is 255.
  *
  * output parameters
  *
@@ -4385,7 +4401,7 @@ float dwt_convertrawtemperature(uint8_t raw_temp)
 {
     float realtemp;
 
-    // the User Manual formula is: Temperature (�C) = ( (SAR_LTEMP � OTP_READ(Vtemp @ 20�C) ) x 1.05)        // Vtemp @ 20�C
+    // the User Manual formula is: Temperature (�C) = ( (SAR_LTEMP � OTP_READ(Vtemp @ 20�C) ) x 1.05)        // Vtemp @ 20�C
     realtemp = (float)((raw_temp - pdw3000local->tempP) * 1.05f) + 20.0f;
     return realtemp;
 }

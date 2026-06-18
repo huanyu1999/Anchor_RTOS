@@ -68,10 +68,15 @@ typedef int32_t  int32;
  * 计算距离结果比实际距离小，需要增大距离，则减小这个数
  * 计算距离结果比实际距离大，需要减小距离，则增大这个数
  */                                                                                                               
-#define ANT_DLY                         16485
+#define ANT_DLY                         16549
+// #define ANT_DLY                         16485
 
 /* 发射功率，目前设定为最大值 */
+#if defined(USE_DW3000)
+#define TX_POWER                        0xfdfdfdfd
+#elif defined(USE_DW1000)
 #define TX_POWER                        0x1f1f1f1f
+#endif
 
 #define MAX_TAG_LIST_SIZE               (MAX_TAG_NUMBER)
 #define MASK_40BIT                      (0x00FFFFFFFFFF)  // DW1000 counter is 40 bits

@@ -220,6 +220,8 @@ static void twrAnchor_rxOkHandle(void)
                 }
 #endif
 #endif  // USE_DW1000
+                /* 保存本次测距值(mm)，下个周期在 resp 的 PREV_DIS 字段回传给标签 */
+                prev_range[recv_tag_id] = (int32_t)(distance_now_m * 1000);
                 // send_processeDis.distance = prev_range[recv_tag_id];
                 send_processeDis.distance = distance_now_m * 1000;
                 send_processeDis.tag_id   = recv_tag_id;
@@ -448,14 +450,13 @@ static void anch_perpareAnc2TagResp(void)
     tx_resp_msg[FUNC_CODE_IDX]          = FUNC_CODE_RESP;
     tx_resp_msg[RESP_MSG_GROUP_IDX]     = group_id;
 
-    // 将上次的测距值打包在resp中发给标签, 暂时先不用，目前方案不太适合
-    // if(range_nb == prev_range[recv_tag_id].range_nb + 1)
-    // {
-    //     tx_resp_msg[RESP_MSG_PREV_DIS_IDX]   = prev_range[recv_tag_id] >> 24;
-    //     tx_resp_msg[RESP_MSG_PREV_DIS_IDX+1] = prev_range[recv_tag_id] >> 16;
-    //     tx_resp_msg[RESP_MSG_PREV_DIS_IDX+2] = prev_range[recv_tag_id] >> 8;
-    //     tx_resp_msg[RESP_MSG_PREV_DIS_IDX+3] = prev_range[recv_tag_id];
-    // }
+    /* 把上一周期算出的测距值(mm)以大端写入 resp 的 PREV_DIS 字段，回传给标签显示。
+     * 标签按大端读取(见 instance_tag.c)。首个周期 prev_range 为 0，标签显示 0，
+     * 下一周期起即为真实距离。recv_tag_id 已在 POLL 处理中设好。 */
+    tx_resp_msg[RESP_MSG_PREV_DIS_IDX]     = (uint8_t)(prev_range[recv_tag_id] >> 24);
+    tx_resp_msg[RESP_MSG_PREV_DIS_IDX + 1] = (uint8_t)(prev_range[recv_tag_id] >> 16);
+    tx_resp_msg[RESP_MSG_PREV_DIS_IDX + 2] = (uint8_t)(prev_range[recv_tag_id] >> 8);
+    tx_resp_msg[RESP_MSG_PREV_DIS_IDX + 3] = (uint8_t)(prev_range[recv_tag_id]);
 
     if (anc_id == 0)                                      // A0负责校准标签时序，防冲突
     {

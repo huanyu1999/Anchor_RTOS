@@ -35,7 +35,7 @@ int user_data[10];
 
 #if defined(USE_DW3000)
 static dwt_txconfig_t txconfig_options = {
-    .PGdly = 0xC2,
+    .PGdly = 0x34,
     .power = TX_POWER,
     .PGcount = 0
 };
@@ -46,6 +46,15 @@ static dwt_txconfig_t txconfig_options = {
 };
 #endif
 
+/*
+ * Configuration options for the following parameters:
+ * Channel: 5, 9
+ * PRF: 64
+ * Preamble Length: 64, 128, 512, 1024
+ * Preamble Code: 3/4 for 16MHz PRf, 9/10/11/12 for 64MHz PRF
+ * Data Rate: 0.85, 6.8
+ * STS: Length 64
+ */
 #if defined(USE_DW3000)
 /* dw3000 rf 配置 channel9（符合 UWB 新国标）
  * DW3000 不支持 110K 速率；PRF 由 txCode/rxCode 隐含（code 9~24 = 64MHz）
@@ -110,7 +119,22 @@ static dwt_config_t uwb_config_channel5[] = {
         .rxPAC = DWT_PAC32,
         .txCode = 10,
         .rxCode = 10,
-        .sfdType = 2,                   // choose 2 for DW 16-bit
+        .sfdType = 2,      // choose 2 for DW 16-bit，non standard
+        .dataRate = DWT_BR_850K,
+        .phrMode = DWT_PHRMODE_STD,
+        .phrRate = DWT_PHRRATE_STD,
+        .sfdTO = (1025 + DWT_SFD_LEN16 - 32),
+        .stsMode = DWT_STS_MODE_OFF,
+        .stsLength = DWT_STS_LEN_64,
+        .pdoaMode = DWT_PDOA_M0
+    },
+    {   /* uwb_config1，channel5 PRF64M 前导码长度1024 数据率 850K，主要使用 */
+        .chan = 5,
+        .txPreambLength = DWT_PLEN_1024,
+        .rxPAC = DWT_PAC32,
+        .txCode = 10,
+        .rxCode = 10,
+        .sfdType = 2,      // choose 2 for DW 16-bit，non standard
         .dataRate = DWT_BR_850K,
         .phrMode = DWT_PHRMODE_STD,
         .phrRate = DWT_PHRRATE_STD,
@@ -344,19 +368,28 @@ static void dev_dw3000Init(dwDevice_t *dev)
 
     dwt_setpanid(PAN_ID);
     dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
+
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
+    dwt_setfinegraintxseq(0);
 
-    // // dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT
+    // dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT
     //                | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO, 0, DWT_ENABLE_INT);
     
     if (dev->device_mode == ANCHOR)
     {
         dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback, NULL, NULL);
     }
+    /* 必须使能 ARFE（帧过滤拒绝）中断：与 DW1000 路径(DWT_INT_ARFE)对齐。
+     * 空闲等 poll 时帧过滤是开的，若漏掉一次 poll、又收到另一基站发给标签的 resp 帧，
+     * DW3000 会把该帧按 RX-error 拒绝并关闭接收机；不使能 ARFE 则没有任何回调，
+     * 接收机被静默关闭、再也收不到后续 poll —— 这正是“双基站跑一阵后一个基站停收发”的根因。
+     * ARFE 属于 SYS_STATUS_ALL_RX_ERR 且经 FINT_STAT_RXERR 路由到 rxfailedcallback，
+     * 会被 dwt_isr 正常清除，不会造成中断线卡死。 */
     dwt_setinterrupt(SYS_ENABLE_LO_TXFRS_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFCG_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFTO_ENABLE_BIT_MASK |
                      SYS_ENABLE_LO_RXPTO_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXPHE_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXFCE_ENABLE_BIT_MASK |
-                     SYS_ENABLE_LO_RXFSL_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXSTO_ENABLE_BIT_MASK, 0, DWT_ENABLE_INT);
+                     SYS_ENABLE_LO_RXFSL_ENABLE_BIT_MASK | SYS_ENABLE_LO_RXSTO_ENABLE_BIT_MASK |
+                     SYS_ENABLE_LO_ARFE_ENABLE_BIT_MASK, 0, DWT_ENABLE_INT);
     port_set_dwic_isr(dwt_isr);
 }
 #elif defined(USE_DW1000)

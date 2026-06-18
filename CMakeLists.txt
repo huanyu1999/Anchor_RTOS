@@ -55,6 +55,17 @@ list(FILTER 01_CORE_THIRDPARTY_SRC_FILES EXCLUDE REGEX "easylogger/")
 file(GLOB_RECURSE DW1000_VENDOR_SRC_FILES  01_Core/Dw1000/*.c)
 file(GLOB_RECURSE DW3000_VENDOR_SRC_FILES  01_Core/Dw3000/*.c)
 
+# ========================== [测试用·可随时回滚] ==========================
+# 用预编译库 01_Core/Dw3000/deca_device.lib 替代 decadriver 源码参与编译。
+# 把下面开关改为 OFF（或 cmake -DDW3000_USE_PREBUILT_LIB=OFF）即恢复源码编译，无需其它改动。
+option(DW3000_USE_PREBUILT_LIB "Link prebuilt deca_device.lib instead of compiling Dw3000/decadriver sources" ON)
+if(DW3000_USE_PREBUILT_LIB)
+    # 从源码列表中剔除 decadriver（deca_device.c），改由 .lib 提供实现，头文件仍保留供包含
+    list(FILTER DW3000_VENDOR_SRC_FILES EXCLUDE REGEX "[Dd]w3000/decadriver/")
+    message(STATUS "[DW3000] using prebuilt deca_device.lib (decadriver sources excluded)")
+endif()
+# =======================================================================
+
 file(GLOB 02_VENDOR_SRC_FILES
     02_Vendor_Lib/*.c
     02_Vendor_Lib/STM32F4xx_HAL_Driver/Src/*.c
@@ -379,7 +390,6 @@ foreach(TGT IN LISTS TARGETS)
     target_compile_definitions(${ELF} PRIVATE
         USE_HAL_DRIVER
         STM32F405xx
-        USE_DW3000
     )
 
     # 头文件：公共 + 对应 DW 厂家驱动
@@ -397,6 +407,10 @@ foreach(TGT IN LISTS TARGETS)
             01_Core/Dw3000/decadriver
             01_Core/Dw3000/platform
         )
+        # [测试用·可回滚] 链接预编译的 DW3000 厂家驱动库（实现由 .lib 提供）
+        if(DW3000_USE_PREBUILT_LIB)
+            target_link_libraries(${ELF} ${CMAKE_SOURCE_DIR}/01_Core/Dw3000/deca_device.lib)
+        endif()
     endif()
 
     # 编译选项

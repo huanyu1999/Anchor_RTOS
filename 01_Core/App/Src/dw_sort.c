@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "dw_sort.h"
 #include "elog.h"
 
@@ -13,7 +14,6 @@ static void node_update_distance(distance_manager_t *mgr,
                                  tag_hashNode_t *node,
                                  uint32_t new_dis);
 static void node_remove(distance_manager_t *mgr, tag_hashNode_t *node);
-static void disManager_DebugPrint(distance_manager_t *mgr);
 
 static void mempool_init(mem_pool_t *mp, void *buf, size_t blk_size, uint32_t cnt);
 static void *mempoll_alloc(mem_pool_t *mp);
@@ -64,7 +64,7 @@ void disManager_update(distance_manager_t *mgr,
             node->last_updateTick = now_tick;
             HASH_ADD(hh, mgr->hash, tag_id, sizeof(node->tag_id), node);        // create an node, insert to hashtable
             node_insert_new(mgr, node);
-            log_d("insert->id=%u dis=%u tick=%u", node->tag_id, node->distance, node->last_updateTick);
+            log_i("+ tag %u dis=%.2fm (online:%u)", node->tag_id, (float)node->distance / 1000.0f, mgr->heap_size);
     }
 }
 
@@ -76,9 +76,9 @@ void disManager_purgeExpired(distance_manager_t *mgr, uint32_t now_tick)
     {
         if ((now_tick - node->last_updateTick) > DIST_EXPIRE_TICK)
         {
+            uint8_t removed_id = node->tag_id;
             node_remove(mgr, node);
-            // disManager_DebugPrint(mgr);
-            log_d("remove id=%u heap_index=%u", node->tag_id, node->heap_index);
+            log_i("- tag %u timeout (online:%u)", removed_id, mgr->heap_size);
         }
     }
 }
@@ -98,28 +98,30 @@ uint16_t disManager_getNodeNum(distance_manager_t *mgr)
     return mgr->heap_size;
 }
 
-static void disManager_DebugPrint(distance_manager_t *mgr)
+void disManager_logSummary(distance_manager_t *mgr)
 {
-    if (mgr->heap_size == 0) {
-        log_d("heap empty");
+    if (mgr->heap_size == 0)
+    {
+        log_i("online:0");
         return;
     }
 
-    log_d("heap_size=%u", mgr->heap_size);
-    log_d("Heap order (min at top):");
-    for (uint16_t i = 0; i < mgr->heap_size; i++)
-    {
-        tag_hashNode_t *node = mgr->heap[i];
-        log_d("idx=%u id=%u dis=%u last_tick=%u", 
-                i, node->tag_id, node->distance, node->last_updateTick);
-    }
+    tag_hashNode_t *min_node = mgr->heap[0];
+    log_i("online:%u min:tag-%u %.2fm",
+           mgr->heap_size, min_node->tag_id,
+           (float)min_node->distance / 1000.0f);
 
-    log_d("Hash table content:\n");
-    tag_hashNode_t *node, *tmp;
-    HASH_ITER(hh, mgr->hash, node, tmp) 
+    static char buf[128];
+    int pos = 0;
+    for (uint16_t i = 0; i < mgr->heap_size && pos < (int)sizeof(buf) - 16; i++)
     {
-        log_d("id=%u distance=%u last_tick=%u heap_index=%u", 
-                node->tag_id, node->distance, node->last_updateTick, node->heap_index);
+        tag_hashNode_t *n = mgr->heap[i];
+        pos += snprintf(buf + pos, sizeof(buf) - pos,
+                        "%u:%.2f ", n->tag_id, (float)n->distance / 1000.0f);
+    }
+    if (pos > 0)
+    {
+        log_d("[tags] %s", buf);
     }
 }
 

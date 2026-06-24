@@ -39,6 +39,7 @@ void disManager_purgeExpired(distance_manager_t *mgr, uint32_t now_tick);
 tag_hashNode_t *disManager_getMin(distance_manager_t *mgr);
 uint16_t disManager_getNodeNum(distance_manager_t *mgr);
 distance_manager_t *disManager_getHandle(void);
+void disManager_logSummary(distance_manager_t *mgr);
 void split32to8(int32_t value, uint8_t *bytes);
 uint32_t combine8to32(const uint8_t *bytes);
 #endif

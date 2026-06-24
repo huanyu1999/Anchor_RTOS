@@ -431,7 +431,27 @@ void task_anchorDisHandling(void *arg)
             osMessageQueuePut(queue_alarm, &event, 0, 0);
         }
 
-        log_d("SelfDis ID %d %.2f, RxDis ID %d %.2f, FinalDis ID %d %.2f \n",  anchorSelfIdx,  (float)(anchorSelfDis) / 1000.0f, anchorRxIdx, (float)(anchorRxDis) / 1000.0f, anchorFinalIdx, (float)(anchorFinalDis) / 1000.0f);
+        {
+            static uint32_t lastFusionLogTick = 0;
+            uint32_t now = osKernelGetTickCount();
+            if ((now - lastFusionLogTick) >= 1000)
+            {
+                lastFusionLogTick = now;
+                if (anchorRxIdx == 0xFF)
+                {
+                    log_d("self:tag-%u %.2fm | remote:N/A | final:tag-%u %.2fm",
+                           anchorSelfIdx, (float)anchorSelfDis / 1000.0f,
+                           anchorFinalIdx, (float)anchorFinalDis / 1000.0f);
+                }
+                else
+                {
+                    log_d("self:tag-%u %.2fm | remote:tag-%u %.2fm | final:tag-%u %.2fm",
+                           anchorSelfIdx, (float)anchorSelfDis / 1000.0f,
+                           anchorRxIdx, (float)anchorRxDis / 1000.0f,
+                           anchorFinalIdx, (float)anchorFinalDis / 1000.0f);
+                }
+            }
+        }
     }
 }
 

@@ -591,20 +591,21 @@ void task_getMinDis(void *arg)
 {
     UNUSED(arg);
     static outDistance_t min_selfDis = {0};
-    static uint16_t cur_tagNum = 0;
     static tag_hashNode_t *min_dis_node = NULL;
+    static uint32_t lastLogTick = 0;
+    extern osMessageQueueId_t queue_minimalDis;
+
     for (;;)
     {
-        osStatus_t status = osSemaphoreAcquire(sema_tagDistClear, osWaitForever); // 周期获取最小距离
+        osStatus_t status = osSemaphoreAcquire(sema_tagDistClear, osWaitForever);
         if (status == osOK)
         {
-            disManager_purgeExpired(&task_dis_manage, osKernelGetTickCount());       // 获取最小距离前先清除过期距离，获取当前tick，将超时的标签清除
+            uint32_t now = osKernelGetTickCount();
+            disManager_purgeExpired(&task_dis_manage, now);
             min_dis_node = disManager_getMin(&task_dis_manage);
-            extern osMessageQueueId_t queue_minimalDis;
+
             if (min_dis_node == NULL)
             {
-                // 没有标签通信，也推一条无效距离消息，让 task_anchorDisHandling
-                // 唤醒后能走"无有效标签"分支去关闭报警 LED
                 min_selfDis.dis_value = 2000000;
                 min_selfDis.dis_index = 0xFF;
                 min_selfDis.dis_class = ANCHOR_SELF_DIS;
@@ -612,13 +613,16 @@ void task_getMinDis(void *arg)
             }
             else
             {
-                cur_tagNum = disManager_getNodeNum(&task_dis_manage);
                 min_selfDis.dis_value = min_dis_node->distance;
                 min_selfDis.dis_index = min_dis_node->tag_id;
                 min_selfDis.dis_class = ANCHOR_SELF_DIS;
-
                 osMessageQueuePut(queue_minimalDis, &min_selfDis, 0, 0);
-                log_d("cur tag num : %d*tag-%d*local min dis : %.2f.", cur_tagNum, min_selfDis.dis_index, (float)(min_selfDis.dis_value) / 1000.0f);
+            }
+
+            if ((now - lastLogTick) >= 2000)
+            {
+                lastLogTick = now;
+                disManager_logSummary(&task_dis_manage);
             }
         }
     }

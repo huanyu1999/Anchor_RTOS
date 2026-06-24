@@ -58,7 +58,7 @@ file(GLOB_RECURSE DW3000_VENDOR_SRC_FILES  01_Core/Dw3000/*.c)
 # ========================== [测试用·可随时回滚] ==========================
 # 用预编译库 01_Core/Dw3000/deca_device.lib 替代 decadriver 源码参与编译。
 # 把下面开关改为 OFF（或 cmake -DDW3000_USE_PREBUILT_LIB=OFF）即恢复源码编译，无需其它改动。
-option(DW3000_USE_PREBUILT_LIB "Link prebuilt deca_device.lib instead of compiling Dw3000/decadriver sources" ON)
+option(DW3000_USE_PREBUILT_LIB "Link prebuilt deca_device.lib instead of compiling Dw3000/decadriver sources" OFF)
 if(DW3000_USE_PREBUILT_LIB)
     # 从源码列表中剔除 decadriver（deca_device.c），改由 .lib 提供实现，头文件仍保留供包含
     list(FILTER DW3000_VENDOR_SRC_FILES EXCLUDE REGEX "[Dd]w3000/decadriver/")

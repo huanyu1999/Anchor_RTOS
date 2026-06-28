@@ -52,7 +52,6 @@ static uint8_t twrAnchor_rxErrorOrTimeoutHandle(void);
 static void anch_txRespOrRxReEnable(void);
 static void anch_rxRenableImmdiate(dwDevice_t *dev);
 static void anch_perpareAnc2TagResp(void);
-
 static inline uint64_t get_tx_timestamp_u64(void);
 static inline uint64_t get_rx_timestamp_u64(void);
 static inline void final_msg_get_ts(const uint8_t *ts_field, uint32_t *ts);
@@ -77,7 +76,7 @@ static int twrAnchor_Init(dwDevice_t *dev)
     {
         return 0;
     }
-    dev->twr_mode = LISTENER;                               // 空闲状态，等待接收 poll (tag 或 anchor)
+    dev->twr_mode = LISTENER;                                       // 空闲状态，等待接收 poll (tag 或 anchor)
     return 1;
 }
 
@@ -134,7 +133,8 @@ static void twrAnchor_rxOkHandle(void)
     {
     case RTLS_MSG_TAG_POLL:
 #if defined(ANCRANGE)
-        if (dev->device_mode == ANCHOR_RNG || dev->twr_mode == RESPONDER_A) {
+        if (dev->device_mode == ANCHOR_RNG || dev->twr_mode == RESPONDER_A)
+        {
             anch_rxRenableImmdiate(dev);
             break;
         }
@@ -144,7 +144,7 @@ static void twrAnchor_rxOkHandle(void)
         recv_tag_id = rx_buffer[SENDER_SHORT_ADD_IDX];     // 取发送标签的ID
         if(recv_tag_id >= inst_slot_number)                // 标签ID如果大于标签总容量则退出
         {
-            anch_rxRenableImmdiate(dev);             // 直接开启下一轮接收poll，无需同步buffer，暂定没问题
+            anch_rxRenableImmdiate(dev);           // 直接开启下一轮接收poll，无需同步buffer，暂定没问题
             break;
         }
 
@@ -158,10 +158,10 @@ static void twrAnchor_rxOkHandle(void)
         anch_txRespOrRxReEnable();                // 判断是否发送resp帧，还是重新打开接收，接收其他基站的resp帧，还是重新打开接收，接收标签final帧
         break;
 
-    case RTLS_MSG_TAG_FINAL:                        // 基站每接收到一个标签的final帧，就进行一次TOF计算
+    case RTLS_MSG_TAG_FINAL:                      // 基站每接收到一个标签的final帧，就进行一次TOF计算
         if (((rx_buffer[RANGE_NB_IDX] == range_nb) && (rx_buffer[SENDER_SHORT_ADD_IDX] == recv_tag_id))) // 验证final帧的range_nb和标签ID是否和之前的poll帧一致
         {
-            dev->twr_mode = LISTENER ;           // 接收到final不用答复，故设置为listener模式
+            dev->twr_mode = LISTENER ;            // 接收到final不用答复，故设置为listener模式
             dev->wait4final = 0; 
             resp_valid = rx_buffer[FINAL_MSG_FINAL_VALID_IDX];
             range_time = portGetTickCnt();         // 再次获取TWR成功，final帧接收的Tick
@@ -253,7 +253,11 @@ static void twrAnchor_rxOkHandle(void)
 #if defined(ANCRANGE)
     case RTLS_MSG_ANCH_POLL:
     {
-        if (anc_id == 0) { anch_rxRenableImmdiate(dev); break; }
+        if (anc_id == 0)
+        {
+            anch_rxRenableImmdiate(dev);
+            break;
+        }
         uint8_t initiator_id = rx_buffer[SENDER_SHORT_ADD_IDX];
         dev->device_mode = ANCHOR_RNG;
         dev->twr_mode = RESPONDER_A;
@@ -278,7 +282,8 @@ static void twrAnchor_rxOkHandle(void)
         dwt_writetxfctrl(ANCH_RESP2_MSG_LEN + FCS_LEN, 0, 1);
         dwt_setdelayedtrxtime((uint32)(resp_tx_time >> 8));
         dwt_setrxtimeout(inst_final_rx_timeout);
-        if (dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED) == DWT_ERROR) {
+        if (dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED) == DWT_ERROR)
+        {
             rnganch_change_back_to_anchor(dev);
         }
         break;
@@ -286,15 +291,22 @@ static void twrAnchor_rxOkHandle(void)
 
     case RTLS_MSG_ANCH_RESP2:
     {
-        if (dev->device_mode != ANCHOR_RNG) { anch_rxRenableImmdiate(dev); break; }
+        if (dev->device_mode != ANCHOR_RNG)
+        {
+            anch_rxRenableImmdiate(dev);
+            break;
+        }
         uint8_t resp_anc_id = rx_buffer[SENDER_SHORT_ADD_IDX];
         a2a_resp_rx_ts[resp_anc_id] = get_rx_timestamp_u64();
         a2a_rxRespMask |= (1 << resp_anc_id);
         a2a_remainingResp--;
 
-        if (a2a_remainingResp == 0) {
+        if (a2a_remainingResp == 0)
+        {
             anch_a2a_sendFinal(dev);
-        } else {
+        }
+        else
+        {
             dwt_setrxtimeout(inst_resp_rx_timeout);
             dwt_rxenable(DWT_START_RX_IMMEDIATE);
         }
@@ -303,10 +315,15 @@ static void twrAnchor_rxOkHandle(void)
 
     case RTLS_MSG_ANCH_FINAL:
     {
-        if (dev->twr_mode != RESPONDER_A) { anch_rxRenableImmdiate(dev); break; }
+        if (dev->twr_mode != RESPONDER_A)
+        {
+            anch_rxRenableImmdiate(dev);
+            break;
+        }
         uint8_t initiator_id = rx_buffer[SENDER_SHORT_ADD_IDX];
         uint8_t valid = rx_buffer[A2A_FINAL_VALID_IDX];
-        if (!((valid >> anc_id) & 0x01)) {
+        if (!((valid >> anc_id) & 0x01))
+        {
             rnganch_change_back_to_anchor(dev);
             break;
         }
@@ -329,7 +346,8 @@ static void twrAnchor_rxOkHandle(void)
 #if defined(USE_DW1000)
         dist_m = dist_m - dwt_getrangebias(inst_ch, (float)dist_m, inst_prf);
 #endif
-        if (dist_m > 0 && dist_m < 20000.0) {
+        if (dist_m > 0 && dist_m < 20000.0)
+        {
             a2a_distance[initiator_id] = (int32_t)(dist_m * 1000);
             log_i("A2A: A%d-A%d = %d mm (responder)", initiator_id, anc_id, a2a_distance[initiator_id]);
         }
@@ -347,15 +365,19 @@ static void twrAnchor_sentHandle(void)
 {
 #if defined(ANCRANGE)
     dwDevice_t *dev = get_the_local_structure_of_dev();
-    if (dev->device_mode == ANCHOR_RNG && dev->twr_mode == INITIATOR) {
-        if (a2a_state == A2A_POLL_SENT) {
+    if (dev->device_mode == ANCHOR_RNG && dev->twr_mode == INITIATOR)
+    {
+        if (a2a_state == A2A_POLL_SENT)
+        {
             a2a_poll_tx_ts = get_tx_timestamp_u64();
             a2a_final_tx_time = (a2a_poll_tx_ts + inst_poll2final_time) & MASK_TXDTS;
             return;
         }
-        if (a2a_state == A2A_FINAL_SENT) {
+        if (a2a_state == A2A_FINAL_SENT)
+        {
             (void)get_tx_timestamp_u64();
-            for (uint8_t i = 1; i < MAX_AHCHOR_NUMBER; i++) {
+            for (uint8_t i = 1; i < MAX_AHCHOR_NUMBER; i++)
+            {
                 if (!((a2a_rxRespMask >> i) & 0x01)) continue;
                 uint32_t Ra = (uint32_t)a2a_resp_rx_ts[i] - (uint32_t)a2a_poll_tx_ts;
                 uint8_t resp_position = i - anc_id - 1;
@@ -366,7 +388,8 @@ static void twrAnchor_sentHandle(void)
 #if defined(USE_DW1000)
                 dist_m = dist_m - dwt_getrangebias(inst_ch, (float)dist_m, inst_prf);
 #endif
-                if (dist_m > 0 && dist_m < 20000.0) {
+                if (dist_m > 0 && dist_m < 20000.0)
+                {
                     a2a_distance[i] = (int32_t)(dist_m * 1000);
                     log_i("A2A: A%d-A%d = %d mm (initiator)", anc_id, i, a2a_distance[i]);
                 }
@@ -375,7 +398,8 @@ static void twrAnchor_sentHandle(void)
             return;
         }
     }
-    if (dev->twr_mode == RESPONDER_A) {
+    if (dev->twr_mode == RESPONDER_A)
+    {
         a2a_resp_tx_ts = get_tx_timestamp_u64();
         return;
     }
@@ -388,15 +412,20 @@ static uint8_t twrAnchor_rxErrorOrTimeoutHandle(void)
     dwDevice_t* dev = get_the_local_structure_of_dev();
 
 #if defined(ANCRANGE)
-    if (dev->device_mode == ANCHOR_RNG) {
-        if (a2a_rxRespMask != 0 && a2a_remainingResp == 0) {
+    if (dev->device_mode == ANCHOR_RNG)
+    {
+        if (a2a_rxRespMask != 0 && a2a_remainingResp == 0)
+        {
             anch_a2a_sendFinal(dev);
-        } else {
+        }
+        else
+        {
             rnganch_change_back_to_anchor(dev);
         }
         return 0;
     }
-    if (dev->twr_mode == RESPONDER_A) {
+    if (dev->twr_mode == RESPONDER_A)
+    {
         rnganch_change_back_to_anchor(dev);
         return 0;
     }
@@ -490,9 +519,9 @@ static void anch_txRespOrRxReEnable(void)
             uint64_t final_rx_time = (poll_rx_ts + inst_poll2final_time);              
             final_rx_time = final_rx_time >> 8;
             dwt_setdelayedtrxtime((uint32)final_rx_time);   // 设置接收机开启延时时间
-            dwt_setrxtimeout(inst_final_rx_timeout);        // 设置接收数据超时时间
-            dwt_setpreambledetecttimeout(PRE_TIMEOUT);      // 设置接收前导码超时时间
-            int ret = dwt_rxenable(DWT_START_RX_DELAYED);   // 延时开启接收机，进行buffer同步，因为之前可能接收resp帧失败，导致buffer未对齐
+            dwt_setrxtimeout(inst_final_rx_timeout);             // 设置接收数据超时时间
+            dwt_setpreambledetecttimeout(PRE_TIMEOUT);        // 设置接收前导码超时时间
+            int ret = dwt_rxenable(DWT_START_RX_DELAYED);        // 延时开启接收机，进行buffer同步，因为之前可能接收resp帧失败，导致buffer未对齐
             if(ret == DWT_ERROR)                            // 打开失败，立即重新打开接收，相当于本次测距失败，重新接收poll帧
             {
                 anch_rxRenableImmdiate(dev);                // 接收机开启失败，直接立即打开接收，重回测距开始阶段，并进行buffer同步，接收poll帧
@@ -506,9 +535,9 @@ static void anch_txRespOrRxReEnable(void)
         else                                                           // 打开延迟接收，用于接收resp帧
         {
 #if defined(USE_DW3000)
-            dwt_configureframefilter(0, 0);                     // 关闭帧过滤，能够接收所有数据
+            dwt_configureframefilter(0, 0);                            // 关闭帧过滤，能够接收所有数据
 #else
-            dwt_enableframefilter(DWT_FF_NOTYPE_EN);            // 关闭帧过滤，能够接收所有数据
+            dwt_enableframefilter(DWT_FF_NOTYPE_EN);          // 关闭帧过滤，能够接收所有数据
 #endif
 
             //设置resp数据接收机开启时间
@@ -530,9 +559,9 @@ static void anch_txRespOrRxReEnable(void)
 
             resp_rx_time = resp_rx_time >> 8;
             dwt_setdelayedtrxtime(resp_rx_time);          // 设置接收机开启延时时间
-            dwt_setrxtimeout(inst_resp_rx_timeout);       // 设置接收数据超时时间
-            dwt_setpreambledetecttimeout(PRE_TIMEOUT);    // 设置接收前导码超时时间
-            int ret = dwt_rxenable(DWT_START_RX_DELAYED); // 延时开启接收机，之前可能情况接收resp帧失败，接收resp帧成功，第二种情况要进行buffer同步
+            dwt_setrxtimeout(inst_resp_rx_timeout);            // 设置接收数据超时时间
+            dwt_setpreambledetecttimeout(PRE_TIMEOUT);      // 设置接收前导码超时时间
+            int ret = dwt_rxenable(DWT_START_RX_DELAYED);      // 延时开启接收机，之前可能情况接收resp帧失败，接收resp帧成功，第二种情况要进行buffer同步
             if (ret == DWT_ERROR)
             {
                 anch_rxRenableImmdiate(dev);                         // 接收机开启失败，直接立即打开接收，重回测距开始阶段，接收poll帧 
@@ -551,11 +580,11 @@ static void anch_rxRenableImmdiate(dwDevice_t *dev)
 #if defined(USE_DW3000)
     dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
 #else
-    dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  // 设置帧过滤模式开启
+    dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);   // 设置帧过滤模式开启
 #endif
-    dwt_setpreambledetecttimeout(0);                        // 清除前导码超时，一直接收
-    dwt_setrxtimeout(0);                                       // 清除接收数据超时，一直接收
-    int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);            // 打开接收机，等待接收数据    
+    dwt_setpreambledetecttimeout(0);                         // 清除前导码超时，一直接收
+    dwt_setrxtimeout(0);                                        // 清除接收数据超时，一直接收
+    int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);             // 打开接收机，等待接收数据    
     if (ret == DWT_ERROR)                                            // 打开接收失败
     {
         // anch_rxRenableImmdiate();                                 // 处理重新打开接收
@@ -592,24 +621,24 @@ static void anch_perpareAnc2TagResp(void)
         int currentSlotTime = 0;
         int expectedSlotTime = 0;
         int sframePeriod_ms = inst_one_slot_time * inst_slot_number;    // sframePeriod_ms 为整个TWR周期的总时间= 单slot时间*slot个数(标签总容量)
-        int slotDuration_ms = inst_one_slot_time;                      // slotDuration_ms 为单slot时间
+        int slotDuration_ms = inst_one_slot_time;                       // slotDuration_ms 为单slot时间
         int tagSleepCorrection_ms = 0;
         
-        currentSlotTime  = range_time % sframePeriod_ms;        // currentSlotTime 当前正在通信标签的实际slot
+        currentSlotTime  = range_time % sframePeriod_ms;         // currentSlotTime 当前正在通信标签的实际slot
         expectedSlotTime = recv_tag_id * slotDuration_ms;        // expectedSlotTime 当前正在通信标签应该处于的slot
-        error = expectedSlotTime - currentSlotTime;             // error 计算slot差异 用于校准
+        error = expectedSlotTime - currentSlotTime;              // error 计算slot差异 用于校准
 
         if (error < (-(sframePeriod_ms >> 1))) // if error is more  than 0.5 period, add whole period to give up to 1.5 period sleep
         {
             tagSleepCorrection_ms = (sframePeriod_ms + error);
         }
-        else //the minimum Sleep time will be 0.5 period
+        else // the minimum Sleep time will be 0.5 period
         {
             tagSleepCorrection_ms = error;
         }
 
         tx_resp_msg[RESP_MSG_SLEEP_COR_IDX] = (tagSleepCorrection_ms >> 8) & 0xFF; // 校准时间高8位存储在 index 11 
-        tx_resp_msg[RESP_MSG_SLEEP_COR_IDX + 1] = tagSleepCorrection_ms & 0xFF;// 校准时间低8位存储在 index 12
+        tx_resp_msg[RESP_MSG_SLEEP_COR_IDX + 1] = tagSleepCorrection_ms & 0xFF;    // 校准时间低8位存储在 index 12
     }
     else
     {
@@ -618,7 +647,7 @@ static void anch_perpareAnc2TagResp(void)
         tx_resp_msg[RESP_MSG_SLEEP_COR_IDX + 1] = 0;
     }
 
-    dwt_writetxdata(RESP_MSG_LEN + FCS_LEN, tx_resp_msg, 0); //数据写入DW1000数据缓冲区
+    dwt_writetxdata(RESP_MSG_LEN + FCS_LEN, tx_resp_msg, 0); // 数据写入DW1000数据缓冲区
     dwt_writetxfctrl(RESP_MSG_LEN + FCS_LEN, 0, 1);
 }
 
@@ -655,7 +684,8 @@ static void anch_start_a2a(dwDevice_t *dev, uint8_t expectedResps)
 
     dwt_setrxtimeout(inst_resp_rx_timeout);
     a2a_state = A2A_POLL_SENT;
-    if (dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED) == DWT_ERROR) {
+    if (dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED) == DWT_ERROR)
+    {
         rnganch_change_back_to_anchor(dev);
     }
 }
@@ -677,8 +707,10 @@ static void anch_a2a_sendFinal(dwDevice_t *dev)
     final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_POLL_TX_TS_IDX], a2a_poll_tx_ts);
     uint64_t final_tx_ts_embed = a2a_final_tx_time + (uint64_t)ant_dly;
     final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_FINAL_TX_TS_IDX], final_tx_ts_embed);
-    for (uint8_t i = 1; i < MAX_AHCHOR_NUMBER; i++) {
-        if ((a2a_rxRespMask >> i) & 0x01) {
+    for (uint8_t i = 1; i < MAX_AHCHOR_NUMBER; i++)
+    {
+        if ((a2a_rxRespMask >> i) & 0x01)
+        {
             final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_RESP_RX_TS_BASE + (i - 1) * FINAL_MSG_TS_LEN], a2a_resp_rx_ts[i]);
         }
     }
@@ -687,7 +719,8 @@ static void anch_a2a_sendFinal(dwDevice_t *dev)
     dwt_writetxfctrl(ANCH_FINAL_MSG_LEN + FCS_LEN, 0, 1);
     dwt_setdelayedtrxtime((uint32)(a2a_final_tx_time >> 8));
     a2a_state = A2A_FINAL_SENT;
-    if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR) {
+    if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR)
+    {
         rnganch_change_back_to_anchor(dev);
     }
 }
@@ -697,7 +730,8 @@ void anch_checkA2ATrigger(dwDevice_t *dev)
     if (dev->device_mode != ANCHOR || dev->twr_mode != LISTENER)
         return;
 
-    if (anc_id == 0 && portGetTickCnt() >= a2aStartTime_ms) {
+    if (anc_id == 0 && portGetTickCnt() >= a2aStartTime_ms)
+    {
         a2aStartTime_ms += sframePeriod_ms;
         anch_start_a2a(dev, MAX_AHCHOR_NUMBER - 1);
     }

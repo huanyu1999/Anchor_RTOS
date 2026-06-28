@@ -121,6 +121,9 @@ Uses **EasyLogger** (`01_Core/Com/easylogger/`), built as static lib `libelog.a`
 | FreeRTOS tick | 1000 Hz |
 | FreeRTOS heap | 4 KB (`heap_4`) |
 
+## TWR 状态机器参考
+参考 `.claude/TREK1000_TWR_STATE_MACHINE_REFERENCE.md` 了解 TWR 状态机的完整规格。
+
 ## Memory 规则
 
 每次对话结束前，主动询问用户是否需要更新 memory。

@@ -55,13 +55,10 @@ typedef int32_t  int32;
 
 
 
-/***********************************************************************************************/
-// #define ANCRANGE                         //基站间测距，用于基站自标定
-/***********************************************************************************************/
-
 #define SOFTWARE_VER                   "V1.0"
 
-#define MAX_AHCHOR_NUMBER               2       // 系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
+#define ANCRANGE                        1
+#define MAX_AHCHOR_NUMBER               3       // 系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
 #define MAX_TAG_NUMBER                  50      // 设置最大标签个数
 
 /* 天线延时
@@ -124,18 +121,11 @@ typedef int32_t  int32;
 #define DATA_INTERVAL_TIME_850K         1600    // 850K通信速率下，一个resp帧的处理（发送或者接收）时间， 一个完整的时间间隔
 #define ANC_RESP_SEND_BACK_850K         300     // 850K通信速率下，基站延后发送RESP消息时间，在前面接收处理完poll帧的基础上，可能还会有接收resp帧的情况，难道是guard time？
 #define TAG_FINALE_SEND_BACK_850K       300     // 850K通信速率下，标签延后发送FINAL消息时间
-
 #define MAX_POLL_SEND_SLEEP_COUNT       150     // MAX_POLL_SEND_SLEEP_COUNT次发送后无运动则进入休眠
 #define ANC_RANGE_COUNT                 5       // 自标定时每个基站测距次数
 
 /* PAN ID */
 #define PAN_ID                          0xDECA
-
-// #define UWB_INT_BIT                     0x0000000F
-// #define EVENT_TX_CPLT_BIT               0x00000001
-// #define EVENT_RX_OK_BIT                 0x00000002
-// #define EVENT_RX_TIMEOUT_BIT            0x00000004
-// #define EVENT_RX_FAILED_BIT             0x00000008
 
 /* 中断状态标志 */
 #define RX_WAIT                         0
@@ -151,46 +141,11 @@ typedef int32_t  int32;
 #define FIANL_MSG_LEN                   (22 + 5 * MAX_AHCHOR_NUMBER + 10)
 #define BLINK_MSG_LEN                   10
 #define INIT_MSG_LEN                    12
-#define SYNC_MSG_LEN                    15
+#define ANCH_POLL_MSG_LEN               11      // header(9) + fcode(1) + range_nb(1)
+#define ANCH_RESP2_MSG_LEN              11      // header(9) + fcode(1) + range_nb(1)
+#define ANCH_FINAL_MSG_LEN              (12 + FINAL_MSG_TS_LEN * 2 + FINAL_MSG_TS_LEN * (MAX_AHCHOR_NUMBER - 1))  // header(9)+fcode(1)+range_nb(1)+valid(1)+poll_tx(4)+final_tx(4)+resp_rx(4)×N
 
-// /* 数据帧数组索引 */
-// #define SEQ_NB_IDX                      2
-// #define PANID_IDX                       3
-// #define RECEIVER_SHORT_ADD_IDX          5
-// #define SENDER_SHORT_ADD_IDX            7
-// #define FUNC_CODE_IDX                   9
-// #define RANGE_NB_IDX                    10
-// #define POLL_MSG_SOS_IDX                11
-// #define POLL_MSG_ALARM_STA_IDX          12
-// #define POLL_MSG_BATTERY_IDX            13
-// #define POLL_MSG_USER_IDX               14
-// #define RESP_MSG_SLEEP_COR_IDX          11
-// #define RESP_MSG_PREV_DIS_IDX           13
-// #define RESP_MSG_ALARM_IDX              17
-// #define RESP_MSG_GROUP_IDX              18
-// #define INIT_MSG_SLEEP_COR_IDX          10
-// #define FINAL_MSG_FINAL_VALID_IDX       11
-// #define FINAL_MSG_POLL_TX_TS_IDX        12
-// #define FINAL_MSG_FINAL_TX_TS_IDX       16
-// #define FINAL_MSG_A0_GROUP_ID_IDX       20
-// #define FINAL_MSG_A1_GROUP_ID_IDX       25
-// #define FINAL_MSG_A2_GROUP_ID_IDX       30
-// #define FINAL_MSG_A3_GROUP_ID_IDX       35
-// #define FINAL_MSG_A4_GROUP_ID_IDX       40
-// #define FINAL_MSG_A5_GROUP_ID_IDX       45
-// #define FINAL_MSG_A6_GROUP_ID_IDX       50
-// #define FINAL_MSG_A7_GROUP_ID_IDX       44
-// #define FINAL_MSG_RESP1_RX_TS_IDX       21     // 标签发送final帧中，接收第一个基站resp帧的时间戳
-// #define FINAL_MSG_RESP2_RX_TS_IDX       26     // 标签发送final帧中，接收第二个基站resp帧的时间戳
-// #define FINAL_MSG_RESP3_RX_TS_IDX       31     // 标签发送final帧中，接收第三个基站resp帧的时间戳
-// #define FINAL_MSG_RESP4_RX_TS_IDX       36
-// #define FINAL_MSG_RESP5_RX_TS_IDX       41
-// #define FINAL_MSG_RESP6_RX_TS_IDX       46
-// #define FINAL_MSG_RESP7_RX_TS_IDX       51
-// #define FINAL_MSG_RESP8_RX_TS_IDX       56
-// #define SYNC_MSG_TIME_IDX               10
-
-/* 数据帧长度，一定要留够空间，不然测距异常 */
+/* 数据帧数组索引 */
 #define SEQ_NB_IDX                      2
 #define PANID_IDX                       3
 #define RECEIVER_SHORT_ADD_IDX          5
@@ -236,27 +191,35 @@ typedef int32_t  int32;
 // #define FINAL_MSG_A6_GROUP_ID_IDX       50
 // #define FINAL_MSG_A7_GROUP_ID_IDX       44
 
-/*  function code */
-#define FUNC_CODE_POLL                  0x21
-#define FUNC_CODE_RESP                  0x10
-#define FUNC_CODE_FINAL                 0x23
-#define FUNC_CODE_BLINK                 0x36
-#define FUNC_CODE_INIT                  0x38
-#define FUNC_CODE_SYNC                  0x42
+/* A2A FINAL 帧字段索引 */
+#define A2A_FINAL_VALID_IDX             11
+#define A2A_FINAL_POLL_TX_TS_IDX        12
+#define A2A_FINAL_FINAL_TX_TS_IDX       (A2A_FINAL_POLL_TX_TS_IDX + FINAL_MSG_TS_LEN)
+#define A2A_FINAL_RESP_RX_TS_BASE       (A2A_FINAL_FINAL_TX_TS_IDX + FINAL_MSG_TS_LEN)
+
+/* Function codes — naming follows TREK1000 RTLS convention */
+#define RTLS_MSG_TAG_POLL               0x21    // Tag poll (broadcast)
+#define RTLS_MSG_ANCH_RESP              0x10    // Anchor response to tag poll
+#define RTLS_MSG_TAG_FINAL              0x23    // Tag final (with timestamps)
+#define RTLS_MSG_TAG_BLINK              0x36    // Tag blink (discovery)
+#define RTLS_MSG_RNG_INIT               0x38    // Ranging init (anchor → tag, discovery response)
+#define RTLS_MSG_ANCH_POLL              0x7A    // Anchor-to-anchor poll
+#define RTLS_MSG_ANCH_RESP2             0x7B    // Anchor response to anchor poll (A2A)
+#define RTLS_MSG_ANCH_FINAL             0x7C    // Anchor final (A2A)
 
 #define WAIT4TAGFINAL					2
 #define WAIT4ANCFINAL					1
 
 /* 状态机标志位 */
 typedef enum {
-    STA_IDLE, 
+    STA_IDLE,
     STA_SEND_POLL,
     STA_WAIT_RESP,
     STA_RECV_RESP,
     STA_SEND_FINAL,
-    STA_INIT_POLL_SYNC,
-    STA_WAIT_POLL_SYNC,
-    STA_RECV_POLL_SYNC,
+    STA_A2A_SEND_POLL,
+    STA_A2A_WAIT_RESP,
+    STA_A2A_RECV_RESP,
     STA_SEND_RESP,
     STA_WAIT_FINAL,
     STA_RECV_FINAL,
@@ -264,7 +227,7 @@ typedef enum {
     STA_SEND_BLINK,
     STA_WAIT_INIT,
     STA_RECV_INIT,
-    STA_SEND_SYNC
+    STA_A2A_SEND_FINAL
 } instStatus;
 
 /* TWR测距状态 */
@@ -279,7 +242,9 @@ typedef enum { TAG, ANCHOR, ANCHOR_RNG, NUM_MODES } instanceModes;
 // instance sending a poll (starting TWR) is INITIATOR
 // instance which receives a poll (and will be involved in the TWR) is RESPONDER
 // instance which does not receive a poll (default state) will be a LISTENER - will send no responses
+// RESONDER_A = RESPONDER_Anchor_Poll
 // RESPONDER_B = RESPONDER_Blink
+// RESPONDER_T = RESPONDER_Tag_Poll
 typedef enum { INITIATOR, RESPONDER_A, RESPONDER_B, RESPONDER_T, LISTENER, GREETER, ATWR_MODES } twrModes;
 
 /******************************************************Dw1000 Device************************************************************/
@@ -323,7 +288,7 @@ typedef struct {
     int32_t       min_dis;                                 // 最小的距离值
     uint8_t       dis_idx;                                 // 最小距离值对应的索引，也就是对应的标签ID                   
 } dwDistance_t;
-
+ 
 /******************************************************Uwb Event************************************************************/
 typedef enum uwbEvent_e {
     eventPacketReceived,
@@ -365,10 +330,9 @@ extern int32 distance_offset_cm;                        // 距离校准，单位
 extern int user_data[10];
 
 #if defined(ANCRANGE)
-extern uint8_t temp_dev_id;
-extern uint8_t ancrange_flag;
-extern uint8_t ancrange_count;
-extern uint8_t target_ancid;
+extern int32_t a2a_distance[MAX_AHCHOR_NUMBER];
+extern uint32_t sframePeriod_ms;
+extern uint32_t a2aStartTime_ms;
 #endif
 
 extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
@@ -388,4 +352,7 @@ int check_twr_quality(uint16_t indexDiff_poll, uint16_t indexDiff_final);
 dwDistance_t* get_the_local_structure_of_dis(void);
 dwDevice_t* get_the_local_structure_of_dev(void);
 uint8_t get_tagFinalRecvFlag(uint8_t tad_idx);
+#if defined(ANCRANGE)
+void anch_checkA2ATrigger(dwDevice_t *dev);
+#endif
 #endif

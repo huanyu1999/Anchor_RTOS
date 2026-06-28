@@ -1,4 +1,4 @@
-#include "com_MultiTimer.h"
+#include "com_multiTimer.h"
 #include <stdio.h>
 
 static MultiTimer* timerList = NULL;

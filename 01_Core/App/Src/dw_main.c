@@ -31,8 +31,11 @@ uint32_t inst_data_interval;        // 相邻两条数据的间隔，如poll和�
 uint16 ant_dly = ANT_DLY;           // 天线延时
 uint32 tx_power;                    // 发射增益代码
 int32 distance_offset_cm;           // 距离校准，单位cm
-int user_data[10];
-
+#if defined(ANCRANGE)
+uint32_t sframePeriod_ms;
+uint32_t a2aStartTime_ms;
+static uint32_t a2aSlotOffset_ms;
+#endif
 #if defined(USE_DW3000)
 static dwt_txconfig_t txconfig_options = {
     .PGdly = 0x34,
@@ -205,11 +208,6 @@ const uwbAlgorithmEntry_t availableAlgorithms[] = {
     {NULL, 0, NULL}
 };
 
-// osMutexId_t  dis_access_mutex;
-// const osMutexAttr_t dis_access_mutex_attr = {
-//     .name = "dis_access_mutex", .attr_bits = osMutexRecursive | osMutexPrioInherit, .cb_mem = NULL, .cb_size = 0
-// };
-
 osSemaphoreId_t sema_uwbInt;                                   // 用于dw1000中断同步
 StaticSemaphore_t sema_uwbInt_cb;
 const osSemaphoreAttr_t sema_uwbInt_attr = {
@@ -251,10 +249,7 @@ const osMessageQueueAttr_t queue_uwbEvent_attr = {
 };
 
 TIM_HandleTypeDef timerForInvaildDistanceClearHandle;
-static int32_t prev_rangeTagDis[MAX_TAG_LIST_SIZE];
-
 /*******************************************************静态函数声明********************************************************/
-static int get_rxPeakIndex(uint16_t start_index, uint16_t num_samples);
 static void distance_init(dwDistance_t *data);
 static void dwDevice_init(dwDevice_t *dev);
 static void txcallback(const dwt_cb_data_t *cb_data);
@@ -316,6 +311,14 @@ static void dev_uwbCommonPostInit(dwDevice_t *dev)
     drv_setTimerForInt(&timerForInvaildDistanceClearHandle, TIM2, 20, 5);
     current_Algorithm->init(&dw1000_dev);
     disManager_memPoolInit();
+
+#if defined(ANCRANGE)
+    sframePeriod_ms = (MAX_TAG_NUMBER + 1) * inst_one_slot_time;
+    a2aSlotOffset_ms = MAX_TAG_NUMBER * inst_one_slot_time;
+    uint32_t now = portGetTickCnt();
+    a2aStartTime_ms = now - (now % sframePeriod_ms) + a2aSlotOffset_ms + 5 * sframePeriod_ms;
+#endif
+
     logOut_dw1000Config();
 }
 
@@ -482,14 +485,6 @@ void dev_uwbInit(void)
 
 void logOut_dw1000Config(void)
 {
-    // dwDevice_t *dev = get_the_local_structure_of_dev();
-
-    // log_i("Firmware Ver = %s * Role = %s * addr = %x", SOFTWARE_VER, (dev->device_mode == TAG) ? "TAG" : "AHCHOR",dev->device_id);
-    // log_i("Max_anc_num = %d * max_tag_num = %d * sync = 0", MAX_AHCHOR_NUMBER, inst_slot_number);
-    // log_i("* baud_rate = %s\r\n* channel = CH%d", (inst_dataRate == DWT_BR_110K) ? "110K" : "850K", inst_ch);
-    // log_i("* data_rate = %dHz\r\n* update_time = %dms", 1000 / (inst_slot_number * inst_one_slot_time),
-    //       inst_slot_number * inst_one_slot_time);
-    // log_i("* ant_dly  = %d\r\n* tx_power = %08lx", ant_dly, tx_power);
 }
 
 /**
@@ -527,28 +522,38 @@ void task_twrRun(void *arg)
     uwbEvent_t evt;
     for (;;)
     {
-        osMessageQueueGet(queue_uwbEvent, &evt, NULL, osWaitForever);  // event trigger twr handle
-        switch (evt) 
+#if defined(ANCRANGE)
+        osStatus_t status = osMessageQueueGet(queue_uwbEvent, &evt, NULL, sframePeriod_ms);
+#else
+        osStatus_t status = osMessageQueueGet(queue_uwbEvent, &evt, NULL, osWaitForever);
+#endif
+        if (status == osOK)
         {
-        case eventPacketSent:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketSent);
-            break;
+            switch (evt)
+            {
+            case eventPacketSent:
+                (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketSent);
+                break;
 
-        case eventPacketReceived:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
-            break;
+            case eventPacketReceived:
+                (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
+                break;
 
-        case eventReceiveTimeout:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveTimeout);
-            break;
+            case eventReceiveTimeout:
+                (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveTimeout);
+                break;
 
-        case eventReceiveFailed:
-            (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveFailed);
-            break;
+            case eventReceiveFailed:
+                (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveFailed);
+                break;
 
-        default:
-            break;
+            default:
+                break;
+            }
         }
+#if defined(ANCRANGE)
+        anch_checkA2ATrigger(&dw1000_dev);
+#endif
     }
 }
 
@@ -571,7 +576,6 @@ void task_minHeapManage(void *arg)
     
     for (;;)
     {
-        // osMutexAcquire(dis_access_mutex,osWaitForever);
         osStatus_t status = osMessageQueueGet(queue_processDis, &recv_processedDis, 0, osWaitForever);
         // 接收到计算完成的距离，以及TWR完成时的tick数，进行插入以及更新，同时只要有标签TWR成功，就进行排序，最小距离发送
         if (status == osOK)    
@@ -583,7 +587,6 @@ void task_minHeapManage(void *arg)
             // 堆更新后，清除无效距离，获取当前tick，将超时的标签清除
             disManager_purgeExpired(&task_dis_manage, current_tick);
         }
-        // osMutexRelease(dis_access_mutex);
     }
 }
 
@@ -774,42 +777,3 @@ static void rxfailedcallback(const dwt_cb_data_t *cb_data)
     osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
 }
 
-/****************************************************备用配置***********************************************************/
-//static dwt_config_t uwb_config_channel7[] = {
-//    {   /* uwb_config0，channel7 脉冲频率64M 前导码长度128 数据率 6M8 */
-//        .chan = 7,
-//        .prf = DWT_PRF_64M,
-//        .txPreambLength = DWT_PLEN_128,
-//        .rxPAC = DWT_PAC8,
-//        .txCode = 19,
-//        .rxCode = 20,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_6M8,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (129 + DW_NS_SFD_LEN_6M8 - 8)
-//    },
-//    {   /* uwb_config1，channel7 脉冲频率64M 前导码长度256 数据率 6M8 */
-//        .chan = 7,
-//        .prf = DWT_PRF_64M,   
-//        .txPreambLength = DWT_PLEN_256,
-//        .rxPAC = DWT_PAC16,
-//        .txCode = 19,
-//        .rxCode = 20,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_6M8,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (257 + DW_NS_SFD_LEN_6M8 - 16)
-//    }, 
-//    {   /* uwb_config2，channel7 脉冲频率64M 前导码长度256 数据率 850K */
-//        .chan = 7,
-//        .prf = DWT_PRF_64M,
-//        .txPreambLength = DWT_PLEN_256,
-//        .rxPAC = DWT_PAC16,
-//        .txCode = 19,
-//        .rxCode = 20,
-//        .nsSFD = 1,
-//        .dataRate = DWT_BR_850K,
-//        .phrMode = DWT_PHRMODE_STD,
-//        .sfdTO = (257 + DW_NS_SFD_LEN_850K - 16)
-//    }, 
-//};

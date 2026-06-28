@@ -3,16 +3,32 @@
 #include "cmsis_os.h"
 #include "elog.h"
 
-// #define TWR_DEBUG
-// extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
-
 /* 保存当前ID标签的测距值，下次发送resp时发给标签 */
 
 /* RESP数据帧格式 */
-static uint8_t tx_resp_msg[RESP_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0x00, 0x00, 0x00, 0x80, FUNC_CODE_RESP, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+static uint8_t tx_resp_msg[RESP_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0x00, 0x00, 0x00, 0x80, RTLS_MSG_ANCH_RESP, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
-#if defined (ANCRANGE)
-static uint8_t tx_sync_msg[SYNC_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0x00, 0x80, 0x00, 0x80, FUNC_CODE_SYNC};
+#if defined(ANCRANGE)
+static uint8_t tx_poll_anchor_msg[ANCH_POLL_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0xFF, 0xFF, 0x00, 0x80, RTLS_MSG_ANCH_POLL, 0x00};
+static uint8_t tx_anch_resp2_msg[ANCH_RESP2_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0xFF, 0xFF, 0x00, 0x80, RTLS_MSG_ANCH_RESP2, 0x00};
+static uint8_t tx_anch_final_msg[ANCH_FINAL_MSG_LEN];
+
+int32_t  a2a_distance[MAX_AHCHOR_NUMBER];
+static uint8_t  a2a_range_nb;
+static uint8_t  a2a_rxRespMask;
+static uint8_t  a2a_remainingResp;
+static uint64_t a2a_poll_tx_ts;
+static uint64_t a2a_resp_rx_ts[MAX_AHCHOR_NUMBER];
+static uint64_t a2a_final_tx_time;
+static uint64_t a2a_poll_rx_ts;
+static uint64_t a2a_resp_tx_ts;
+
+typedef enum { A2A_IDLE, A2A_POLL_SENT, A2A_RESP_SENT, A2A_FINAL_SENT } a2aState_t;
+static a2aState_t a2a_state = A2A_IDLE;
+
+static void anch_start_a2a(dwDevice_t *dev, uint8_t expectedResps);
+static void anch_a2a_sendFinal(dwDevice_t *dev);
+static void rnganch_change_back_to_anchor(dwDevice_t *dev);
 #endif
 
 /* 接收数据buffer */
@@ -22,8 +38,6 @@ static uint8_t rx_buffer[FRAME_LEN_MAX];
 static uint64_t poll_rx_ts;    
 static uint64_t resp_tx_ts;
 static uint64_t final_rx_ts;
-static uint16_t indexDiff_poll;
-static uint16_t indexDiff_final;
 static int32_t prev_range[MAX_TAG_LIST_SIZE];
 static float distance_now_m;
 static tag_hashNode_t send_processeDis;
@@ -47,7 +61,7 @@ static inline void final_msg_set_ts(uint8_t *ts_field, uint64_t ts);
 // 单套 TWR anchor 算法，DW1000/DW3000 通过函数内 USE_DW1000/USE_DW3000 条件编译区分
 uwbAlgorithm_t uwbTwr_AnchorAlgorithm = { .init = twrAnchor_Init, .onEvent = twrAnchor_onEvent };
 
-/*******************************************DW1000 event function********************************************/
+/*****************************************CCCC**DW1000 event function********************************************/
 static int twrAnchor_Init(dwDevice_t *dev)
 {
     dev = get_the_local_structure_of_dev();
@@ -57,13 +71,13 @@ static int twrAnchor_Init(dwDevice_t *dev)
     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  // 设置帧过滤模式开启
 #endif
     dwt_setpreambledetecttimeout(0);                        // 清除前导码超时，一直接收
-    dwt_setrxtimeout(0);                                    // 清除接收数据超时，一直接收
-    int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);         // 打开接收机，等待接收数据，初始接收，进行一次buffer对齐
-    if(ret == DWT_ERROR)                                    // 打开接收失败
+    dwt_setrxtimeout(0);                                       // 清除接收数据超时，一直接收
+    int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);            // 打开接收机，等待接收数据，初始接收，进行一次buffer对齐
+    if(ret == DWT_ERROR)                                            // 打开接收失败
     {
         return 0;
     }
-    dev->twr_mode = RESPONDER_T;                            // twr模式设置，表示同基站测距，接收poll
+    dev->twr_mode = LISTENER;                               // 空闲状态，等待接收 poll (tag 或 anchor)
     return 1;
 }
 
@@ -100,8 +114,6 @@ static uint32_t twrAnchor_onEvent(dwDevice_t *dev, uwbEvent_t event)
 static void twrAnchor_rxOkHandle(void)
 {
     dwDevice_t* dev = get_the_local_structure_of_dev();
-    dwDistance_t* distance =  get_the_local_structure_of_dis();
-    
     uint32 frame_len;
 #if defined(USE_DW3000)
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
@@ -120,7 +132,14 @@ static void twrAnchor_rxOkHandle(void)
 
     switch (f_code)
     {
-    case FUNC_CODE_POLL:
+    case RTLS_MSG_TAG_POLL:
+#if defined(ANCRANGE)
+        if (dev->device_mode == ANCHOR_RNG || dev->twr_mode == RESPONDER_A) {
+            anch_rxRenableImmdiate(dev);
+            break;
+        }
+#endif
+        dev->twr_mode = RESPONDER_T;
         range_nb    = rx_buffer[RANGE_NB_IDX];             // 取range_nb，resp发送时发送相同的range_nb
         recv_tag_id = rx_buffer[SENDER_SHORT_ADD_IDX];     // 取发送标签的ID
         if(recv_tag_id >= inst_slot_number)                // 标签ID如果大于标签总容量则退出
@@ -137,12 +156,9 @@ static void twrAnchor_rxOkHandle(void)
         dev->respTxIndex = 0x01 << anc_id;        // 该标志位标识当前基站发送resp帧的位置，先右移，0号基站接收poll帧后，直接发送，1号基站延后一位
         anch_perpareAnc2TagResp();                // 可以在这里就将要发送的resp帧写入发送缓存
         anch_txRespOrRxReEnable();                // 判断是否发送resp帧，还是重新打开接收，接收其他基站的resp帧，还是重新打开接收，接收标签final帧
-#if defined(USE_DW1000)
-        dev->indexDiff_poll = uwb_isInNLOS_index(FUNC_CODE_POLL);
-#endif
         break;
 
-    case FUNC_CODE_FINAL:                        // 基站每接收到一个标签的final帧，就进行一次TOF计算
+    case RTLS_MSG_TAG_FINAL:                        // 基站每接收到一个标签的final帧，就进行一次TOF计算
         if (((rx_buffer[RANGE_NB_IDX] == range_nb) && (rx_buffer[SENDER_SHORT_ADD_IDX] == recv_tag_id))) // 验证final帧的range_nb和标签ID是否和之前的poll帧一致
         {
             dev->twr_mode = LISTENER ;           // 接收到final不用答复，故设置为listener模式
@@ -193,33 +209,6 @@ static void twrAnchor_rxOkHandle(void)
                 {
                     distance_now_m = -1;
                 }
-#if defined(USE_DW1000)
-                dev->indexDiff_final = uwb_isInNLOS_index(FUNC_CODE_FINAL);
-                int twr_quality = check_twr_quality(dev->indexDiff_poll, dev->indexDiff_final);
-                dev->indexDiff_poll = 0;
-                dev->indexDiff_final = 0;
-                // float dis_toss =  fabsf(distance_now_m -((float)prev_range[recv_tag_id] / 1000.0f));
-                // if (prev_range[recv_tag_id] > 0 && dis_toss >= 5)
-                // {
-                //     distance_now_m = (float)(prev_range[recv_tag_id]) / 1000.0f; // 如果测距结果出现不符合人体正常移动速度的波动，就滤掉本次结果，use last distance.
-                // }
-#ifdef TWR_DEBUG
-                if (twr_quality == -1)             // TWR质量不合格，拒绝此次测距结果，沿用上次测距结果，这里质量差的判别存在问题
-                {
-                    log_d("TWR C, tag %d dis : %.2f", recv_tag_id, (float)(distance_now_m));
-                }
-                else if (twr_quality == 0)
-                {
-                    prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m
-                    log_d("TWR A, tag %d dis : %.2f", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
-                }
-                else if (twr_quality == 1)
-                {
-                    prev_range[recv_tag_id] = distance_now_m * 1000;    // 使用本次TWR结果，更新prev_range，并将单位转换为m，
-                    log_d("TWR B, tag %d dis : %.2f", recv_tag_id, (float)(prev_range[recv_tag_id]) / 1000.0);
-                }
-#endif
-#endif  // USE_DW1000
                 /* 保存本次测距值(mm)，下个周期在 resp 的 PREV_DIS 字段回传给标签 */
                 prev_range[recv_tag_id] = (int32_t)(distance_now_m * 1000);
                 // send_processeDis.distance = prev_range[recv_tag_id];
@@ -241,7 +230,7 @@ static void twrAnchor_rxOkHandle(void)
         anch_rxRenableImmdiate(dev);            // 直接开启下一轮接收poll，无需同步buffer，因为dwt_ihandleResp_times中已经处理过buffer切换    
         break;
 
-    case FUNC_CODE_RESP:
+    case RTLS_MSG_ANCH_RESP:
         if(rx_buffer[RANGE_NB_IDX] == range_nb)      // 和当前测距具有相同的range_nb
         {   
             dev->rxOtherResp++;                     // 接收到一次其他基站发送的resp帧  
@@ -261,6 +250,94 @@ static void twrAnchor_rxOkHandle(void)
         anch_txRespOrRxReEnable();         // 判断是否发送resp帧，还是重新打开接收，接收其他基站的resp帧
         break;
 
+#if defined(ANCRANGE)
+    case RTLS_MSG_ANCH_POLL:
+    {
+        if (anc_id == 0) { anch_rxRenableImmdiate(dev); break; }
+        uint8_t initiator_id = rx_buffer[SENDER_SHORT_ADD_IDX];
+        dev->device_mode = ANCHOR_RNG;
+        dev->twr_mode = RESPONDER_A;
+        a2a_poll_rx_ts = get_rx_timestamp_u64();
+        a2a_range_nb = rx_buffer[RANGE_NB_IDX];
+        a2a_state = A2A_RESP_SENT;
+
+        uint8_t resp_position = anc_id - initiator_id - 1;
+        uint64_t resp_tx_time = a2a_poll_rx_ts
+            + ((uint64_t)(FIRST_RESP_SEND_850K + resp_position * inst_data_interval) * UUS_TO_DWT_TIME)
+            + ((uint64_t)ANC_RESP_SEND_BACK_850K * UUS_TO_DWT_TIME);
+
+        tx_anch_resp2_msg[SEQ_NB_IDX] = frame_seq_nb++;
+        tx_anch_resp2_msg[PANID_IDX] = (uint8_t)PAN_ID;
+        tx_anch_resp2_msg[PANID_IDX + 1] = (uint8_t)(PAN_ID >> 8);
+        tx_anch_resp2_msg[SENDER_SHORT_ADD_IDX] = anc_id;
+        tx_anch_resp2_msg[RECEIVER_SHORT_ADD_IDX] = 0xFF;
+        tx_anch_resp2_msg[FUNC_CODE_IDX] = RTLS_MSG_ANCH_RESP2;
+        tx_anch_resp2_msg[RANGE_NB_IDX] = a2a_range_nb;
+
+        dwt_writetxdata(ANCH_RESP2_MSG_LEN + FCS_LEN, tx_anch_resp2_msg, 0);
+        dwt_writetxfctrl(ANCH_RESP2_MSG_LEN + FCS_LEN, 0, 1);
+        dwt_setdelayedtrxtime((uint32)(resp_tx_time >> 8));
+        dwt_setrxtimeout(inst_final_rx_timeout);
+        if (dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED) == DWT_ERROR) {
+            rnganch_change_back_to_anchor(dev);
+        }
+        break;
+    }
+
+    case RTLS_MSG_ANCH_RESP2:
+    {
+        if (dev->device_mode != ANCHOR_RNG) { anch_rxRenableImmdiate(dev); break; }
+        uint8_t resp_anc_id = rx_buffer[SENDER_SHORT_ADD_IDX];
+        a2a_resp_rx_ts[resp_anc_id] = get_rx_timestamp_u64();
+        a2a_rxRespMask |= (1 << resp_anc_id);
+        a2a_remainingResp--;
+
+        if (a2a_remainingResp == 0) {
+            anch_a2a_sendFinal(dev);
+        } else {
+            dwt_setrxtimeout(inst_resp_rx_timeout);
+            dwt_rxenable(DWT_START_RX_IMMEDIATE);
+        }
+        break;
+    }
+
+    case RTLS_MSG_ANCH_FINAL:
+    {
+        if (dev->twr_mode != RESPONDER_A) { anch_rxRenableImmdiate(dev); break; }
+        uint8_t initiator_id = rx_buffer[SENDER_SHORT_ADD_IDX];
+        uint8_t valid = rx_buffer[A2A_FINAL_VALID_IDX];
+        if (!((valid >> anc_id) & 0x01)) {
+            rnganch_change_back_to_anchor(dev);
+            break;
+        }
+
+        uint32_t poll_tx_ts_32, final_tx_ts_32, resp_rx_ts_32;
+        final_msg_get_ts(&rx_buffer[A2A_FINAL_POLL_TX_TS_IDX], &poll_tx_ts_32);
+        final_msg_get_ts(&rx_buffer[A2A_FINAL_FINAL_TX_TS_IDX], &final_tx_ts_32);
+        final_msg_get_ts(&rx_buffer[A2A_FINAL_RESP_RX_TS_BASE + (anc_id - 1) * FINAL_MSG_TS_LEN], &resp_rx_ts_32);
+
+        a2a_resp_tx_ts = get_tx_timestamp_u64();
+        uint64_t a2a_final_rx_ts = get_rx_timestamp_u64();
+
+        double Ra = (double)(resp_rx_ts_32 - poll_tx_ts_32);
+        double Rb = (double)((uint32_t)a2a_final_rx_ts - (uint32_t)a2a_resp_tx_ts);
+        double Da = (double)(final_tx_ts_32 - resp_rx_ts_32);
+        double Db = (double)((uint32_t)a2a_resp_tx_ts - (uint32_t)a2a_poll_rx_ts);
+        int64_t tof_dtu = (int64_t)((Ra * Rb - Da * Db) / (Ra + Rb + Da + Db));
+        double tof = tof_dtu * DWT_TIME_UNITS;
+        double dist_m = tof * SPEED_OF_LIGHT;
+#if defined(USE_DW1000)
+        dist_m = dist_m - dwt_getrangebias(inst_ch, (float)dist_m, inst_prf);
+#endif
+        if (dist_m > 0 && dist_m < 20000.0) {
+            a2a_distance[initiator_id] = (int32_t)(dist_m * 1000);
+            log_i("A2A: A%d-A%d = %d mm (responder)", initiator_id, anc_id, a2a_distance[initiator_id]);
+        }
+        rnganch_change_back_to_anchor(dev);
+        break;
+    }
+#endif
+
     default:
         break;
     }
@@ -268,12 +345,62 @@ static void twrAnchor_rxOkHandle(void)
 
 static void twrAnchor_sentHandle(void)
 {
+#if defined(ANCRANGE)
+    dwDevice_t *dev = get_the_local_structure_of_dev();
+    if (dev->device_mode == ANCHOR_RNG && dev->twr_mode == INITIATOR) {
+        if (a2a_state == A2A_POLL_SENT) {
+            a2a_poll_tx_ts = get_tx_timestamp_u64();
+            a2a_final_tx_time = (a2a_poll_tx_ts + inst_poll2final_time) & MASK_TXDTS;
+            return;
+        }
+        if (a2a_state == A2A_FINAL_SENT) {
+            (void)get_tx_timestamp_u64();
+            for (uint8_t i = 1; i < MAX_AHCHOR_NUMBER; i++) {
+                if (!((a2a_rxRespMask >> i) & 0x01)) continue;
+                uint32_t Ra = (uint32_t)a2a_resp_rx_ts[i] - (uint32_t)a2a_poll_tx_ts;
+                uint8_t resp_position = i - anc_id - 1;
+                uint32_t Db_known = (FIRST_RESP_SEND_850K + resp_position * inst_data_interval + ANC_RESP_SEND_BACK_850K) * UUS_TO_DWT_TIME;
+                int64_t tof_dtu = ((int64_t)Ra - (int64_t)Db_known) / 2;
+                double tof = tof_dtu * DWT_TIME_UNITS;
+                double dist_m = tof * SPEED_OF_LIGHT;
+#if defined(USE_DW1000)
+                dist_m = dist_m - dwt_getrangebias(inst_ch, (float)dist_m, inst_prf);
+#endif
+                if (dist_m > 0 && dist_m < 20000.0) {
+                    a2a_distance[i] = (int32_t)(dist_m * 1000);
+                    log_i("A2A: A%d-A%d = %d mm (initiator)", anc_id, i, a2a_distance[i]);
+                }
+            }
+            rnganch_change_back_to_anchor(dev);
+            return;
+        }
+    }
+    if (dev->twr_mode == RESPONDER_A) {
+        a2a_resp_tx_ts = get_tx_timestamp_u64();
+        return;
+    }
+#endif
     anch_txRespOrRxReEnable();                      // 发送resp帧之后，触发中断
 }
 
 static uint8_t twrAnchor_rxErrorOrTimeoutHandle(void)
 {
     dwDevice_t* dev = get_the_local_structure_of_dev();
+
+#if defined(ANCRANGE)
+    if (dev->device_mode == ANCHOR_RNG) {
+        if (a2a_rxRespMask != 0 && a2a_remainingResp == 0) {
+            anch_a2a_sendFinal(dev);
+        } else {
+            rnganch_change_back_to_anchor(dev);
+        }
+        return 0;
+    }
+    if (dev->twr_mode == RESPONDER_A) {
+        rnganch_change_back_to_anchor(dev);
+        return 0;
+    }
+#endif
 
     // 接收超时有3种情况，接收poll帧超时，接收resp帧超时，接收final帧超时
     // 接收poll异常，重新打开接收
@@ -434,7 +561,7 @@ static void anch_rxRenableImmdiate(dwDevice_t *dev)
         // anch_rxRenableImmdiate();                                 // 处理重新打开接收
         // return 0;
     }
-    dev->twr_mode = RESPONDER_T;                                     // twr模式设置，表示同基站测距，接收poll
+    dev->twr_mode = LISTENER;                                        // 空闲状态，等待接收 poll (tag 或 anchor)
 }
 
 // 将要发送的resp帧打包好，存入发送缓存
@@ -447,7 +574,7 @@ static void anch_perpareAnc2TagResp(void)
     tx_resp_msg[RANGE_NB_IDX]           = range_nb;
     tx_resp_msg[SENDER_SHORT_ADD_IDX]   = anc_id;
     tx_resp_msg[RECEIVER_SHORT_ADD_IDX] = recv_tag_id;
-    tx_resp_msg[FUNC_CODE_IDX]          = FUNC_CODE_RESP;
+    tx_resp_msg[FUNC_CODE_IDX]          = RTLS_MSG_ANCH_RESP;
     tx_resp_msg[RESP_MSG_GROUP_IDX]     = group_id;
 
     /* 把上一周期算出的测距值(mm)以大端写入 resp 的 PREV_DIS 字段，回传给标签显示。
@@ -492,8 +619,90 @@ static void anch_perpareAnc2TagResp(void)
     }
 
     dwt_writetxdata(RESP_MSG_LEN + FCS_LEN, tx_resp_msg, 0); //数据写入DW1000数据缓冲区
-    dwt_writetxfctrl(RESP_MSG_LEN + FCS_LEN, 0, 1); 
+    dwt_writetxfctrl(RESP_MSG_LEN + FCS_LEN, 0, 1);
 }
+
+#if defined(ANCRANGE)
+static void rnganch_change_back_to_anchor(dwDevice_t *dev)
+{
+    dev->device_mode = ANCHOR;
+    dev->twr_mode = LISTENER;
+    a2a_state = A2A_IDLE;
+    dwt_setrxtimeout(0);
+    dwt_setrxaftertxdelay(0);
+    anch_rxRenableImmdiate(dev);
+}
+
+static void anch_start_a2a(dwDevice_t *dev, uint8_t expectedResps)
+{
+    dwt_forcetrxoff();
+    dev->device_mode = ANCHOR_RNG;
+    dev->twr_mode = INITIATOR;
+    a2a_range_nb++;
+    a2a_remainingResp = expectedResps;
+    a2a_rxRespMask = 0;
+
+    tx_poll_anchor_msg[SEQ_NB_IDX] = frame_seq_nb++;
+    tx_poll_anchor_msg[PANID_IDX] = (uint8_t)PAN_ID;
+    tx_poll_anchor_msg[PANID_IDX + 1] = (uint8_t)(PAN_ID >> 8);
+    tx_poll_anchor_msg[SENDER_SHORT_ADD_IDX] = anc_id;
+    tx_poll_anchor_msg[RECEIVER_SHORT_ADD_IDX] = 0xFF;
+    tx_poll_anchor_msg[FUNC_CODE_IDX] = RTLS_MSG_ANCH_POLL;
+    tx_poll_anchor_msg[RANGE_NB_IDX] = a2a_range_nb;
+
+    dwt_writetxdata(ANCH_POLL_MSG_LEN + FCS_LEN, tx_poll_anchor_msg, 0);
+    dwt_writetxfctrl(ANCH_POLL_MSG_LEN + FCS_LEN, 0, 1);
+
+    dwt_setrxtimeout(inst_resp_rx_timeout);
+    a2a_state = A2A_POLL_SENT;
+    if (dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED) == DWT_ERROR) {
+        rnganch_change_back_to_anchor(dev);
+    }
+}
+
+static void anch_a2a_sendFinal(dwDevice_t *dev)
+{
+    memset(tx_anch_final_msg, 0, ANCH_FINAL_MSG_LEN);
+    tx_anch_final_msg[0] = 0x41;
+    tx_anch_final_msg[1] = 0x88;
+    tx_anch_final_msg[SEQ_NB_IDX] = frame_seq_nb++;
+    tx_anch_final_msg[PANID_IDX] = (uint8_t)PAN_ID;
+    tx_anch_final_msg[PANID_IDX + 1] = (uint8_t)(PAN_ID >> 8);
+    tx_anch_final_msg[RECEIVER_SHORT_ADD_IDX] = 0xFF;
+    tx_anch_final_msg[SENDER_SHORT_ADD_IDX] = anc_id;
+    tx_anch_final_msg[FUNC_CODE_IDX] = RTLS_MSG_ANCH_FINAL;
+    tx_anch_final_msg[RANGE_NB_IDX] = a2a_range_nb;
+    tx_anch_final_msg[A2A_FINAL_VALID_IDX] = a2a_rxRespMask;
+
+    final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_POLL_TX_TS_IDX], a2a_poll_tx_ts);
+    uint64_t final_tx_ts_embed = a2a_final_tx_time + (uint64_t)ant_dly;
+    final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_FINAL_TX_TS_IDX], final_tx_ts_embed);
+    for (uint8_t i = 1; i < MAX_AHCHOR_NUMBER; i++) {
+        if ((a2a_rxRespMask >> i) & 0x01) {
+            final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_RESP_RX_TS_BASE + (i - 1) * FINAL_MSG_TS_LEN], a2a_resp_rx_ts[i]);
+        }
+    }
+
+    dwt_writetxdata(ANCH_FINAL_MSG_LEN + FCS_LEN, tx_anch_final_msg, 0);
+    dwt_writetxfctrl(ANCH_FINAL_MSG_LEN + FCS_LEN, 0, 1);
+    dwt_setdelayedtrxtime((uint32)(a2a_final_tx_time >> 8));
+    a2a_state = A2A_FINAL_SENT;
+    if (dwt_starttx(DWT_START_TX_DELAYED) == DWT_ERROR) {
+        rnganch_change_back_to_anchor(dev);
+    }
+}
+
+void anch_checkA2ATrigger(dwDevice_t *dev)
+{
+    if (dev->device_mode != ANCHOR || dev->twr_mode != LISTENER)
+        return;
+
+    if (anc_id == 0 && portGetTickCnt() >= a2aStartTime_ms) {
+        a2aStartTime_ms += sframePeriod_ms;
+        anch_start_a2a(dev, MAX_AHCHOR_NUMBER - 1);
+    }
+}
+#endif
 
 /*! ------------------------------------------------------------------------------------------------------------------
  * @fn get_tx_timestamp_u64()

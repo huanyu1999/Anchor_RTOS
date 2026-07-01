@@ -52,8 +52,14 @@ typedef int32_t  int32;
 #include "drv_timer.h"
 #include "iwdg.h"
 
-
-
+typedef enum {
+    UWB_TX_MODE_IMMEDIATE = 0,
+    UWB_TX_MODE_DELAYED,
+    UWB_TX_MODE_DELAYED_REF,
+    UWB_TX_MODE_DELAYED_RX_TS,
+    UWB_TX_MODE_DELAYED_TX_TS,
+    UWB_TX_MODE_CCA,
+} uwb_tx_mode_t;
 
 #define SOFTWARE_VER                   "V1.0"
 
@@ -65,8 +71,14 @@ typedef int32_t  int32;
  * 计算距离结果比实际距离小，需要增大距离，则减小这个数
  * 计算距离结果比实际距离大，需要减小距离，则增大这个数
  */                                                                                                               
-#define ANT_DLY                         16549
-// #define ANT_DLY                         16485
+#define ANT_DLY_DW1000                 16549   // DW1000：已按标签链路标定，作为参考基准
+#define ANT_DLY_DW3000                 16347   // DW3000：原照抄 16549，A2A 混合对偏小 ~0.95m，减 202 单位单独标定
+
+#if defined(USE_DW3000)
+#define ANT_DLY_DEFAULT                ANT_DLY_DW3000
+#elif defined(USE_DW1000)
+#define ANT_DLY_DEFAULT                ANT_DLY_DW1000
+#endif
 
 /* 发射功率，目前设定为最大值 */
 #if defined(USE_DW3000)
@@ -142,7 +154,7 @@ typedef int32_t  int32;
 #define BLINK_MSG_LEN                   10
 #define INIT_MSG_LEN                    12
 #define ANCH_POLL_MSG_LEN               11      // header(9) + fcode(1) + range_nb(1)
-#define ANCH_RESP2_MSG_LEN              11      // header(9) + fcode(1) + range_nb(1)
+#define ANCH_RESP2_MSG_LEN              15      // header(9) + fcode(1) + range_nb(1) + prev_dis(4)
 #define ANCH_FINAL_MSG_LEN              (12 + FINAL_MSG_TS_LEN * 2 + FINAL_MSG_TS_LEN * (MAX_AHCHOR_NUMBER - 1))  // header(9)+fcode(1)+range_nb(1)+valid(1)+poll_tx(4)+final_tx(4)+resp_rx(4)×N
 
 /* 数据帧数组索引 */
@@ -192,6 +204,8 @@ typedef int32_t  int32;
 // #define FINAL_MSG_A7_GROUP_ID_IDX       44
 
 /* A2A FINAL 帧字段索引 */
+#define A2A_RESP2_PREV_DIS_IDX          11
+
 #define A2A_FINAL_VALID_IDX             11
 #define A2A_FINAL_POLL_TX_TS_IDX        12
 #define A2A_FINAL_FINAL_TX_TS_IDX       (A2A_FINAL_POLL_TX_TS_IDX + FINAL_MSG_TS_LEN)
@@ -237,6 +251,9 @@ typedef enum { RANGE_NULL, RANGE_TWR_OK, RANGE_ERROR } twrStatus;
 typedef enum { UWB_CHIP_DW1000, UWB_CHIP_DW3000 } uwbChipType;
 
 /* 系统运行角色 */
+// Tag = Exchanges DecaRanging messages (Poll-Response-Final) with Anchor and enabling Anchor to calculate the range between the two instances
+// Anchor = see above
+// Anchor_Rng = the anchor (assumes a tag function) and ranges to another anchor - used in Anchor to Anchor TWR for auto positioning function
 typedef enum { TAG, ANCHOR, ANCHOR_RNG, NUM_MODES } instanceModes;
 
 // instance sending a poll (starting TWR) is INITIATOR
@@ -352,6 +369,7 @@ int check_twr_quality(uint16_t indexDiff_poll, uint16_t indexDiff_final);
 dwDistance_t* get_the_local_structure_of_dis(void);
 dwDevice_t* get_the_local_structure_of_dev(void);
 uint8_t get_tagFinalRecvFlag(uint8_t tad_idx);
+int uwb_starttx(uwb_tx_mode_t mode, bool response_expected);
 #if defined(ANCRANGE)
 void anch_checkA2ATrigger(dwDevice_t *dev);
 #endif

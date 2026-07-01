@@ -247,7 +247,8 @@ void task_swoOutPut(void *arg)
                     portMAX_DELAY);
         SEGGER_RTT_Write(0, temp_buf, num_bytes);
 
-        // --- 原 SWO/ITM 输出路径（保留以便回滚）---
+        // --- 原 SWO/ITM 输出路径（保留以便回滚）--
+        // -
         // size_t idx = 0;
         // while (idx < num_bytes)
         // {

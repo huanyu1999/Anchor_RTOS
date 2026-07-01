@@ -125,9 +125,9 @@ ANT_DLY: 16485 → 16549   （已应用）
 | 内容 | 位置 |
 |---|---|
 | `ANT_DLY` 定义 | `01_Core/App/Inc/dw_instance.h` |
-| 天线延时写入芯片 | `dw_main.c` `dwt_setrxantennadelay()` / `dwt_settxantennadelay()`（DW3000 与 DW1000 init 各一处，**共用同一个 `ANT_DLY`**） |
+| 天线延时写入芯片 | `dw_main.c` `dwt_setrxantennadelay()` / `dwt_settxantennadelay()`（值来自 `uwb_get_default_ant_dly()`，**按芯片分别取 `ANT_DLY_DW1000` / `ANT_DLY_DW3000`**） |
 | 运行期距离微调 | `distance_offset_cm`（`dw_instance.h`，可经网络协议下发；落点是否真加到测量值待确认） |
 | TOF 计算 / 距离合法性 | `dw_instance_anchor.c` FUNC_CODE_FINAL 分支 |
 | 距离入堆（有符号比较） | `dw_sort.c` `node_less` / `disManager_update` |
 
-> 注意：`ANT_DLY` 被 DW1000 与 DW3000 两版**共用**。若只在一种芯片上标定，刷另一版前需确认是否要分开取值。
+> 注意：`ANT_DLY_DW1000` / `ANT_DLY_DW3000` **已分芯片取值**（DW3000 原照抄 DW1000，后单独标定 16347，见 [`a2a_ranging_debug.md`](./a2a_ranging_debug.md)）。每颗芯片按自身真实延时标定后，任意配对（含混芯片、锚-标签）在 DS-TWR 公式里自动抵消，无需再针对配对加 offset。

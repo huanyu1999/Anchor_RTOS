@@ -6,7 +6,6 @@
 #include "elog.h"
 #include "SEGGER_RTT.h"
 
-#define ANCHOR_DEV_ID 0x00
 uint8_t group_id;                   // 组ID，后续会有用处，不同车务段的人员共同施工，各自跟各自的基站通信？？？？
 uint8_t anc_id;                     // 如当前角色是基站，则表示当前基站ID
 uint8_t tag_id;                     // 如当前角色是标签，则表示当前标签ID
@@ -28,7 +27,7 @@ uint32_t inst_final_rx_timeout;     // 基站final接收超时时间，根据通
 uint32_t inst_resp_rx_timeout;      // 标签发送poll后接收resp超时时间，根据通信速率不同而不同，单位us
 uint64_t inst_poll2final_time;      // 单TWR周期poll起始到final结束的总时间
 uint32_t inst_data_interval;        // 相邻两条数据的间隔，如poll和第一个resp的间隔，resp1和resp2的间隔，根据通信速率不同而不同，单位us
-uint16 ant_dly = ANT_DLY;           // 天线延时
+uint16 ant_dly = ANT_DLY_DEFAULT;   // 天线延时
 uint32 tx_power;                    // 发射增益代码
 int32 distance_offset_cm;           // 距离校准，单位cm
 #if defined(ANCRANGE)
@@ -269,6 +268,70 @@ static uwbAlgorithm_t* findAlgorithmByChip(uwbChipType chip)
     return &dummy_Algorithm;
 }
 
+static uint16_t uwb_get_default_ant_dly(void)
+{
+#if defined(USE_DW3000)
+    return ANT_DLY_DW3000;
+#elif defined(USE_DW1000)
+    return ANT_DLY_DW1000;
+#else
+    return ANT_DLY_DEFAULT;
+#endif
+}
+
+/* Unify the app-facing TX start semantics.
+ * DW1000 only supports immediate/delayed start plus wait-for-response.
+ * DW3000 extends this with reference/RX/TX timestamp delayed modes and CCA. */
+int uwb_starttx(uwb_tx_mode_t mode, bool response_expected)
+{
+    uint8_t driver_mode = 0;
+
+#if defined(USE_DW3000)
+    switch (mode)
+    {
+    case UWB_TX_MODE_IMMEDIATE:
+        driver_mode = DWT_START_TX_IMMEDIATE;
+        break;
+    case UWB_TX_MODE_DELAYED:
+        driver_mode = DWT_START_TX_DELAYED;
+        break;
+    case UWB_TX_MODE_DELAYED_REF:
+        driver_mode = DWT_START_TX_DLY_REF;
+        break;
+    case UWB_TX_MODE_DELAYED_RX_TS:
+        driver_mode = DWT_START_TX_DLY_RS;
+        break;
+    case UWB_TX_MODE_DELAYED_TX_TS:
+        driver_mode = DWT_START_TX_DLY_TS;
+        break;
+    case UWB_TX_MODE_CCA:
+        driver_mode = DWT_START_TX_CCA;
+        break;
+    default:
+        return DWT_ERROR;
+    }
+#elif defined(USE_DW1000)
+    switch (mode)
+    {
+    case UWB_TX_MODE_IMMEDIATE:
+        driver_mode = DWT_START_TX_IMMEDIATE;
+        break;
+    case UWB_TX_MODE_DELAYED:
+        driver_mode = DWT_START_TX_DELAYED;
+        break;
+    default:
+        return DWT_ERROR;
+    }
+#endif
+
+    if (response_expected)
+    {
+        driver_mode |= DWT_RESPONSE_EXPECTED;
+    }
+
+    return dwt_starttx(driver_mode);
+}
+
 static void dev_uwbCommonPreInit(dwDevice_t *dev)
 {
     distance_init(get_the_local_structure_of_dis());
@@ -365,7 +428,7 @@ static void dev_dw3000Init(dwDevice_t *dev)
     tx_power = txconfig_options.power;
     dwt_configuretxrf(&txconfig_options);
 
-    ant_dly = ANT_DLY;
+    ant_dly = uwb_get_default_ant_dly();
     dwt_setrxantennadelay(ant_dly);
     dwt_settxantennadelay(ant_dly);
 
@@ -450,7 +513,7 @@ static void dev_dw1000Init(dwDevice_t *dev)
     tx_power = txconfig_options.power;
     dwt_configuretxrf(&txconfig_options);
 
-    ant_dly = ANT_DLY;
+    ant_dly = uwb_get_default_ant_dly();
     dwt_setrxantennadelay(ant_dly);
     dwt_settxantennadelay(ant_dly);
 
@@ -731,11 +794,9 @@ static void dwDevice_init(dwDevice_t *dev)
 {
     dev->device_mode = ANCHOR;
     dev->twr_mode = LISTENER;
-#if defined(USE_DW3000)
+    /* A2A/TWR 角色依赖真实基站 ID。
+     * DW1000 也需要和 DW3000 一样从拨码读取，否则所有基站都会被当成 A0。 */
     dev->device_id = dev_getDipVal();
-#elif defined(USE_DW1000)
-    dev->device_id = ANCHOR_DEV_ID;
-#endif
     dev->remainingRespToRx = -1;     // 初始化为 -1
     dev->rxOtherResp = 0;            // 接收其他基站resp帧计数
     dev->respTxIndex = 0;            // 该变量用于决定基站发送resp帧的位置，跟基站自身ID相关

@@ -15,8 +15,8 @@
 #define MODULE_CAN_ENABLE           1   /* CAN 总线通信（双基站联动） */
 
 /* ======================== 存储 & 日志 ======================== */
-#define MODULE_EMMC_ENABLE          1   /* eMMC + FatFS */
-#define MODULE_LOG_MANAGE_ENABLE    1   /* 业务日志写入 eMMC */
+#define MODULE_EMMC_ENABLE          0   /* eMMC + FatFS */
+#define MODULE_LOG_MANAGE_ENABLE    0   /* 业务日志写入 eMMC */
 #define MODULE_USB_MSC_ENABLE       0   /* USB MSC（U盘模式导出日志） */
 
 /* ======================== 网络 & 卫星授时 ======================== */

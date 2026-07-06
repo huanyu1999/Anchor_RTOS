@@ -261,24 +261,50 @@ typedef enum {
 
 
 
-/******************************************************Dw1000 Device************************************************************/
-struct dwDevice_s;
+/******************************************************TWR Instance************************************************************/
+/* 统一实例管理结构（参照 TREK1000 instance_data_t），单例经 instance_get() 访问。
+ *
+ * T2A responder / A2A initiator / A2A responder 共用同一套交换状态：
+ * 同一时刻设备只处于一个交换中，语义由 device_mode + twr_mode 区分（TREK1000 同款），
+ * 不为 A2A 单独维护状态机或计数器副本。
+ * 对外上报用的全局变量（anc_id/distance_report/range_status 等）不在此内，见文件尾 extern 区。 */
+typedef struct instance_data_s {
+    /* 角色管理 */
+    instanceModes device_mode;      // ANCHOR / ANCHOR_RNG（TAG 预留）
+    twrModes      twr_mode;         // 当前交换中的子角色
+    uint8_t       device_id;        // 拨码读取的基站 ID
+    uint8_t       gatewayAnchor;    // device_id == 0：A0，负责标签时隙校准 / A2A 发起 / discovery
 
-typedef void (*dwHandler_t)(struct dwDevice_s *dev);
+    /* 单次交换的轮转状态 */
+    int8_t   remainingRespToRx;     // 还需接收的 resp 数；-1 = 空闲（未在交换中）
+    uint8_t  rxRespMask;            // 本轮已收到 resp 的发送方位掩码（A2A final 有效位 / 调试）
+    uint8_t  wait4final;            // 0 / WAIT4TAGFINAL / WAIT4ANCFINAL
+    uint8_t  lastTxFcode;           // 最近调度发送的功能码，TX-done 事件分流用（对应 TREK previousState 的作用）
+    uint8_t  frame_seq_nb;          // 802.15.4 帧序号，每帧 +1
+    uint8_t  range_nb;              // T2A 测距序号（随标签 poll 更新，resp 原样回带）
+    uint8_t  a2a_range_nb;          // A2A 测距序号（发起端自增；TREK rangeNumAnc 同理独立）
+    uint8_t  recv_tag_id;           // 当前测距标签 ID
+    uint8_t  resp_valid;            // 标签 final 帧携带的有效 resp 掩码
+    uint64_t nextSlotTime;          // 下一 resp 槽的绝对调度时间(dwt 单位)，逐事件累加（TREK delayedTRXTime 机制）
 
-typedef struct dwDevice_s {
-    void* user_data;
-    instanceModes device_mode;
-    twrModes twr_mode;
-    uint8_t device_id;
-    uint8_t rxOtherResp;
-    uint8_t respTxIndex;
-    int8_t  remainingRespToRx;
-    uint8_t wait4final;
+    /* responder 侧时间戳（T2A / A2A 共用，交换互斥所以安全） */
+    uint64_t poll_rx_ts;
+    uint64_t resp_tx_ts;
+    uint64_t final_rx_ts;
+    /* initiator 侧时间戳与调度（A2A 发起 / 未来 tag 角色复用） */
+    uint64_t poll_tx_ts;
+    uint64_t resp_rx_ts[MAX_AHCHOR_NUMBER];
+    uint64_t final_tx_time;         // 发起端 final 预调度发送时间
+    uint64_t final_rx_time;         // 应答端 final 延迟接收开启时间
 
-    uint16_t indexDiff_poll;
-    uint16_t indexDiff_final;
-} dwDevice_t;
+    int32_t  prev_range[MAX_TAG_LIST_SIZE];     // 各标签上一轮测距值(mm)，下轮 resp 回传
+#if defined(ANCRANGE)
+    int32_t  a2a_distance[MAX_AHCHOR_NUMBER];   // 与各基站的 A2A 距离(mm)
+    /* A2A 超帧调度（A0 专用） */
+    uint32_t sframePeriod_ms;       // 超帧周期
+    uint32_t a2aStartTime_ms;       // 下次 A2A 触发的绝对 tick
+#endif
+} instance_data_t;
 
 /******************************************************Distance Manage************************************************************/
 #define ANCHOR_SELF_DIS  0
@@ -318,11 +344,12 @@ typedef enum uwbEvent_e {
 
 // Callback for one uwb algorithm
 typedef struct uwbAlgorithm_s {
-    int (*init)(dwDevice_t *dev);
-    uint32_t (*onEvent)(dwDevice_t *dev, uwbEvent_t event);
+    int (*init)(instance_data_t *inst);
+    uint32_t (*onEvent)(instance_data_t *inst, uwbEvent_t event);
 } uwbAlgorithm_t;
 
-// 待后续优化测距模块代码再处理
+/* 对外上报/配置接口使用的全局变量（net_protocol.c / app_network.c / dw_sort.c 消费），
+ * TWR 内部轮转状态已收入 instance_data_t，不再对外暴露 */
 extern uint8_t anc_id;
 extern uint8_t tag_id;
 extern uint8_t group_id;                                // 组ID
@@ -331,14 +358,10 @@ extern int32_t group_report[8];                         // 基站组ID数组，�
 extern uint32_t range_time;
 extern uint8_t inst_ch;                                 // 信道号Channel number
 extern uint8_t inst_prf;                                // PRF
-extern uint8_t frame_seq_nb;                            // 每帧数据增加1
-extern uint8_t range_nb;                                // 每次range增加1(poll resp1~4 fianl维护一套range_nb)
-extern uint8_t recv_tag_id;
-extern uint8_t recv_anc_id;
 extern uint8_t range_status;
 extern float rx_power;
 extern uint16_t inst_slot_number;
-extern uint8_t inst_dataRate; 
+extern uint8_t inst_dataRate;
 extern uint8_t inst_one_slot_time;
 extern uint32_t inst_final_rx_timeout;
 extern uint32_t inst_resp_rx_timeout;
@@ -346,13 +369,6 @@ extern uint64_t inst_poll2final_time;
 extern uint32_t inst_data_interval;
 extern uint16 ant_dly;
 extern int32 distance_offset_cm;                        // 距离校准，单位cm
-extern int user_data[10];
-
-#if defined(ANCRANGE)
-extern int32_t a2a_distance[MAX_AHCHOR_NUMBER];
-extern uint32_t sframePeriod_ms;
-extern uint32_t a2aStartTime_ms;
-#endif
 
 extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
 
@@ -360,7 +376,6 @@ extern double dwt_getrangebias(uint8 chan, float range, uint8 prf);
 void dev_uwbInit(void);
 void logOut_dw1000Config(void);
 void task_uwb(void *arg);
-void task_twrRun(void *arg);
 void task_minHeapManage(void *arg);
 void task_getMinDis(void *arg);
 #if defined(USE_DW1000)
@@ -369,10 +384,9 @@ uint16_t uwb_isInNLOS_index(uint8_t receive_functionCode);
 #endif
 int check_twr_quality(uint16_t indexDiff_poll, uint16_t indexDiff_final);
 dwDistance_t* get_the_local_structure_of_dis(void);
-dwDevice_t* get_the_local_structure_of_dev(void);
-uint8_t get_tagFinalRecvFlag(uint8_t tad_idx);
+instance_data_t* instance_get(void);
 int dev_uwbStartTx(uwb_tx_mode_t mode, bool response_expected);
 #if defined(ANCRANGE)
-void anch_checkA2ATrigger(dwDevice_t *dev);
+void anch_checkA2ATrigger(instance_data_t *inst);
 #endif
 #endif

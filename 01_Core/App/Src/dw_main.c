@@ -13,10 +13,6 @@ uint8_t tag_id;                     // 如当前角色是标签，则表示当�
 int32_t distance_report[8];         // 基站测距值数组，用于打包输出
 int32_t group_report[8];            // 基站组ID数组，用于打包输出
 uint32_t range_time;                // 测距产生时间，串口打包发送
-uint8_t frame_seq_nb = 0;           // 每帧数据增加1
-uint8_t range_nb = 0;               // 每次range增加1(poll resp1~4 fianl维护一套range_nb)
-uint8_t recv_tag_id;                // 如当前角色是基站，则表示当前基站收到标签发送过来数据的标签ID
-uint8_t recv_anc_id;                // 如当前角色是标签，则表示当前标签收到基站发送过来数据的基站ID
 uint8_t range_status = RANGE_NULL;  // 测距成功标志位，用于打包输出
 float rx_power;                     // 接收RSSI
 uint16_t inst_slot_number;          // 系统内最大标签容量
@@ -35,7 +31,7 @@ int32 distance_offset_cm;           // 距离校准，单位cm
 sfConfig_t sfConfig = {
     .numSlots = MAX_TAG_NUMBER + 2, // 最大slot数量，标签数量+2个基站slot
     .slotDuration_ms = 12,          // 单slot时间，单位ms
-    .sfPeriod_ms = (MAX_TAG_NUMBER + 2) * 20, // 整个superframe周期时间，单位ms
+    .sfPeriod_ms = (MAX_TAG_NUMBER + 2) * 20,  // 整个superframe周期时间，单位ms
     .tagPeriod_ms = (MAX_TAG_NUMBER + 2) * 20, // 标签测距周期时间，单位ms,先设置为跟superframe周期时间一致，后续tag睡眠唤醒功能要使用
     .pollTxToFinalTxDly_us = 1300 + 3 * 1600,  // poll发送到final发送的延时，单位us
 };  // super frame 配置，针对不同通信速率，不同的基站部署个数，选择不同的配置
@@ -346,8 +342,12 @@ static float calc_length_data(float msgdatalen)
 {
     int x = 0;
 
-    x = (int)ceilf(msgdatalen * 8.0f / 330.0f);
-    msgdatalen = msgdatalen * 8.0f + x * 48.0f;
+    /* 
+        根据802.15.4 UWB PHY 规定,PSDU 数据要经过 RS(63,55) 编码:
+        每 330 bits 数据为一块, 每块附加 48 bits 校验
+    */
+    x = (int)ceil(msgdatalen * 8.0f / 330.0f); // 不足330bits 的尾块也要按一整块加 48 bits，使用ceil函数向上取整
+    msgdatalen = msgdatalen * 8.0f + x * 48.0f; // 计算总的编码后数据长度，单位bits，每个330bits数据块加上48bits校验码
 
     // Assume PHR length is 172308ns for 110k and 21539ns for 850k/6.8M.
     if (inst_dataRate == DWT_BR_110K)
@@ -357,8 +357,8 @@ static float calc_length_data(float msgdatalen)
     }
     else if (inst_dataRate == DWT_BR_850K)
     {
-        msgdatalen *= 1025.64f;
-        msgdatalen += 21539.0f;
+        msgdatalen *= 1025.64f; // 以850K为例，计算出来的总的bit数，乘上每个bit占用的时间
+        msgdatalen += 21539.0f; // 加上PHR的占用时间
     }
     else
     {
@@ -366,7 +366,7 @@ static float calc_length_data(float msgdatalen)
         msgdatalen += 21539.0f;
     }
 
-    return msgdatalen;
+    return msgdatalen;         // 返回计算完成的的air time，单位ns
 }
 
 static void dev_uwbCommonPreInit(dwDevice_t *dev)

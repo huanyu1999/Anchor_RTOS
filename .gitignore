@@ -44,3 +44,5 @@ build
 
 #clangd index cache
 .cache/
+#claude-mem auto-generated context (not project code)
+AGENTS.md

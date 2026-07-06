@@ -52,15 +52,6 @@ typedef int32_t  int32;
 #include "drv_timer.h"
 #include "iwdg.h"
 
-typedef enum {
-    UWB_TX_MODE_IMMEDIATE = 0,
-    UWB_TX_MODE_DELAYED,
-    UWB_TX_MODE_DELAYED_REF,
-    UWB_TX_MODE_DELAYED_RX_TS,
-    UWB_TX_MODE_DELAYED_TX_TS,
-    UWB_TX_MODE_CCA,
-} uwb_tx_mode_t;
-
 #define SOFTWARE_VER                   "V1.0"
 
 #define ANCRANGE                        1
@@ -134,7 +125,6 @@ typedef enum {
 #define ANC_RESP_SEND_BACK_850K         300     // 850K通信速率下，基站延后发送RESP消息时间，在前面接收处理完poll帧的基础上，可能还会有接收resp帧的情况，难道是guard time？
 #define TAG_FINALE_SEND_BACK_850K       300     // 850K通信速率下，标签延后发送FINAL消息时间
 #define MAX_POLL_SEND_SLEEP_COUNT       150     // MAX_POLL_SEND_SLEEP_COUNT次发送后无运动则进入休眠
-#define ANC_RANGE_COUNT                 5       // 自标定时每个基站测距次数
 
 /* PAN ID */
 #define PAN_ID                          0xDECA
@@ -187,23 +177,7 @@ typedef enum {
 // #define FINAL_MSG_RESP1_RX_TS_IDX       21
 // #define FINAL_MSG_RESP2_RX_TS_IDX       26
 
-// #define FINAL_MSG_RESP3_RX_TS_IDX       31
-// #define FINAL_MSG_RESP4_RX_TS_IDX       36
-// #define FINAL_MSG_RESP5_RX_TS_IDX       41
-// #define FINAL_MSG_RESP6_RX_TS_IDX       46
-// #define FINAL_MSG_RESP7_RX_TS_IDX       51
-// #define FINAL_MSG_RESP8_RX_TS_IDX       56
-
-// #define SYNC_MSG_TIME_IDX               10
-// #define FINAL_MSG_A1_GROUP_ID_IDX       25
-// #define FINAL_MSG_A2_GROUP_ID_IDX       30
-// #define FINAL_MSG_A3_GROUP_ID_IDX       35
-// #define FINAL_MSG_A4_GROUP_ID_IDX       40
-// #define FINAL_MSG_A5_GROUP_ID_IDX       45
-// #define FINAL_MSG_A6_GROUP_ID_IDX       50
-// #define FINAL_MSG_A7_GROUP_ID_IDX       44
-
-/* A2A FINAL 帧字段索引 */
+/* A2A(基站间测距) FINAL 帧字段索引 */
 #define A2A_RESP2_PREV_DIS_IDX          11
 
 #define A2A_FINAL_VALID_IDX             11
@@ -244,17 +218,32 @@ typedef enum {
     STA_A2A_SEND_FINAL
 } instStatus;
 
+typedef enum {
+    UWB_TX_MODE_IMMEDIATE = 0,
+    UWB_TX_MODE_DELAYED,
+    UWB_TX_MODE_DELAYED_REF,
+    UWB_TX_MODE_DELAYED_RX_TS,
+    UWB_TX_MODE_DELAYED_TX_TS,
+    UWB_TX_MODE_CCA,
+} uwb_tx_mode_t;
+
 /* TWR测距状态 */
-typedef enum { RANGE_NULL, RANGE_TWR_OK, RANGE_ERROR } twrStatus;
+typedef enum {
+    RANGE_NULL, RANGE_TWR_OK, RANGE_ERROR
+} twrStatus;
 
 /* UWB 芯片类型 */
-typedef enum { UWB_CHIP_DW1000, UWB_CHIP_DW3000 } uwbChipType;
+typedef enum {
+    UWB_CHIP_DW1000, UWB_CHIP_DW3000
+} uwbChipType;
 
 /* 系统运行角色 */
 // Tag = Exchanges DecaRanging messages (Poll-Response-Final) with Anchor and enabling Anchor to calculate the range between the two instances
 // Anchor = see above
 // Anchor_Rng = the anchor (assumes a tag function) and ranges to another anchor - used in Anchor to Anchor TWR for auto positioning function
-typedef enum { TAG, ANCHOR, ANCHOR_RNG, NUM_MODES } instanceModes;
+typedef enum {
+    TAG, ANCHOR, ANCHOR_RNG, NUM_MODES
+} instanceModes;
 
 // instance sending a poll (starting TWR) is INITIATOR
 // instance which receives a poll (and will be involved in the TWR) is RESPONDER
@@ -262,7 +251,15 @@ typedef enum { TAG, ANCHOR, ANCHOR_RNG, NUM_MODES } instanceModes;
 // RESONDER_A = RESPONDER_Anchor_Poll
 // RESPONDER_B = RESPONDER_Blink
 // RESPONDER_T = RESPONDER_Tag_Poll
-typedef enum { INITIATOR, RESPONDER_A, RESPONDER_B, RESPONDER_T, LISTENER, GREETER, ATWR_MODES } twrModes;
+typedef enum {
+    INITIATOR,
+    RESPONDER_A, RESPONDER_B, RESPONDER_T,
+    LISTENER,
+    GREETER,
+    ATWR_MODES
+} twrModes;
+
+
 
 /******************************************************Dw1000 Device************************************************************/
 struct dwDevice_s;
@@ -289,11 +286,6 @@ typedef struct dwDevice_s {
 #define FINAL_DIS        2
 #define MIN_DIS_QUEUE_LEN 3
 
-// typedef struct {
-//     uint8_t twr_successSign;          // 本次TWR测距是否成功的标志位，同标签编号进行绑定
-//     int32_t tag_distance;
-// } tagDistance_t;    
-
 typedef struct {            
     int32_t dis_value;
     uint8_t dis_class;
@@ -305,7 +297,17 @@ typedef struct {
     int32_t       min_dis;                                 // 最小的距离值
     uint8_t       dis_idx;                                 // 最小距离值对应的索引，也就是对应的标签ID                   
 } dwDistance_t;
- 
+
+/******************************************************SuperFrame Config******************************************************/
+typedef struct
+{
+    uint16 slotDuration_ms ; // slot duration (time for 1 tag to range to some anchors)
+    uint16 numSlots ; 		 // number of slots in one superframe (number of tags supported)
+    uint16 sfPeriod_ms ;	 // superframe period in ms
+    uint16 tagPeriod_ms ; 	 // the time during which tag ranges to anchors and then sleeps, should be same as FRAME PERIOD so that tags don't interfere
+    uint16 pollTxToFinalTxDly_us ; // response delay time (Poll to Final delay)
+} sfConfig_t ;
+
 /******************************************************Uwb Event************************************************************/
 typedef enum uwbEvent_e {
     eventPacketReceived,
@@ -369,7 +371,7 @@ int check_twr_quality(uint16_t indexDiff_poll, uint16_t indexDiff_final);
 dwDistance_t* get_the_local_structure_of_dis(void);
 dwDevice_t* get_the_local_structure_of_dev(void);
 uint8_t get_tagFinalRecvFlag(uint8_t tad_idx);
-int uwb_starttx(uwb_tx_mode_t mode, bool response_expected);
+int dev_uwbStartTx(uwb_tx_mode_t mode, bool response_expected);
 #if defined(ANCRANGE)
 void anch_checkA2ATrigger(dwDevice_t *dev);
 #endif

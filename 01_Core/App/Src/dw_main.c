@@ -5,6 +5,7 @@
 #include "cmsis_os.h"
 #include "elog.h"
 #include "SEGGER_RTT.h"
+#include <math.h>
 
 uint8_t group_id;                   // 组ID，后续会有用处，不同车务段的人员共同施工，各自跟各自的基站通信？？？？
 uint8_t anc_id;                     // 如当前角色是基站，则表示当前基站ID
@@ -30,6 +31,15 @@ uint32_t inst_data_interval;        // 相邻两条数据的间隔，如poll和�
 uint16 ant_dly = ANT_DLY_DEFAULT;   // 天线延时
 uint32 tx_power;                    // 发射增益代码
 int32 distance_offset_cm;           // 距离校准，单位cm
+
+sfConfig_t sfConfig = {
+    .numSlots = MAX_TAG_NUMBER + 2, // 最大slot数量，标签数量+2个基站slot
+    .slotDuration_ms = 12,          // 单slot时间，单位ms
+    .sfPeriod_ms = (MAX_TAG_NUMBER + 2) * 20, // 整个superframe周期时间，单位ms
+    .tagPeriod_ms = (MAX_TAG_NUMBER + 2) * 20, // 标签测距周期时间，单位ms,先设置为跟superframe周期时间一致，后续tag睡眠唤醒功能要使用
+    .pollTxToFinalTxDly_us = 1300 + 3 * 1600,  // poll发送到final发送的延时，单位us
+};  // super frame 配置，针对不同通信速率，不同的基站部署个数，选择不同的配置
+
 #if defined(ANCRANGE)
 uint32_t sframePeriod_ms;
 uint32_t a2aStartTime_ms;
@@ -268,7 +278,7 @@ static uwbAlgorithm_t* findAlgorithmByChip(uwbChipType chip)
     return &dummy_Algorithm;
 }
 
-static uint16_t uwb_get_default_ant_dly(void)
+static uint16_t dev_GetDefaultAntDly(void)
 {
 #if defined(USE_DW3000)
     return ANT_DLY_DW3000;
@@ -282,7 +292,7 @@ static uint16_t uwb_get_default_ant_dly(void)
 /* Unify the app-facing TX start semantics.
  * DW1000 only supports immediate/delayed start plus wait-for-response.
  * DW3000 extends this with reference/RX/TX timestamp delayed modes and CCA. */
-int uwb_starttx(uwb_tx_mode_t mode, bool response_expected)
+int dev_uwbStartTx(uwb_tx_mode_t mode, bool response_expected)
 {
     uint8_t driver_mode = 0;
 
@@ -330,6 +340,33 @@ int uwb_starttx(uwb_tx_mode_t mode, bool response_expected)
     }
 
     return dwt_starttx(driver_mode);
+}
+
+static float calc_length_data(float msgdatalen)
+{
+    int x = 0;
+
+    x = (int)ceilf(msgdatalen * 8.0f / 330.0f);
+    msgdatalen = msgdatalen * 8.0f + x * 48.0f;
+
+    // Assume PHR length is 172308ns for 110k and 21539ns for 850k/6.8M.
+    if (inst_dataRate == DWT_BR_110K)
+    {
+        msgdatalen *= 8205.13f;
+        msgdatalen += 172308.0f;
+    }
+    else if (inst_dataRate == DWT_BR_850K)
+    {
+        msgdatalen *= 1025.64f;
+        msgdatalen += 21539.0f;
+    }
+    else
+    {
+        msgdatalen *= 128.21f;
+        msgdatalen += 21539.0f;
+    }
+
+    return msgdatalen;
 }
 
 static void dev_uwbCommonPreInit(dwDevice_t *dev)
@@ -428,7 +465,7 @@ static void dev_dw3000Init(dwDevice_t *dev)
     tx_power = txconfig_options.power;
     dwt_configuretxrf(&txconfig_options);
 
-    ant_dly = uwb_get_default_ant_dly();
+    ant_dly = dev_GetDefaultAntDly();
     dwt_setrxantennadelay(ant_dly);
     dwt_settxantennadelay(ant_dly);
 
@@ -513,7 +550,7 @@ static void dev_dw1000Init(dwDevice_t *dev)
     tx_power = txconfig_options.power;
     dwt_configuretxrf(&txconfig_options);
 
-    ant_dly = uwb_get_default_ant_dly();
+    ant_dly = dev_GetDefaultAntDly();
     dwt_setrxantennadelay(ant_dly);
     dwt_settxantennadelay(ant_dly);
 

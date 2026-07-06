@@ -191,7 +191,7 @@ static void twrAnchor_rxOkHandle(void)
             resp_tx_ts = get_tx_timestamp_u64();   // 取得resp_tx时间戳
             final_rx_ts = get_rx_timestamp_u64();  // 取得final_rx时间戳
 
-            if((resp_valid >> anc_id) & 0x01)                                               // final消息中，本基站发送的resp消息是有效的,则进行距离计算，或者发送时间戳
+            if((resp_valid >> anc_id) & 0x01)      // final消息中，本基站发送的resp消息是有效的,则进行距离计算，或者发送时间戳
             {
                 uint32_t poll_tx_ts_32, resp_rx_ts_32, final_tx_ts_32;
                 uint32_t poll_rx_ts_32, resp_tx_ts_32, final_rx_ts_32;
@@ -214,7 +214,7 @@ static void twrAnchor_rxOkHandle(void)
                 Db = (double)(resp_tx_ts_32 - poll_rx_ts_32);
                 tof_dtu = (int64_t)((Ra * Rb - Da * Db) / (Ra + Rb + Da + Db));
                 tof = (int32)tof_dtu; 
-                if (tof > 0x7FFFFFFF)                     // 如果TOF值溢出
+                if (tof > 0x7FFFFFFF)                       // 如果TOF值溢出
                 {
                     tof -= 0x80000000;  
                 }
@@ -331,7 +331,7 @@ static void twrAnchor_rxOkHandle(void)
         dwt_writetxdata(ANCH_RESP2_MSG_LEN + FCS_LEN, tx_anch_resp2_msg, 0);
         dwt_writetxfctrl(ANCH_RESP2_MSG_LEN + FCS_LEN, 0, 1);
         dwt_setdelayedtrxtime((uint32)(resp_tx_time >> 8));
-        if (uwb_starttx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
+        if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
         {
             log_d("A2A A%d resp2 starttx failed, init=A%d pos=%d rn=%d",
                     anc_id, initiator_id, resp_position, a2a_range_nb);
@@ -653,7 +653,7 @@ static void anch_txRespOrRxReEnable(void)
         resp_tx_time = resp_tx_time >> 8;
         dwt_setdelayedtrxtime((uint32)resp_tx_time);
 
-        int ret = uwb_starttx(UWB_TX_MODE_DELAYED, false);  // 延时发送
+        int ret = dev_uwbStartTx(UWB_TX_MODE_DELAYED, false);  // 延时发送
         if(ret == DWT_ERROR)
         {   
             range_status = RANGE_ERROR;  
@@ -851,7 +851,7 @@ static void anch_start_a2a(dwDevice_t *dev, uint8_t expectedResps)
         dwt_setrxtimeout(a2a_first_resp_us + inst_data_interval + a2a_anc_back_us + inst_resp_rx_timeout);
     }
     a2a_state = A2A_POLL_SENT;
-    if (uwb_starttx(UWB_TX_MODE_IMMEDIATE, true) == DWT_ERROR)       // 期待延迟接收
+    if (dev_uwbStartTx(UWB_TX_MODE_IMMEDIATE, true) == DWT_ERROR)       // 期待延迟接收
     {
         rnganch_change_back_to_anchor(dev);
     }
@@ -891,7 +891,7 @@ static void anch_a2a_sendFinal(dwDevice_t *dev)
     dwt_writetxfctrl(ANCH_FINAL_MSG_LEN + FCS_LEN, 0, 1);
     dwt_setdelayedtrxtime((uint32)(a2a_final_tx_time >> 8));
     a2a_state = A2A_FINAL_SENT;
-    if (uwb_starttx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
+    if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
     {
         log_d("A2A A%d final starttx failed, mask=0x%02X rn=%d",
                 anc_id, a2a_rxRespMask, a2a_range_nb);

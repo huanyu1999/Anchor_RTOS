@@ -125,7 +125,7 @@ ANT_DLY: 16485 → 16549   （已应用）
 | 内容 | 位置 |
 |---|---|
 | `ANT_DLY` 定义 | `01_Core/App/Inc/dw_instance.h` |
-| 天线延时写入芯片 | `dw_main.c` `dwt_setrxantennadelay()` / `dwt_settxantennadelay()`（值来自 `uwb_get_default_ant_dly()`，**按芯片分别取 `ANT_DLY_DW1000` / `ANT_DLY_DW3000`**） |
+| 天线延时写入芯片 | `dw_main.c` `dwt_setrxantennadelay()` / `dwt_settxantennadelay()`（值来自 `dev_GetDefaultAntDly()`，**按芯片分别取 `ANT_DLY_DW1000` / `ANT_DLY_DW3000`**） |
 | 运行期距离微调 | `distance_offset_cm`（`dw_instance.h`，可经网络协议下发；落点是否真加到测量值待确认） |
 | TOF 计算 / 距离合法性 | `dw_instance_anchor.c` FUNC_CODE_FINAL 分支 |
 | 距离入堆（有符号比较） | `dw_sort.c` `node_less` / `disManager_update` |

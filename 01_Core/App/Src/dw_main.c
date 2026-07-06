@@ -36,11 +36,6 @@ sfConfig_t sfConfig = {
     .pollTxToFinalTxDly_us = 1300 + 3 * 1600,  // poll发送到final发送的延时，单位us
 };  // super frame 配置，针对不同通信速率，不同的基站部署个数，选择不同的配置
 
-#if defined(ANCRANGE)
-uint32_t sframePeriod_ms;
-uint32_t a2aStartTime_ms;
-static uint32_t a2aSlotOffset_ms;
-#endif
 #if defined(USE_DW3000)
 static dwt_txconfig_t txconfig_options = {
     .PGdly = 0x34,
@@ -198,8 +193,8 @@ static dwt_config_t uwb_config_channel5[7] = {
 static uwbAlgorithm_t dummy_Algorithm;
 static uwbAlgorithm_t *current_Algorithm = &dummy_Algorithm;
 extern uwbAlgorithm_t uwbTwr_AnchorAlgorithm;
-static dwDevice_t   dw1000_dev;      // 定义dw1000设备，twr使用
-static dwDistance_t distance_data;   // 定义距离管理
+static instance_data_t instance_data;   // TWR 实例单例（角色/RF/超帧/轮转状态统一管理）
+static dwDistance_t distance_data;      // 定义距离管理
 
 typedef struct {
     uwbAlgorithm_t *algorithm;
@@ -245,18 +240,10 @@ const osMessageQueueAttr_t queue_processDis_attr = {
     .mq_mem = &queue_processDis_buf, .mq_size = sizeof(queue_processDis_buf), .cb_mem = &queue_processDis_cb, .cb_size = sizeof(queue_processDis_cb),
 };
 
-osMessageQueueId_t queue_uwbEvent;
-uwbEvent_t queue_uwbEvent_buf[8];
-StaticQueue_t queue_uwbEvent_cb;
-const osMessageQueueAttr_t queue_uwbEvent_attr = {
-    .name = "queue_uwbEvent",
-    .mq_mem = &queue_uwbEvent_buf, .mq_size = sizeof(queue_uwbEvent_buf), .cb_mem = &queue_uwbEvent_cb, .cb_size = sizeof(queue_uwbEvent_cb),
-};
-
 TIM_HandleTypeDef timerForInvaildDistanceClearHandle;
 /*******************************************************静态函数声明********************************************************/
 static void distance_init(dwDistance_t *data);
-static void dwDevice_init(dwDevice_t *dev);
+static void instance_dataInit(instance_data_t *inst);
 static void txcallback(const dwt_cb_data_t *cb_data);
 static void rxcallback(const dwt_cb_data_t *cb_data);
 static void rxTimeoutCallback(const dwt_cb_data_t *cb_data);
@@ -369,10 +356,10 @@ static float calc_length_data(float msgdatalen)
     return msgdatalen;         // 返回计算完成的的air time，单位ns
 }
 
-static void dev_uwbCommonPreInit(dwDevice_t *dev)
+static void dev_uwbCommonPreInit(instance_data_t *inst)
 {
     distance_init(get_the_local_structure_of_dis());
-    dwDevice_init(dev);
+    instance_dataInit(inst);
 
 #if defined(USE_DW3000)
     current_Algorithm = findAlgorithmByChip(UWB_CHIP_DW3000);
@@ -384,17 +371,16 @@ static void dev_uwbCommonPreInit(dwDevice_t *dev)
     sema_dw1000Write  = osSemaphoreNew(1, 0, &sema_dw1000Write_attr);
     sema_dw1000Read   = osSemaphoreNew(1, 0, &sema_dw1000Read_attr);
     sema_tagDistClear = osSemaphoreNew(1, 0, &sema_tagDistClear_attr);
-    queue_uwbEvent    = osMessageQueueNew(8, sizeof(uwbEvent_t), &queue_uwbEvent_attr);
     queue_processDis  = osMessageQueueNew(16, sizeof(tag_hashNode_t), &queue_processDis_attr);
 }
 
-static void dev_uwbCommonPostInit(dwDevice_t *dev)
+static void dev_uwbCommonPostInit(instance_data_t *inst)
 {
-    if (dev->device_mode == ANCHOR)
+    if (inst->device_mode == ANCHOR)
     {
-        uint16_t anc_short_add = 0x8000 | dev->device_id;
+        uint16_t anc_short_add = 0x8000 | inst->device_id;
         dwt_setaddress16(anc_short_add);
-        anc_id = dev->device_id;
+        anc_id = inst->device_id;
         if (anc_id == 0)
         {
             group_id = group_id | 0x80;
@@ -403,27 +389,27 @@ static void dev_uwbCommonPostInit(dwDevice_t *dev)
     }
     else
     {
-        dwt_setaddress16(dev->device_id);
-        tag_id = dev->device_id;
+        dwt_setaddress16(inst->device_id);
+        tag_id = inst->device_id;
         dwt_forcetrxoff();
     }
 
     drv_setTimerForInt(&timerForInvaildDistanceClearHandle, TIM2, 20, 5);
-    current_Algorithm->init(&dw1000_dev);
+    current_Algorithm->init(inst);
     disManager_memPoolInit();
 
 #if defined(ANCRANGE)
-    sframePeriod_ms = (MAX_TAG_NUMBER + 1) * inst_one_slot_time;
-    a2aSlotOffset_ms = MAX_TAG_NUMBER * inst_one_slot_time;
+    inst->sframePeriod_ms = (MAX_TAG_NUMBER + 1) * inst_one_slot_time;
+    uint32_t a2aSlotOffset_ms = MAX_TAG_NUMBER * inst_one_slot_time;
     uint32_t now = portGetTickCnt();
-    a2aStartTime_ms = now - (now % sframePeriod_ms) + a2aSlotOffset_ms + 5 * sframePeriod_ms;
+    inst->a2aStartTime_ms = now - (now % inst->sframePeriod_ms) + a2aSlotOffset_ms + 5 * inst->sframePeriod_ms;
 #endif
 
     logOut_dw1000Config();
 }
 
 #if defined(USE_DW3000)
-static void dev_dw3000Init(dwDevice_t *dev)
+static void dev_dw3000Init(instance_data_t *inst)
 {
     dwt_config_t *current_rfConfig = &uwb_config_channel5[0];
 
@@ -479,7 +465,7 @@ static void dev_dw3000Init(dwDevice_t *dev)
     // dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT
     //                | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFTO | DWT_INT_RXPTO, 0, DWT_ENABLE_INT);
     
-    if (dev->device_mode == ANCHOR)
+    if (inst->device_mode == ANCHOR)
     {
         dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback, NULL, NULL);
     }
@@ -496,7 +482,7 @@ static void dev_dw3000Init(dwDevice_t *dev)
     port_set_dwic_isr(dwt_isr);
 }
 #elif defined(USE_DW1000)
-static void dev_dw1000Init(dwDevice_t *dev)
+static void dev_dw1000Init(instance_data_t *inst)
 {
     dwt_config_t *current_rfConfig = &uwb_config_channel5[2];
 
@@ -562,7 +548,7 @@ static void dev_dw1000Init(dwDevice_t *dev)
     dwt_setinterrupt(DWT_INT_TFRS | DWT_INT_RFCG | DWT_INT_ARFE | DWT_INT_RFSL | DWT_INT_SFDT
                    | DWT_INT_RPHE | DWT_INT_RFCE | DWT_INT_RFSL | DWT_INT_RFTO | DWT_INT_RXPTO, 1);
 
-    if (dev->device_mode == ANCHOR)
+    if (inst->device_mode == ANCHOR)
     {
         dwt_setcallbacks(&txcallback, &rxcallback, &rxTimeoutCallback, &rxfailedcallback);
     }
@@ -571,16 +557,16 @@ static void dev_dw1000Init(dwDevice_t *dev)
 
 void dev_uwbInit(void)
 {
-    dwDevice_t *dev = get_the_local_structure_of_dev();
-    dev_uwbCommonPreInit(dev);
+    instance_data_t *inst = instance_get();
+    dev_uwbCommonPreInit(inst);
 
 #if defined(USE_DW3000)
-    dev_dw3000Init(dev);
+    dev_dw3000Init(inst);
 #elif defined(USE_DW1000)
-    dev_dw1000Init(dev);
+    dev_dw1000Init(inst);
 #endif
 
-    dev_uwbCommonPostInit(dev);
+    dev_uwbCommonPostInit(inst);
 }
 
 void logOut_dw1000Config(void)
@@ -588,7 +574,10 @@ void logOut_dw1000Config(void)
 }
 
 /**
- * @brief uwb中断处理任务
+ * @brief uwb 唯一处理任务（ISR 优先级）：
+ *        DW 中断 → process_deca_irq → dwt_isr → callbacks 内直接执行 TWR 状态机（TREK1000 同款，
+ *        resp 准备与 delayed TX/RX 调度不再经过队列转发，消除一次上下文切换延迟）。
+ *        A2A 周期触发由信号量超时兜底检查（原 task_twrRun 职责）。
  * @param  void *arg RTOS要求参数为空指针类型
  * @retval none
  */
@@ -601,58 +590,28 @@ void task_uwb(void *arg)
 #elif defined(USE_DW1000)
     board_dw1000IRQInit();
 #endif
+
+#if defined(ANCRANGE)
+    instance_data_t *inst = instance_get();
+    /* 仅 A0 需要周期唤醒检查 A2A 触发点，其余基站纯中断驱动 */
+    uint32_t acquire_timeout = (anc_id == 0) ? inst->sframePeriod_ms : osWaitForever;
+#endif
+
     for (;;)
-    {   
+    {
+#if defined(ANCRANGE)
+        osStatus_t status = osSemaphoreAcquire(sema_uwbInt, acquire_timeout);
+        if (status == osOK)
+        {
+            process_deca_irq();
+        }
+        anch_checkA2ATrigger(inst);
+#else
         osStatus_t status = osSemaphoreAcquire(sema_uwbInt, osWaitForever); // 采用中断触发的方式执行，获取信号量
         if (status == osOK)
         {
             process_deca_irq();
         }
-    }
-}
-
-/**
- * @brief uwb双边测距处理任务，中断处理发送任务通知，通过接收不同类型任务通知，执行对应的回调函数
- * @param  void *arg RTOS要求参数为空指针类型
- * @retval none
- */
-void task_twrRun(void *arg)
-{
-    UNUSED(arg);
-    uwbEvent_t evt;
-    for (;;)
-    {
-#if defined(ANCRANGE)
-        osStatus_t status = osMessageQueueGet(queue_uwbEvent, &evt, NULL, sframePeriod_ms);
-#else
-        osStatus_t status = osMessageQueueGet(queue_uwbEvent, &evt, NULL, osWaitForever);
-#endif
-        if (status == osOK)
-        {
-            switch (evt)
-            {
-            case eventPacketSent:
-                (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketSent);
-                break;
-
-            case eventPacketReceived:
-                (void) current_Algorithm->onEvent(&dw1000_dev, eventPacketReceived);
-                break;
-
-            case eventReceiveTimeout:
-                (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveTimeout);
-                break;
-
-            case eventReceiveFailed:
-                (void) current_Algorithm->onEvent(&dw1000_dev, eventReceiveFailed);
-                break;
-
-            default:
-                break;
-            }
-        }
-#if defined(ANCRANGE)
-        anch_checkA2ATrigger(&dw1000_dev);
 #endif
     }
 }
@@ -814,9 +773,9 @@ dwDistance_t *get_the_local_structure_of_dis(void)
     return &distance_data;
 }
 
-dwDevice_t *get_the_local_structure_of_dev(void)
+instance_data_t *instance_get(void)
 {
-    return &dw1000_dev;
+    return &instance_data;
 }
 
 static void distance_init(dwDistance_t *data)
@@ -826,52 +785,51 @@ static void distance_init(dwDistance_t *data)
     data->min_dis = 2000000;
 }
 
-/******************************************************Dw1000 Device************************************************************/
-static void dwDevice_init(dwDevice_t *dev)
+/******************************************************TWR Instance************************************************************/
+static void instance_dataInit(instance_data_t *inst)
 {
-    dev->device_mode = ANCHOR;
-    dev->twr_mode = LISTENER;
+    inst->device_mode = ANCHOR;
+    inst->twr_mode = LISTENER;
     /* A2A/TWR 角色依赖真实基站 ID。
      * DW1000 也需要和 DW3000 一样从拨码读取，否则所有基站都会被当成 A0。 */
-    dev->device_id = dev_getDipVal();
-    dev->remainingRespToRx = -1;     // 初始化为 -1
-    dev->rxOtherResp = 0;            // 接收其他基站resp帧计数
-    dev->respTxIndex = 0;            // 该变量用于决定基站发送resp帧的位置，跟基站自身ID相关
+    inst->device_id = dev_getDipVal();
+    inst->gatewayAnchor = (inst->device_id == 0);
+    inst->remainingRespToRx = -1;    // -1 = 空闲，未处于任何交换中
+    inst->rxRespMask = 0;
+    inst->wait4final = 0;
+    inst->lastTxFcode = 0;
 #if defined(USE_DW3000)
     board_dw3000Init();
 #elif defined(USE_DW1000)
     board_dw1000Init();
 #endif
-    SEGGER_RTT_printf(0, "\r\nThe Anchor ID : %d.\r\n", dev->device_id);  
+    SEGGER_RTT_printf(0, "\r\nThe Anchor ID : %d.\r\n", inst->device_id);
 }
 
 /******************************************************interrupt use callback function************************************************************/
-extern osThreadId_t task_twrRun_handle;
+/* 回调在 task_uwb 上下文内由 dwt_isr 调用（非真中断），直接驱动 TWR 状态机，
+ * 时间关键的 resp 准备与 delayed TX/RX 调度零队列延迟（TREK1000 同款架构） */
 static void txcallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    uwbEvent_t evt = eventPacketSent;
-    osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
+    (void) current_Algorithm->onEvent(&instance_data, eventPacketSent);
 }
 
 static void rxcallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    uwbEvent_t evt = eventPacketReceived;
-    osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
+    (void) current_Algorithm->onEvent(&instance_data, eventPacketReceived);
 }
 
 static void rxTimeoutCallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    uwbEvent_t evt = eventReceiveTimeout;
-    osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
+    (void) current_Algorithm->onEvent(&instance_data, eventReceiveTimeout);
 }
 
 static void rxfailedcallback(const dwt_cb_data_t *cb_data)
 {
     UNUSED(cb_data);
-    uwbEvent_t evt = eventReceiveFailed;
-    osMessageQueuePut(queue_uwbEvent, &evt, 0, 0);
+    (void) current_Algorithm->onEvent(&instance_data, eventReceiveFailed);
 }
 

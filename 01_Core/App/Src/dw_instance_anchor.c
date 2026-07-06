@@ -16,58 +16,73 @@ static uint8_t tx_anch_final_msg[ANCH_FINAL_MSG_LEN];
 #define A2A_RESPONDER_COUNT            (MAX_AHCHOR_NUMBER - 1)
 #define A2A_FINAL_SCHEDULE_INDEX       (A2A_RESPONDER_COUNT + 2)
 
-int32_t  a2a_distance[MAX_AHCHOR_NUMBER];
-static uint8_t  a2a_range_nb;
-static uint8_t  a2a_rxRespMask;
-static uint8_t  a2a_remainingResp;
-static uint64_t a2a_poll_tx_ts;
-static uint64_t a2a_resp_rx_ts[MAX_AHCHOR_NUMBER];
-static uint64_t a2a_final_tx_time;
-static uint64_t a2a_final_rx_time;
-static uint64_t a2a_poll_rx_ts;
-static uint64_t a2a_resp_tx_ts;
-
-typedef enum { A2A_IDLE, A2A_POLL_SENT, A2A_RESP_SENT, A2A_FINAL_SENT } a2aState_t;
-static a2aState_t a2a_state = A2A_IDLE;
-
-static void anch_start_a2a(dwDevice_t *dev, uint8_t expectedResps);
-static void anch_a2a_sendFinal(dwDevice_t *dev);
-static void rnganch_change_back_to_anchor(dwDevice_t *dev);
+static void anch_start_a2a(instance_data_t *inst, uint8_t expectedResps);
+static void anch_a2a_sendFinal(instance_data_t *inst);
+static void rnganch_change_back_to_anchor(instance_data_t *inst);
 #endif
 
 /* 接收数据buffer */
 static uint8_t rx_buffer[FRAME_LEN_MAX];
 
-/* TWR时间戳，用于计算飞行时间 */
-static uint64_t poll_rx_ts;    
-static uint64_t resp_tx_ts;
-static uint64_t final_rx_ts;
-static int32_t prev_range[MAX_TAG_LIST_SIZE];
+/* 单次TWR成功后的距离缓存，投递 queue_processDis 用 */
 static float distance_now_m;
 static tag_hashNode_t send_processeDis;
-static uint8_t resp_valid = 0x00;                    // 基站数据有效标志 
-static uint8_t handleResp_times;                     // 对基站发送或者接收resp帧计数，初始化为当前测距的基站个数
 
-static int twrAnchor_Init(dwDevice_t *dev);
-static uint32_t twrAnchor_onEvent(dwDevice_t *dev, uwbEvent_t event);
-static void twrAnchor_rxOkHandle(void);
-static void twrAnchor_sentHandle(void);
-static uint8_t twrAnchor_rxErrorOrTimeoutHandle(void);
-static void anch_txRespOrRxReEnable(void);
-static void anch_rxRenableImmdiate(dwDevice_t *dev);
-static void anch_perpareAnc2TagResp(void);
+/* 速率相关时序参数集，Phase B 将由 twr_set_replydelay() 统一公式计算取代，
+ * 当前数值与原 6 处 if-else 阶梯完全一致 */
+typedef struct {
+    uint32_t first_resp_us;   // poll 后首个 resp 槽的基准延时
+    uint32_t anc_back_us;     // 基站 resp 发送在槽基准上的再延后量
+    uint32_t final_back_us;   // final 发送在槽基准上的再延后量
+} rateTiming_t;
+
+static int twrAnchor_Init(instance_data_t *inst);
+static uint32_t twrAnchor_onEvent(instance_data_t *inst, uwbEvent_t event);
+static void twrAnchor_rxOkHandle(instance_data_t *inst);
+static void twrAnchor_sentHandle(instance_data_t *inst);
+static uint8_t twrAnchor_rxErrorOrTimeoutHandle(instance_data_t *inst);
+static void anch_respSlotProcess(instance_data_t *inst);
+static void anch_rxRenableImmdiate(instance_data_t *inst);
+static void anch_perpareAnc2TagResp(instance_data_t *inst);
+static rateTiming_t rate_timing(void);
 static inline uint64_t get_tx_timestamp_u64(void);
 static inline uint64_t get_rx_timestamp_u64(void);
 static inline void final_msg_get_ts(const uint8_t *ts_field, uint32_t *ts);
 static inline void final_msg_set_ts(uint8_t *ts_field, uint64_t ts);
 
+static rateTiming_t rate_timing(void)
+{
+    rateTiming_t rt;
+#if defined(USE_DW1000)
+    if (inst_dataRate == DWT_BR_110K)
+    {
+        rt.first_resp_us = FIRST_RESP_SEND_110K;
+        rt.anc_back_us   = ANC_RESP_SEND_BACK_110K;
+        rt.final_back_us = TAG_FINALE_SEND_BACK_110K;
+        return rt;
+    }
+#endif
+    if (inst_dataRate == DWT_BR_6M8)
+    {
+        rt.first_resp_us = FIRST_RESP_SEND_6P8M;
+        rt.anc_back_us   = ANC_RESP_SEND_BACK_6P8M;
+        rt.final_back_us = TAG_FINALE_SEND_BACK_6P8M;
+    }
+    else
+    {
+        rt.first_resp_us = FIRST_RESP_SEND_850K;
+        rt.anc_back_us   = ANC_RESP_SEND_BACK_850K;
+        rt.final_back_us = TAG_FINALE_SEND_BACK_850K;
+    }
+    return rt;
+}
+
 // 单套 TWR anchor 算法，DW1000/DW3000 通过函数内 USE_DW1000/USE_DW3000 条件编译区分
 uwbAlgorithm_t uwbTwr_AnchorAlgorithm = { .init = twrAnchor_Init, .onEvent = twrAnchor_onEvent };
 
 /*****************************************CCCC**DW1000 event function********************************************/
-static int twrAnchor_Init(dwDevice_t *dev)
+static int twrAnchor_Init(instance_data_t *inst)
 {
-    dev = get_the_local_structure_of_dev();
 #if defined(USE_DW3000)
     dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
 #else
@@ -80,28 +95,27 @@ static int twrAnchor_Init(dwDevice_t *dev)
     {
         return 0;
     }
-    dev->twr_mode = LISTENER;                                       // 空闲状态，等待接收 poll (tag 或 anchor)
+    inst->twr_mode = LISTENER;                                      // 空闲状态，等待接收 poll (tag 或 anchor)
     return 1;
 }
 
-static uint32_t twrAnchor_onEvent(dwDevice_t *dev, uwbEvent_t event)
+static uint32_t twrAnchor_onEvent(instance_data_t *inst, uwbEvent_t event)
 {
-    UNUSED(dev);
     switch (event)
     {
     case eventPacketReceived:
-        twrAnchor_rxOkHandle();
+        twrAnchor_rxOkHandle(inst);
         break;
 
     case eventPacketSent:
-        twrAnchor_sentHandle();
+        twrAnchor_sentHandle(inst);
         break;
 
     case eventReceiveFailed:
     case eventReceiveTimeout:
-        twrAnchor_rxErrorOrTimeoutHandle();
-        break;    
-    
+        twrAnchor_rxErrorOrTimeoutHandle(inst);
+        break;
+
     default:
         break;
     }

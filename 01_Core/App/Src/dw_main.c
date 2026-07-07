@@ -337,12 +337,15 @@ static float calc_length_data(float msgdatalen)
     msgdatalen = msgdatalen * 8.0f + x * 48.0f; // 计算总的编码后数据长度，单位bits，每个330bits数据块加上48bits校验码
 
     // Assume PHR length is 172308ns for 110k and 21539ns for 850k/6.8M.
+#if defined(USE_DW1000)
     if (inst_dataRate == DWT_BR_110K)
     {
         msgdatalen *= 8205.13f;
         msgdatalen += 172308.0f;
     }
-    else if (inst_dataRate == DWT_BR_850K)
+    else
+#endif
+    if (inst_dataRate == DWT_BR_850K)
     {
         msgdatalen *= 1025.64f; // 以850K为例，计算出来的总的bit数，乘上每个bit占用的时间
         msgdatalen += 21539.0f; // 加上PHR的占用时间

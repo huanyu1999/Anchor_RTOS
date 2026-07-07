@@ -144,22 +144,13 @@ const osMessageQueueAttr_t queue_alarm_attr = {
 };
 
 /**************************************************************Thread**************************************************************/
-osThreadId_t task_uwb_handle;                           
-static uint8_t task_uwb_buf[1280];
+osThreadId_t task_uwb_handle;
+static uint8_t task_uwb_buf[2048];              // 回调直驱 TWR 状态机（原 task_twrRun 职责并入，含 double 运算与 log），1280→2048；task_twrRun 的 2048 已删除，净 RAM 不增
 StaticTask_t task_uwb_cb;
 const osThreadAttr_t task_uwb_attr = {
     .name      = "task_uwb",
     .stack_mem = task_uwb_buf, .stack_size = sizeof(task_uwb_buf), .cb_mem = &task_uwb_cb, .cb_size = sizeof(task_uwb_cb),
     .priority  = (osPriority_t) osPriorityISR,   // TWR State machine core task
-};
-
-osThreadId_t task_twrRun_handle;
-static uint8_t task_twrRun_buf[2048];           // 改任务涉及具体TDMA算法，以及TWR实现，为应对极限50个标签的情况，暂时将栈空间设置为2048字节，后续根据实际情况调整
-StaticTask_t task_twrRun_cb;
-const osThreadAttr_t task_twrRun_attr = {
-    .name      = "task_twrRun", 
-    .stack_mem = task_twrRun_buf, .stack_size = sizeof(task_twrRun_buf), .cb_mem = &task_twrRun_cb, .cb_size = sizeof(task_twrRun_cb),
-    .priority  = (osPriority_t) osPriorityISR
 };
 
 osThreadId_t task_anchorDisHandling_handle;
@@ -274,7 +265,6 @@ void MX_FREERTOS_Init(void)
     /* USER CODE BEGIN RTOS_THREADS */
 #if MODULE_UWB_ENABLE
     task_uwb_handle               = osThreadNew(task_uwb, NULL, &task_uwb_attr);
-    task_twrRun_handle            = osThreadNew(task_twrRun, NULL, &task_twrRun_attr);
     task_anchorDisHandling_handle = osThreadNew(task_anchorDisHandling, NULL, &task_anchorDisHandling_attr);
     task_minHeapManage_handle     = osThreadNew(task_minHeapManage, NULL, &task_minHeapManage_attr);
     task_getMinDis_handle         = osThreadNew(task_getMinDis, NULL, &task_getMinDis_attr);
@@ -763,7 +753,6 @@ void task_rtosMonitor(void *arg)
 
         log_d("===================stack monitor===================");
         log_d("task_uwb stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_uwb_handle));
-        log_d("task_twrRun stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_twrRun_handle));
         log_d("task_anchorDisHandling stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_anchorDisHandling_handle));
         log_d("task_minHeapManage stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_minHeapManage_handle));
         log_d("task_getMinDis stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_getMinDis_handle));

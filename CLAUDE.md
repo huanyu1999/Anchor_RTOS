@@ -53,8 +53,7 @@ The toolchain (`toolchain.cmake`) auto-discovers `arm-none-eabi-gcc` via `where`
 
 | 任务 | 优先级 | 栈 | 职责 |
 |---|---|---|---|
-| `task_twrRun` | ISR | 2048 | TWR 状态机（onEvent → dwt_starttx/rxenable） |
-| `task_uwb` | ISR | 1280 | DW1000 IRQ → process_deca_irq → post queue_uwbEvent |
+| `task_uwb` | ISR | 2048 | DW IRQ → process_deca_irq → 回调内直驱 TWR 状态机（onEvent → dwt_starttx/rxenable）；A0 兼任 A2A 周期触发（信号量超时兜底） |
 | `task_minHeapManage` | Realtime5 | 1024 | 距离 hash+minheap 插入/更新/purge |
 | `task_anchorDisHandling` | Realtime4 | 1280 | 本/对侧距离融合，LED 控制，post queue_alarm |
 | `task_getMinDis` | Realtime4 | 1024 | TIM2(20ms) 周期取堆顶，post queue_minimalDis |
@@ -66,13 +65,12 @@ The toolchain (`toolchain.cmake`) auto-discovers `arm-none-eabi-gcc` via `where`
 | `task_swoOutput` | Realtime5 | 1024 | SWO 调试输出（定义在 main.c） |
 | `task_main` | Realtime4 | 256 | 系统启动入口（定义在 main.c） |
 
-**设计原则**：task_uwb 与 task_twrRun 共同独占 ISR 最高级，任何其他任务不得与其同级，保护 TWR 延时发送时间窗口不被抢占。
+**设计原则**：task_uwb 独占 ISR 最高级（TWR 状态机在其回调上下文内直驱，Trek1000 同款架构），任何其他任务不得与其同级，保护 TWR 延时发送时间窗口不被抢占。
 
 Key RTOS primitives (`01_Core/App/Inc/os_event.h`):
 - `queue_alarm` (`osMessageQueueId_t`) — carries `alarm_event_t` enum values between tasks
 - `queue_minimalDis` — 本侧最小距离，task_getMinDis → task_anchorDisHandling
-- `queue_processDis` — 单次 TWR 成功后的距离，task_twrRun → task_minHeapManage
-- `queue_uwbEvent` — DW1000 IRQ 事件，task_uwb → task_twrRun
+- `queue_processDis` — 单次 TWR 成功后的距离，task_uwb（回调内） → task_minHeapManage
 - Semaphores: `sema_uwbInt`（DW IRQ）, `sema_tagDistClear`（TIM2 20ms）, `sema_w5500Int`, `sema_elogLock`, `sema_gnssReceive`
 
 ### UWB Ranging (`dw1000_application/`)
@@ -123,6 +121,7 @@ Uses **EasyLogger** (`01_Core/Com/easylogger/`), built as static lib `libelog.a`
 
 ## TWR 状态机器参考
 参考 `.claude/TREK1000_TWR_STATE_MACHINE_REFERENCE.md` 了解 TWR 状态机的完整规格。
+TREK1000 重构（4 阶段）的进度与交接以 `docs/trek1000_refactor_plan.md` 为唯一事实来源。
 
 ## Memory 规则
 

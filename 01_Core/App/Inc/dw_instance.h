@@ -100,6 +100,14 @@ typedef int32_t  int32;
 #endif
 
 /************************************** 单位 microsecond ***************************************/
+/* Phase B 统一时序计算开关：
+ * TWR_TIMING_LEGACY = 1：twrTimings_t 从下方旧宏装填，空口时序与现网 Tag 完全一致（过渡/回归用）
+ *                   = 0：twr_set_replydelay() 按帧长公式计算（更省空口时间，但须与 Tag 工程
+ *                        按 docs/TWR_TIMING.md 同步适配后同时刷机）
+ * 下方 *_110K/_850K/_6P8M 旧宏仅剩 twr_set_replydelay() 的 LEGACY 装填一处引用 */
+#define TWR_TIMING_LEGACY               1
+#define TWR_TURNAROUND_US               500     // 公式模式唯一可调余量：帧间处理翻转时间（含 RTOS 调度），SWO 实测后收紧
+
 #define FINAL_RX_TIMEOUT_6P8M           600
 #define RESP_RX_TIMEOUT_6P8M            450
 #define FIRST_RESP_SEND_6P8M            900     // 6.8M通信速率下，第一个resp消息发送延时
@@ -259,7 +267,19 @@ typedef enum {
     ATWR_MODES
 } twrModes;
 
-
+/******************************************************TWR Timings*************************************************************/
+/* 统一时序参数集（对应 TREK instance_set_replydelay 的输出），
+ * init 时由 twr_set_replydelay() 装填一次，T2A/A2A 全部时序引用此结构 */
+typedef struct {
+    uint32_t firstRespDly_us;       // poll RX(RMARKER) → 首个 resp 槽基准的延时（替代 FIRST_RESP_SEND_*）
+    uint32_t replyInterval_us;      // 相邻 resp 槽间隔（替代 DATA_INTERVAL_TIME_*）
+    uint32_t ancRespTxBack_us;      // 基站 resp 发送在槽基准上的再延后量（替代 ANC_RESP_SEND_BACK_*）
+    uint32_t finalTxBack_us;        // final 发送在槽基准上的再延后量（替代 TAG_FINALE_SEND_BACK_*）
+    uint32_t respRxTimeout_us;      // resp 帧接收超时（替代 RESP_RX_TIMEOUT_*）
+    uint32_t finalRxTimeout_us;     // final 帧接收超时（替代 FINAL_RX_TIMEOUT_*）
+    uint64_t pollRx2FinalRx_dwt;    // poll RX → final RX 开窗的 dwt 时间（替代 inst_poll2final_time）
+    uint32_t rngInitTxDly_us;       // blink RX → RNG_INIT TX 延时（Phase C discovery 用）
+} twrTimings_t;
 
 /******************************************************TWR Instance************************************************************/
 /* 统一实例管理结构（参照 TREK1000 instance_data_t），单例经 instance_get() 访问。
@@ -274,6 +294,8 @@ typedef struct instance_data_s {
     twrModes      twr_mode;         // 当前交换中的子角色
     uint8_t       device_id;        // 拨码读取的基站 ID
     uint8_t       gatewayAnchor;    // device_id == 0：A0，负责标签时隙校准 / A2A 发起 / discovery
+
+    twrTimings_t  timings;          // 统一时序参数（twr_set_replydelay() 装填）
 
     /* 单次交换的轮转状态 */
     int8_t   remainingRespToRx;     // 还需接收的 resp 数；-1 = 空闲（未在交换中）
@@ -363,10 +385,6 @@ extern float rx_power;
 extern uint16_t inst_slot_number;
 extern uint8_t inst_dataRate;
 extern uint8_t inst_one_slot_time;
-extern uint32_t inst_final_rx_timeout;
-extern uint32_t inst_resp_rx_timeout;
-extern uint64_t inst_poll2final_time;
-extern uint32_t inst_data_interval;
 extern uint16 ant_dly;
 extern int32 distance_offset_cm;                        // 距离校准，单位cm
 

@@ -19,11 +19,7 @@ uint16_t inst_slot_number;          // 系统内最大标签容量
 uint8_t inst_dataRate;              // 通信速率，用于根据当前110K还是6.8M确定数据超时等通信过程相关参数
 uint8_t inst_ch;                    // 信道号Channel number
 uint8_t inst_prf;                   // PRF
-uint8_t inst_one_slot_time;         // 一个slot的时间，根据通信速率不同而不同，单位ms
-uint32_t inst_final_rx_timeout;     // 基站final接收超时时间，根据通信速率不同而不同，单位us
-uint32_t inst_resp_rx_timeout;      // 标签发送poll后接收resp超时时间，根据通信速率不同而不同，单位us
-uint64_t inst_poll2final_time;      // 单TWR周期poll起始到final结束的总时间
-uint32_t inst_data_interval;        // 相邻两条数据的间隔，如poll和第一个resp的间隔，resp1和resp2的间隔，根据通信速率不同而不同，单位us
+uint8_t inst_one_slot_time;         // 一个slot的时间，根据通信速率不同而不同，单位ms（超帧配置输入，保留全局）
 uint16 ant_dly = ANT_DLY_DEFAULT;   // 天线延时
 uint32 tx_power;                    // 发射增益代码
 int32 distance_offset_cm;           // 距离校准，单位cm
@@ -333,7 +329,7 @@ static float calc_length_data(float msgdatalen)
         根据802.15.4 UWB PHY 规定,PSDU 数据要经过 RS(63,55) 编码:
         每 330 bits 数据为一块, 每块附加 48 bits 校验
     */
-    x = (int)ceil(msgdatalen * 8.0f / 330.0f); // 不足330bits 的尾块也要按一整块加 48 bits，使用ceil函数向上取整
+    x = ((int)msgdatalen * 8 + 329) / 330;      // 不足330bits 的尾块也要按一整块加 48 bits，整数向上取整（避免 libm 的 ceil，工程未链 -lm）
     msgdatalen = msgdatalen * 8.0f + x * 48.0f; // 计算总的编码后数据长度，单位bits，每个330bits数据块加上48bits校验码
 
     // Assume PHR length is 172308ns for 110k and 21539ns for 850k/6.8M.
@@ -357,6 +353,121 @@ static float calc_length_data(float msgdatalen)
     }
 
     return msgdatalen;         // 返回计算完成的的air time，单位ns
+}
+
+/* 前导码长度（symbol 数），从 RF 配置枚举反查。
+ * 仅列出两种芯片 SDK 都有的档位，本项目实际只用 256/1024 */
+static uint16_t plen_symbols(const dwt_config_t *rf)
+{
+    switch (rf->txPreambLength)
+    {
+    case DWT_PLEN_64:   return 64;
+    case DWT_PLEN_128:  return 128;
+    case DWT_PLEN_256:  return 256;
+    case DWT_PLEN_512:  return 512;
+    case DWT_PLEN_1024: return 1024;
+    default:            return 1024;
+    }
+}
+
+/* DW 非标 SFD 长度按速率（TREK dwnsSFDlen[] 同值）：110K=64, 850K=16, 6M8=8 */
+static uint8_t sfd_length(void)
+{
+#if defined(USE_DW1000)
+    if (inst_dataRate == DWT_BR_110K)
+    {
+        return 64;
+    }
+#endif
+    return (inst_dataRate == DWT_BR_850K) ? 16 : 8;
+}
+
+/* 统一计算 TWR 时序（对应 TREK instance_set_replydelay），dwt_configure 之后调用一次。
+ * LEGACY 装填值与公式计算值都会算出并打印对照表，便于公式模式联调校准；
+ * 实际生效哪组由 TWR_TIMING_LEGACY 决定（见 dw_instance.h 注释与 docs/TWR_TIMING.md）。 */
+static void twr_set_replydelay(instance_data_t *inst, const dwt_config_t *rf)
+{
+    twrTimings_t legacy, calc;
+
+    /* ---- LEGACY：旧宏装填（全工程唯一引用旧时序宏的地方），空口时序与现网 Tag 一致 ---- */
+#if defined(USE_DW1000)
+    if (inst_dataRate == DWT_BR_110K)
+    {
+        legacy.firstRespDly_us   = FIRST_RESP_SEND_110K;
+        legacy.replyInterval_us  = DATA_INTERVAL_TIME_110K;
+        legacy.ancRespTxBack_us  = ANC_RESP_SEND_BACK_110K;
+        legacy.finalTxBack_us    = TAG_FINALE_SEND_BACK_110K;
+        legacy.respRxTimeout_us  = RESP_RX_TIMEOUT_110K;
+        legacy.finalRxTimeout_us = FINAL_RX_TIMEOUT_110K;
+    }
+    else
+#endif
+    if (inst_dataRate == DWT_BR_6M8)
+    {
+        legacy.firstRespDly_us   = FIRST_RESP_SEND_6P8M;
+        legacy.replyInterval_us  = DATA_INTERVAL_TIME_6P8M;
+        legacy.ancRespTxBack_us  = ANC_RESP_SEND_BACK_6P8M;
+        legacy.finalTxBack_us    = TAG_FINALE_SEND_BACK_6P8M;
+        legacy.respRxTimeout_us  = RESP_RX_TIMEOUT_6P8M;
+        legacy.finalRxTimeout_us = FINAL_RX_TIMEOUT_6P8M;
+    }
+    else
+    {
+        legacy.firstRespDly_us   = FIRST_RESP_SEND_850K;
+        legacy.replyInterval_us  = DATA_INTERVAL_TIME_850K;
+        legacy.ancRespTxBack_us  = ANC_RESP_SEND_BACK_850K;
+        legacy.finalTxBack_us    = TAG_FINALE_SEND_BACK_850K;
+        legacy.respRxTimeout_us  = RESP_RX_TIMEOUT_850K;
+        legacy.finalRxTimeout_us = FINAL_RX_TIMEOUT_850K;
+    }
+    legacy.pollRx2FinalRx_dwt = (uint64_t)(legacy.firstRespDly_us
+        + MAX_AHCHOR_NUMBER * legacy.replyInterval_us) * UUS_TO_DWT_TIME;
+    legacy.rngInitTxDly_us    = legacy.replyInterval_us;    // discovery 未上线，先按一个槽间隔
+
+    /* ---- 公式模式：按帧长推导（TREK §9 适配 N 基站），数值待 SWO 实测收紧 ----
+     * dwt 时间戳打在 RMARKER（SFD 结束），poll 数据段在 RMARKER 之后还要飞 poll_data_us；
+     * 延迟发送编程的也是 RMARKER 时刻，前导码在其之前发出，所以槽间隔必须容纳整帧+翻转 */
+    float sym_us        = 1.01763f;                             // PRF64 前导符号时长(us)，PRF16 用 0.99359
+    float preamble_us   = (plen_symbols(rf) + sfd_length()) * sym_us;
+    float poll_data_us  = calc_length_data(POLL_MSG_LEN)  / 1000.0f;
+    float resp_data_us  = calc_length_data(RESP_MSG_LEN)  / 1000.0f;
+    float final_data_us = calc_length_data(FIANL_MSG_LEN) / 1000.0f;
+
+    calc.firstRespDly_us   = (uint32_t)(poll_data_us + TWR_TURNAROUND_US + preamble_us);
+    calc.replyInterval_us  = (uint32_t)(preamble_us + resp_data_us + TWR_TURNAROUND_US);
+    calc.ancRespTxBack_us  = TWR_TURNAROUND_US / 2;             // RX 先于 TX 半个翻转量开窗
+    calc.finalTxBack_us    = TWR_TURNAROUND_US / 2;
+    calc.respRxTimeout_us  = (uint32_t)(calc.ancRespTxBack_us + preamble_us + resp_data_us) + TWR_TURNAROUND_US / 2;
+    calc.finalRxTimeout_us = (uint32_t)(calc.finalTxBack_us + preamble_us + final_data_us) + TWR_TURNAROUND_US / 2;
+    calc.pollRx2FinalRx_dwt = (uint64_t)(calc.firstRespDly_us
+        + MAX_AHCHOR_NUMBER * calc.replyInterval_us) * UUS_TO_DWT_TIME;
+    calc.rngInitTxDly_us    = calc.replyInterval_us;
+
+#if (TWR_TIMING_LEGACY == 1)
+    inst->timings = legacy;
+#else
+    inst->timings = calc;
+#endif
+
+    /* 两组对照输出（验收依据：LEGACY=1 时生效组必须等于旧常量） */
+    log_i("TWR timing active(%s): 1stResp=%u interval=%u ancBack=%u finalBack=%u respTO=%u finalTO=%u",
+          (TWR_TIMING_LEGACY == 1) ? "LEGACY" : "CALC",
+          (unsigned)inst->timings.firstRespDly_us,  (unsigned)inst->timings.replyInterval_us,
+          (unsigned)inst->timings.ancRespTxBack_us, (unsigned)inst->timings.finalTxBack_us,
+          (unsigned)inst->timings.respRxTimeout_us, (unsigned)inst->timings.finalRxTimeout_us);
+    log_i("TWR timing calc-ref: 1stResp=%u interval=%u respTO=%u finalTO=%u (preamble=%uus turnaround=%uus)",
+          (unsigned)calc.firstRespDly_us, (unsigned)calc.replyInterval_us,
+          (unsigned)calc.respRxTimeout_us, (unsigned)calc.finalRxTimeout_us,
+          (unsigned)preamble_us, (unsigned)TWR_TURNAROUND_US);
+
+    /* 单次 TWR 交换（poll→resp×N→final 收完）必须放得进一个 slot */
+    uint32_t exchange_us = inst->timings.firstRespDly_us
+        + MAX_AHCHOR_NUMBER * inst->timings.replyInterval_us
+        + inst->timings.finalRxTimeout_us;
+    if (exchange_us > (uint32_t)inst_one_slot_time * 1000U)
+    {
+        log_e("TWR exchange %uus exceeds slot %ums!", (unsigned)exchange_us, inst_one_slot_time);
+    }
 }
 
 static void dev_uwbCommonPreInit(instance_data_t *inst)
@@ -432,23 +543,9 @@ static void dev_dw3000Init(instance_data_t *inst)
     inst_dataRate = current_rfConfig->dataRate;
     inst_ch       = current_rfConfig->chan;
 
-    /* 配置通信相关时序 */
-    if (inst_dataRate == DWT_BR_6M8)
-    {
-        inst_one_slot_time    = ONE_SLOT_TIME_MS_6P8M;
-        inst_final_rx_timeout = FINAL_RX_TIMEOUT_6P8M;
-        inst_resp_rx_timeout  = RESP_RX_TIMEOUT_6P8M;
-        inst_data_interval    = DATA_INTERVAL_TIME_6P8M;
-        inst_poll2final_time  = ((FIRST_RESP_SEND_6P8M + MAX_AHCHOR_NUMBER * inst_data_interval) * UUS_TO_DWT_TIME);
-    }
-    else if (inst_dataRate == DWT_BR_850K)
-    {
-        inst_one_slot_time    = ONE_SLOT_TIME_MS_850K;
-        inst_final_rx_timeout = FINAL_RX_TIMEOUT_850K;
-        inst_resp_rx_timeout  = RESP_RX_TIMEOUT_850K;
-        inst_data_interval    = DATA_INTERVAL_TIME_850K;
-        inst_poll2final_time  = ((FIRST_RESP_SEND_850K + MAX_AHCHOR_NUMBER * inst_data_interval) * UUS_TO_DWT_TIME);
-    }
+    /* 超帧 slot 时长按速率选择；其余 TWR 时序统一由 twr_set_replydelay() 计算 */
+    inst_one_slot_time = (inst_dataRate == DWT_BR_6M8) ? ONE_SLOT_TIME_MS_6P8M : ONE_SLOT_TIME_MS_850K;
+    twr_set_replydelay(inst, current_rfConfig);
 
     txconfig_options.power = TX_POWER;
     tx_power = txconfig_options.power;
@@ -509,31 +606,20 @@ static void dev_dw1000Init(instance_data_t *inst)
     inst_dataRate = current_rfConfig->dataRate;
     inst_ch       = current_rfConfig->chan;
 
-    /* 配置通信相关时序 */
+    /* 超帧 slot 时长按速率选择；其余 TWR 时序统一由 twr_set_replydelay() 计算 */
     if (inst_dataRate == DWT_BR_6M8)
     {
-        inst_one_slot_time    = ONE_SLOT_TIME_MS_6P8M;
-        inst_final_rx_timeout = FINAL_RX_TIMEOUT_6P8M;
-        inst_resp_rx_timeout  = RESP_RX_TIMEOUT_6P8M;
-        inst_data_interval    = DATA_INTERVAL_TIME_6P8M;
-        inst_poll2final_time  = ((FIRST_RESP_SEND_6P8M + MAX_AHCHOR_NUMBER * inst_data_interval) * UUS_TO_DWT_TIME);
+        inst_one_slot_time = ONE_SLOT_TIME_MS_6P8M;
     }
     else if (inst_dataRate == DWT_BR_110K)
     {
-        inst_one_slot_time    = ONE_SLOT_TIME_MS_110K;
-        inst_final_rx_timeout = FINAL_RX_TIMEOUT_110K;
-        inst_resp_rx_timeout  = RESP_RX_TIMEOUT_110K;
-        inst_data_interval    = DATA_INTERVAL_TIME_110K;
-        inst_poll2final_time  = ((FIRST_RESP_SEND_110K + MAX_AHCHOR_NUMBER * inst_data_interval) * UUS_TO_DWT_TIME);
+        inst_one_slot_time = ONE_SLOT_TIME_MS_110K;
     }
-    else if (inst_dataRate == DWT_BR_850K)
+    else
     {
-        inst_one_slot_time    = ONE_SLOT_TIME_MS_850K;
-        inst_final_rx_timeout = FINAL_RX_TIMEOUT_850K;
-        inst_resp_rx_timeout  = RESP_RX_TIMEOUT_850K;
-        inst_data_interval    = DATA_INTERVAL_TIME_850K;
-        inst_poll2final_time  = ((FIRST_RESP_SEND_850K + MAX_AHCHOR_NUMBER * inst_data_interval) * UUS_TO_DWT_TIME);
+        inst_one_slot_time = ONE_SLOT_TIME_MS_850K;
     }
+    twr_set_replydelay(inst, current_rfConfig);
 
     txconfig_options.power = TX_POWER;
     tx_power = txconfig_options.power;

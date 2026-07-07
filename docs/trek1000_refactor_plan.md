@@ -22,14 +22,15 @@
 
 | 阶段 | 内容 | 状态 | 提交 |
 |------|------|------|------|
-| Phase A | `instance_data_t` 统一 + 回调直驱事件流 | ✅ 代码完成(待真机回归) | `4542790`+`f816688`(中间态)+本次收尾提交 |
-| Phase B | `twr_set_replydelay()` 统一时序计算 | 🔶 进行中 | — |
+| Phase A | `instance_data_t` 统一 + 回调直驱事件流 | ✅ 已提交(待真机回归) | `4542790`+`f816688`(中间态)+`1fe8e48`(收尾) |
+| Phase B | `twr_set_replydelay()` 统一时序计算 | 🔶 代码完成,待编译+烧录验证 | 工作区 |
 | Phase C | Discovery 基站侧(ISO 0xC5 blink) | ⬜ 未开始 | — |
 | Phase D | 冗余清理 | ⬜ 未开始 | — |
 
 ### 当前断点
 
-无代码断点。Phase A 代码全部完成;Phase B 进行中。
+无代码断点。Phase B 代码全部完成(2026-07-07,工作区未提交),等待用户编译+烧录验证
+(LEGACY=1,boot log 的 `TWR timing active` 六项应与旧常量逐项一致)。通过后提交 → Phase C。
 
 ---
 
@@ -97,30 +98,41 @@
 - [ ] `task_rtosMonitor` 确认 task_uwb 栈水位(接管状态机后负载变重);
 - [ ] 长跑 30min 无"单基站停收发"复发(`dw_main.c` ARFE/双 buffer 根因注释)。
 
-## Phase B:`twr_set_replydelay()` 统一时序计算 🔶
+## Phase B:`twr_set_replydelay()` 统一时序计算 🔶(代码完成,待验证)
 
 **参照**:TREK §9(instance_set_replydelay)、§2.1(sfConfig_t)
 
-1. `dw_instance.h` 新增 `twrTimings_t`(作为 `instance_data_t` 成员 `timings`):
+### 完成内容(2026-07-07)
+
+1. **`dw_instance.h`**:新增 `twrTimings_t`(`instance_data_t` 成员 `timings`):
    `firstRespDly_us / replyInterval_us / ancRespTxBack_us / finalTxBack_us /
    respRxTimeout_us / finalRxTimeout_us / pollRx2FinalRx_dwt / rngInitTxDly_us(Phase C 用)`;
-2. `dw_main.c` 实现 `twr_set_replydelay(inst)`(init 在 dwt_configure 后调一次):
-   - **`TWR_TIMING_LEGACY=1`(默认)**:从现有旧宏装填,空口时序与现网 Tag 完全一致(回归用);
-     旧宏(`FIRST_RESP_SEND_*` 等)保留,唯一引用点就是这里的装填代码;
-   - **`=0`(公式模式,Tag 端适配后启用)**:Trek 公式适配 N 基站:
-     `preamble_us = (plen_symbols + sfdlen) × 1.01763(PRF64)`(sfdlen 按 dataRate:850K=16/6M8=8/110K=64),
-     `frame_us(len) = preamble_us + calc_length_data(len)/1000`(**复用现成 calc_length_data,首次投入使用**),
-     `replyInterval_us = frame_us(RESP_MSG_LEN) + TWR_TURNAROUND_US`,
-     `respRxTimeout_us / finalRxTimeout_us = frame_us(对应帧长) + margin`;
-     `TWR_TURNAROUND_US` 唯一可调余量,初值 500,按 SWO 实测(poll RX 回调进入→starttx 返回)收紧;
-   - boot log 打印两种模式的时序对照表(LEGACY=1 时装填值 == 旧常量);
-3. 替换消费点:删 `rate_timing()` helper 与 A2A 路径全部旧宏/全局引用;
-   全局 `inst_resp_rx_timeout/inst_final_rx_timeout/inst_data_interval/inst_poll2final_time`
-   收编进 `inst->timings`(`inst_one_slot_time` 保留,超帧输入);
-   init 校验"单次 TWR 总时长 < slotDuration",超出 log_e;
-4. 新文档 `docs/TWR_TIMING.md`:完整公式、参数表、双端必须一致的量(Tag 工程适配依据);
-5. **验收**:LEGACY=1 编译烧录,T2A + A2A 与 Phase A 表现一致(时序值逐项相同);
-   `TWR_TIMING_LEGACY=0` 留待 Tag 端按 `docs/TWR_TIMING.md` 适配后双端联调。
+   新增 `TWR_TIMING_LEGACY`(=1)与 `TWR_TURNAROUND_US`(=500)开关;
+   删除 extern:`inst_final_rx_timeout/inst_resp_rx_timeout/inst_poll2final_time/inst_data_interval`;
+2. **`dw_main.c`**:实现 `twr_set_replydelay(inst, rf)`(两个芯片 init 在 dwt_configure 后各调一次):
+   - LEGACY 装填(全工程唯一引用旧时序宏处)+ 公式计算**两组都算**,boot log 打印对照
+     (`TWR timing active(...)` / `TWR timing calc-ref`),生效组由开关决定;
+   - 公式:`preamble_us=(plen+sfdlen)×1.01763`,`data_us(len)=calc_length_data(len)/1000`
+     (**calc_length_data 首次投入使用**),间隔=帧长+`TWR_TURNAROUND_US`,详见 `docs/TWR_TIMING.md`;
+   - 附带 `plen_symbols()/sfd_length()` helper;单次交换总时长 > slot 时 log_e 告警;
+   - 删除 4 个时序全局定义,两处速率阶梯精简为只选 `inst_one_slot_time`;
+3. **`dw_instance_anchor.c`**:删 `rateTiming_t/rate_timing()`,T2A+A2A 全部时序改读 `inst->timings`
+   (13 处消费点,数值经 LEGACY 装填与改前逐项一致);
+4. **`docs/TWR_TIMING.md`**(新增):字段表/LEGACY 数值表/公式/双端一致清单/切换流程;
+5. **A2A 容错修复**(真机发现:关掉 A1 后 A0 收不到 A2 的 resp2,整轮报废):
+   - 发起端初始接收窗只预算 1 个槽,A1 缺席时超时正好掐断 A2 正在空中的 resp2
+     (帧等待超时不因前导码检测停表),且"延迟开窗到下一槽"已过点 → 改为初始窗
+     一次性覆盖全部 responder 槽;
+   - 超时/接收错误改为**立即重开接收**兜后续槽(immediate 无过点风险),删除延迟重开窗;
+   - 收到**最后一台**基站(MAX_AHCHOR_NUMBER-1)的 resp2 即直接发 final,不再空等超时
+     (否则 final 延迟发送会过点)。
+
+### 验收(用户执行)
+
+- [ ] LEGACY=1 编译烧录,boot log `TWR timing active` 六项 == 旧常量(850K:1300/1600/300/300/1000/1300);
+- [ ] T2A + A2A 表现与 Phase A 一致;
+- [ ] `TWR_TIMING_LEGACY=0` 留待 Tag 端按 `docs/TWR_TIMING.md` 适配后双端联调
+      (届时 SWO 实测收紧 `TWR_TURNAROUND_US`)。
 
 ## Phase C:Discovery 基站侧(Trek 原版 ISO 0xC5)⬜
 
@@ -145,6 +157,7 @@
 
 1. 删除未使用的 `instStatus` 枚举(STA_* 全部无引用;保持事件驱动 + twrMode 模型,不引入 TA_* 大状态机);
 2. `availableAlgorithms[]` 两条目同指一个算法 + dummy:精简为单算法直接绑定(保留 chipType 字段);
+   `sfConfig` 全局无任何消费者(Phase B 查证),删除或接入超帧逻辑二选一;
 3. 拼写修正(限触碰过的行):`FIANL_MSG_LEN`→`FINAL_MSG_LEN`、`anch_perpareAnc2TagResp`→
    `anch_prepareAnc2TagResp`、`anch_rxRenableImmdiate`→`anch_rxReenableImmediate`;
 4. `dw_instance.h` 对外 extern 区最终审视;更新 `CLAUDE.md` 任务表与本文档;

@@ -3,6 +3,14 @@
 #include "cmsis_os.h"
 #include "elog.h"
 
+#define ANCH_FRAME_TRACE_ENABLE 1
+
+#if ANCH_FRAME_TRACE_ENABLE
+#define ANCH_FRAME_TRACE_LOG(...) log_d(__VA_ARGS__)
+#else
+#define ANCH_FRAME_TRACE_LOG(...) ((void)0)
+#endif
+
 /* 保存当前ID标签的测距值，下次发送resp时发给标签 */
 
 /* RESP数据帧格式 */
@@ -152,6 +160,8 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         inst->poll_rx_ts = get_rx_timestamp_u64();// 获得poll_rx时间戳
         /* 初始化本轮交换状态：nextSlotTime 指向首个 resp 槽（TREK delayedTRXTime 机制），
          * 每消耗一槽（收到/超时/自己发完）累加一个 interval，取代旧 respTxIndex 位走位 + handleResp_times 双计数 */
+        // ANCH_FRAME_TRACE_LOG("T2A rx poll: A%d <- T%d rn=%d",
+        //                      anc_id, inst->recv_tag_id, inst->range_nb);
         inst->wait4final = 0;
         inst->lastTxFcode = 0;
         inst->rxRespMask = 0;
@@ -167,6 +177,8 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         {
             inst->wait4final = 0;
             inst->resp_valid = rx_buffer[FINAL_MSG_FINAL_VALID_IDX];
+            // ANCH_FRAME_TRACE_LOG("T2A rx final: A%d <- T%d rn=%d valid=0x%02X",
+            //                      anc_id, inst->recv_tag_id, inst->range_nb, inst->resp_valid);
             range_time = portGetTickCnt();               // 再次获取TWR成功，final帧接收的Tick
             inst->resp_tx_ts = get_tx_timestamp_u64();   // 取得resp_tx时间戳
             inst->final_rx_ts = get_rx_timestamp_u64();  // 取得final_rx时间戳
@@ -228,6 +240,9 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         break;
 
     case RTLS_MSG_ANCH_RESP:
+        // ANCH_FRAME_TRACE_LOG("T2A rx resp: A%d <- A%d rn=%d current=%d",
+        //                      anc_id, rx_buffer[SENDER_SHORT_ADD_IDX],
+        //                      rx_buffer[RANGE_NB_IDX], inst->range_nb);
         if (rx_buffer[RANGE_NB_IDX] == inst->range_nb)  // 和当前测距具有相同的range_nb
         {
             inst->rxRespMask |= (uint8_t)(1 << rx_buffer[SENDER_SHORT_ADD_IDX]);  // 记录已收到该基站的 resp
@@ -262,6 +277,7 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         inst->poll_rx_ts = get_rx_timestamp_u64();
         inst->a2a_range_nb = rx_buffer[RANGE_NB_IDX];
         // log_d("A2A A%d rxd poll from A%d", anc_id, initiator_id);
+        ANCH_FRAME_TRACE_LOG("A2A A%d rxd poll from A%d", anc_id, initiator_id);
 
         uint8_t resp_position = anc_id - initiator_id - 1;
         /* A2A 的第一个 responder 原来直接占用首个响应槽，DW3000 上这个槽太紧，
@@ -294,8 +310,8 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         inst->lastTxFcode = RTLS_MSG_ANCH_RESP2;            // TX-done 事件按此分流
         if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
         {
-            log_d("A2A A%d resp2 starttx failed, init=A%d pos=%d rn=%d",
-                    anc_id, initiator_id, resp_position, inst->a2a_range_nb);
+            // log_d("A2A A%d resp2 starttx failed, init=A%d pos=%d rn=%d",
+            //         anc_id, initiator_id, resp_position, inst->a2a_range_nb);
             rnganch_change_back_to_anchor(inst);
         }
         break;
@@ -313,6 +329,8 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         inst->rxRespMask |= (1 << resp_anc_id);
         inst->remainingRespToRx--;
         // log_d("A2A A%d rxd resp2 from A%d, remain=%d", anc_id, resp_anc_id, inst->remainingRespToRx);
+        ANCH_FRAME_TRACE_LOG("A2A A%d rxd resp2 from A%d, remain=%d",
+                             anc_id, resp_anc_id, inst->remainingRespToRx);
 
         int32_t prev_dis = (int32_t)(rx_buffer[A2A_RESP2_PREV_DIS_IDX]
             | ((uint32_t)rx_buffer[A2A_RESP2_PREV_DIS_IDX + 1] << 8)
@@ -352,9 +370,10 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         // log_d("A2A A%d rxd final", anc_id);
         uint8_t initiator_id = rx_buffer[SENDER_SHORT_ADD_IDX];
         uint8_t valid = rx_buffer[A2A_FINAL_VALID_IDX];
+        ANCH_FRAME_TRACE_LOG("A2A A%d rxd final", anc_id);
         if (!((valid >> anc_id) & 0x01))
         {
-            log_d("A2A A%d final valid mask miss, mask=0x%02X", anc_id, valid);
+            ANCH_FRAME_TRACE_LOG("A2A A%d final valid mask miss, mask=0x%02X", anc_id, valid);
             rnganch_change_back_to_anchor(inst);
             break;
         }
@@ -411,6 +430,7 @@ static void twrAnchor_sentHandle(instance_data_t *inst)
 #if defined(ANCRANGE)
     case RTLS_MSG_ANCH_POLL:      // A2A 发起端：poll 已发出，预排 final 发送时刻
         // log_d("A2A A%d poll sent", anc_id);
+        // ANCH_FRAME_TRACE_LOG("A2A A%d poll sent", anc_id);
         inst->poll_tx_ts = get_tx_timestamp_u64();
         /* FINAL is pre-scheduled from POLL TX, after all RESP2 slots plus one extra guard slot. */
         inst->final_tx_time = inst->poll_tx_ts
@@ -419,6 +439,7 @@ static void twrAnchor_sentHandle(instance_data_t *inst)
         break;
     case RTLS_MSG_ANCH_RESP2:    // A2A 应答端：resp2 已发出，开窗等 final
         // log_d("A2A A%d resp2 sent", anc_id);
+        // ANCH_FRAME_TRACE_LOG("A2A A%d resp2 sent", anc_id);
         inst->resp_tx_ts = get_tx_timestamp_u64();
         /* Arm delayed RX after RESP2 really leaves the air. */
         dwt_setdelayedtrxtime((uint32)(inst->final_rx_time >> 8));
@@ -432,10 +453,13 @@ static void twrAnchor_sentHandle(instance_data_t *inst)
         break;
     case RTLS_MSG_ANCH_FINAL:                       // A2A 发起端：final 已发出，本轮结束
         // log_d("A2A A%d final sent", anc_id);
+        // ANCH_FRAME_TRACE_LOG("A2A A%d final sent", anc_id);
         rnganch_change_back_to_anchor(inst);
         break;
 #endif
     case RTLS_MSG_ANCH_RESP:                        // T2A：自己的 resp 槽已消耗，推进到下一槽
+        // ANCH_FRAME_TRACE_LOG("T2A tx resp: A%d -> T%d rn=%d",
+        //                      anc_id, inst->recv_tag_id, inst->range_nb);
     default:
         inst->nextSlotTime += (uint64_t)inst->timings.replyInterval_us * UUS_TO_DWT_TIME;
         anch_respSlotProcess(inst);
@@ -454,6 +478,8 @@ static uint8_t twrAnchor_rxErrorOrTimeoutHandle(instance_data_t *inst)
          * 槽数耗尽后只要收到过 resp2 就发 final，让在线 responder 完成本轮 TWR。 */
         if (inst->remainingRespToRx > 0)
         {
+            // log_d("A2A A%d wait resp2 timeout, remain=%d mask=0x%02X rn=%d",
+                    // anc_id, inst->remainingRespToRx, inst->rxRespMask, inst->a2a_range_nb);
             inst->remainingRespToRx--;
         }
         if (inst->remainingRespToRx > 0)
@@ -720,8 +746,8 @@ static void anch_a2a_sendFinal(instance_data_t *inst)
     inst->lastTxFcode = RTLS_MSG_ANCH_FINAL;        // TX-done 事件按此分流
     if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
     {
-        log_d("A2A A%d final starttx failed, mask=0x%02X rn=%d",
-                anc_id, inst->rxRespMask, inst->a2a_range_nb);
+        // ANCH_FRAME_TRACE_LOG("A2A A%d final starttx failed, mask=0x%02X rn=%d",
+        //         anc_id, inst->rxRespMask, inst->a2a_range_nb);
         rnganch_change_back_to_anchor(inst);
     }
 }

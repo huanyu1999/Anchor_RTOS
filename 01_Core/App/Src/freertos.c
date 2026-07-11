@@ -762,7 +762,7 @@ void task_rtosMonitor(void *arg)
         log_d("task_eth stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_eth_handle));
         log_d("task_rtosMonitor stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_rtosMonitor_handle));
         log_d("task_swoOutput stack hwm: %d bytes", uxTaskGetStackHighWaterMark(task_swoOutput_handle));
-        osDelay(10000);
+        osDelay(60000);
     }
 }
 

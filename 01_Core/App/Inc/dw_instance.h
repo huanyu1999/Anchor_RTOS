@@ -99,39 +99,12 @@ typedef int32_t  int32;
 #define ONE_SLOT_TIME_MS_6P8M           15
 #endif
 
-/************************************** 单位 microsecond ***************************************/
-/* Phase B 统一时序计算开关：
- * TWR_TIMING_LEGACY = 1：twrTimings_t 从下方旧宏装填，空口时序与现网 Tag 完全一致（过渡/回归用）
- *                   = 0：twr_set_replydelay() 按帧长公式计算（更省空口时间，但须与 Tag 工程
- *                        按 docs/TWR_TIMING.md 同步适配后同时刷机）
- * 下方 *_110K/_850K/_6P8M 旧宏仅剩 twr_set_replydelay() 的 LEGACY 装填一处引用 */
-#define TWR_TIMING_LEGACY               1
-#define TWR_TURNAROUND_US               500     // 公式模式唯一可调余量：帧间处理翻转时间（含 RTOS 调度），SWO 实测后收紧
-
-#define FINAL_RX_TIMEOUT_6P8M           600
-#define RESP_RX_TIMEOUT_6P8M            450
-#define FIRST_RESP_SEND_6P8M            900     // 6.8M通信速率下，第一个resp消息发送延时
-#define DATA_INTERVAL_TIME_6P8M         1100    // 6.8M通信速率下，相邻消息间隔时间
-#define ANC_RESP_SEND_BACK_6P8M         100     // 6.8M通信速率下，基站延后发送RESP消息时间
-#define TAG_FINALE_SEND_BACK_6P8M       100     // 6.8M通信速率下，标签延后发送FINAL消息时间
-
-#define FINAL_RX_TIMEOUT_110K           6000
-#define RESP_RX_TIMEOUT_110K            3800
-#define FIRST_RESP_SEND_110K            3000    // 110K通信速率下，第一个resp消息发送延时
-#define DATA_INTERVAL_TIME_110K         3900    // 110K通信速率下，相邻消息间隔时间
-#define ANC_RESP_SEND_BACK_110K         1080    // 110K通信速率下，基站延后发送RESP消息时间
-#define TAG_FINALE_SEND_BACK_110K       1080    // 110K通信速率下，标签延后发送FINAL消息时间
-
-#define FINAL_RX_TIMEOUT_850K           1300    // 850K通信速率下，基站接收final帧超时时间
-#define RESP_RX_TIMEOUT_850K            1000    // 850K通信速率下，基站接收resp帧超时时间
-/* 
-    850K通信速率下，第一个resp消息处理（发送或者接收）延时，之前设定的为1250，
-    考虑的是基站接收到poll帧记录时间戳后，还要做帧解析，处理后续resp帧，这些都是在dwt_isr中做完，需要留够时间，确保处理完成不出错。
-*/ 
-#define FIRST_RESP_SEND_850K            1300    
-#define DATA_INTERVAL_TIME_850K         1600    // 850K通信速率下，一个resp帧的处理（发送或者接收）时间， 一个完整的时间间隔
-#define ANC_RESP_SEND_BACK_850K         300     // 850K通信速率下，基站延后发送RESP消息时间，在前面接收处理完poll帧的基础上，可能还会有接收resp帧的情况，难道是guard time？
-#define TAG_FINALE_SEND_BACK_850K       300     // 850K通信速率下，标签延后发送FINAL消息时间
+/************************************** TWR 时序常量（TREK1000 同源） ***************************************/
+/* 所有 TWR 时序由 twr_set_replydelay()（dw_main.c，移植 TREK instance_set_replydelay）
+ * 按帧长公式统一算出并装填 instance_data_t.timings，不再有按速率展开的时序宏。
+ * 双端约定与参考数值见 docs/TWR_TIMING.md，Tag 工程须按同一公式适配。 */
+#define DW_RX_ON_DELAY                  16      // us，DW 接收机使能到可收数据的开机延时
+#define RX_RESPONSE_TURNAROUND          500     // us，帧间处理翻转余量（TREK 裸机原值 300；RTOS 回调路径保守取 500）
 #define MAX_POLL_SEND_SLEEP_COUNT       150     // MAX_POLL_SEND_SLEEP_COUNT次发送后无运动则进入休眠
 
 /* PAN ID */
@@ -268,17 +241,18 @@ typedef enum {
 } twrModes;
 
 /******************************************************TWR Timings*************************************************************/
-/* 统一时序参数集（对应 TREK instance_set_replydelay 的输出），
- * init 时由 twr_set_replydelay() 装填一次，T2A/A2A 全部时序引用此结构 */
+/* 统一时序参数集（TREK instance_set_replydelay 的输出字段），
+ * init 时由 twr_set_replydelay() 装填一次，T2A/A2A 全部时序引用此结构。
+ * 32h = 40bit DW 设备时间的高 32 位（即 >>8）；sy = symbol（1.0256us，dwt_setrxtimeout 原生单位）。
+ * TREK 时序模型：统一槽间隔，首个 resp 槽 = poll RX + 1×fixedReplyDelay，逐槽 +1×；
+ * delayed TX 编程的是 RMARKER 时刻，delayed RX 编程的是开机时刻，开窗须提前一个前导码。 */
 typedef struct {
-    uint32_t firstRespDly_us;       // poll RX(RMARKER) → 首个 resp 槽基准的延时（替代 FIRST_RESP_SEND_*）
-    uint32_t replyInterval_us;      // 相邻 resp 槽间隔（替代 DATA_INTERVAL_TIME_*）
-    uint32_t ancRespTxBack_us;      // 基站 resp 发送在槽基准上的再延后量（替代 ANC_RESP_SEND_BACK_*）
-    uint32_t finalTxBack_us;        // final 发送在槽基准上的再延后量（替代 TAG_FINALE_SEND_BACK_*）
-    uint32_t respRxTimeout_us;      // resp 帧接收超时（替代 RESP_RX_TIMEOUT_*）
-    uint32_t finalRxTimeout_us;     // final 帧接收超时（替代 FINAL_RX_TIMEOUT_*）
-    uint64_t pollRx2FinalRx_dwt;    // poll RX → final RX 开窗的 dwt 时间（替代 inst_poll2final_time）
-    uint32_t rngInitTxDly_us;       // blink RX → RNG_INIT TX 延时（Phase C discovery 用）
+    uint32_t fixedReplyDelayAnc32h;   // 统一槽间隔 = devtime(resp整帧 + RX_RESPONSE_TURNAROUND) >> 8
+    uint32_t preambleDuration32h;     // 前导码时长(devtime>>8) + DW_RX_ON_DELAY，delayed RX 开窗提前量
+    uint32_t pollTx2FinalTxDelay32h;  // poll TX → final TX 总延时(devtime>>8) = (N+1)×fixedReplyDelay，Tag 端同公式
+    uint16_t fixedReplyDelay_sy;      // 槽间隔的 symbol 表示，多槽接收超时窗算术用（A2A 容错）
+    uint16_t fwto4RespFrame_sy;       // resp 帧接收超时（symbol）
+    uint16_t fwto4FinalFrame_sy;      // final 帧接收超时（symbol，按较长的 T2A final 计算 + 余量）
 } twrTimings_t;
 
 /******************************************************TWR Instance************************************************************/
@@ -298,8 +272,9 @@ typedef struct instance_data_s {
     twrTimings_t  timings;          // 统一时序参数（twr_set_replydelay() 装填）
 
     /* 单次交换的轮转状态 */
-    int8_t   remainingRespToRx;     // 还需接收的 resp 数；-1 = 空闲（未在交换中）
-    uint8_t  rxRespMask;            // 本轮已收到 resp 的发送方位掩码（A2A final 有效位 / 调试）
+    int8_t   remainingRespToRx;     // T2A 专用：还需接收的他站 resp 数；-1 = 空闲（LISTENER 不变式，A2A 期间保持 -1）
+    int8_t   remainingRespToRxAnc;  // A2A 专用：发起端还需接收的 resp2 数（TREK 共用一个计数器，本工程按模式彻底分开）
+    uint8_t  rxRespMaskAnc;         // A2A 专用：本轮已收到 resp2 的发送方位掩码，final 有效位（TREK rxResponseMaskAnc）；T2A 不用掩码
     uint8_t  wait4final;            // 0 / WAIT4TAGFINAL / WAIT4ANCFINAL
     uint8_t  lastTxFcode;           // 最近调度发送的功能码，TX-done 事件分流用（对应 TREK previousState 的作用）
     uint8_t  frame_seq_nb;          // 802.15.4 帧序号，每帧 +1
@@ -307,7 +282,7 @@ typedef struct instance_data_s {
     uint8_t  a2a_range_nb;          // A2A 测距序号（发起端自增；TREK rangeNumAnc 同理独立）
     uint8_t  recv_tag_id;           // 当前测距标签 ID
     uint8_t  resp_valid;            // 标签 final 帧携带的有效 resp 掩码
-    uint64_t nextSlotTime;          // 下一 resp 槽的绝对调度时间(dwt 单位)，逐事件累加（TREK delayedTRXTime 机制）
+    uint32_t nextSlotTime32h;       // 下一 resp 槽的绝对调度时间(32h)，逐事件累加（TREK delayedTRXTime32h 同款）
 
     /* responder 侧时间戳（T2A / A2A 共用，交换互斥所以安全） */
     uint64_t poll_rx_ts;
@@ -316,8 +291,8 @@ typedef struct instance_data_s {
     /* initiator 侧时间戳与调度（A2A 发起 / 未来 tag 角色复用） */
     uint64_t poll_tx_ts;
     uint64_t resp_rx_ts[MAX_AHCHOR_NUMBER];
-    uint64_t final_tx_time;         // 发起端 final 预调度发送时间
-    uint64_t final_rx_time;         // 应答端 final 延迟接收开启时间
+    uint32_t final_tx_time32h;      // 发起端 final 预调度发送时间(32h，RMARKER)
+    uint32_t final_rx_time32h;      // 应答端 final 延迟接收槽基准(32h，开窗时再减前导码)
 
     int32_t  prev_range[MAX_TAG_LIST_SIZE];     // 各标签上一轮测距值(mm)，下轮 resp 回传
 #if defined(ANCRANGE)

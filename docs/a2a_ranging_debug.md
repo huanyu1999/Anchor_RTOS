@@ -96,7 +96,7 @@ sum = 3200 + 4800 + 4800 + 3200                          = 16000 µs
 **符号**：`Da` 偏小 → `Da·Db` 偏小 → 分子 `Ra·Rb − Da·Db` 偏大 → `tof` 偏大 → **距离被高估**（真实 1m 读成 15m）。
 
 ### 修复
-`dw_instance_anchor.c`（`anch_a2a_sendFinal`）：
+`dw_instance_anchor.c`（`rnganch_sendFinal`）：
 
 ```c
 uint64_t final_tx_ts_embed = (a2a_final_tx_time & MASK_TXDTS) + ant_dly;  // 补回 TX 天线延时
@@ -183,11 +183,11 @@ c × DWT = 299702547 × 15.65 ps ≈ 4.69 mm / DTU
 
 | 文件 | 改动 | 修的问题 |
 |---|---|---|
-| `dw_instance_anchor.c`（`anch_a2a_sendFinal`） | `final_tx` 补 `+ ant_dly` | Bug #1：15m 爆表 |
+| `dw_instance_anchor.c`（`rnganch_sendFinal`） | `final_tx` 补 `+ ant_dly` | Bug #1：15m 爆表 |
 | `dw_instance.h` | `ANT_DLY_DW3000` 16549 → 16347 | Bug #2：~0.95m 固定偏差 |
 
 **两台都要重新编译烧录**：
-- A0（DW1000）：Bug #1 的修复在发起方的 `anch_a2a_sendFinal`，A0 是发起方 → 必须重烧。
+- A0（DW1000）：Bug #1 的修复在发起方的 `rnganch_sendFinal`，A0 是发起方 → 必须重烧。
 - A1（DW3000）：要拿到新的 `ANT_DLY_DW3000` → 必须重烧（`USE_DW3000` 配置）。
 
 ---

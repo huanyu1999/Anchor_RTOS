@@ -425,7 +425,7 @@ inst->testAppState = TA_TXPOLL_WAIT_SEND;
 port_EnableEXT_IRQ();
 ```
 
-**ANCHOR_RNG → ANCHOR** (`rnganch_change_back_to_anchor`):
+**ANCHOR_RNG → ANCHOR** (`rnganch_changeBackToAnchor`):
 ```c
 inst->testAppState = TA_RXE_WAIT;
 inst->mode = ANCHOR;
@@ -481,25 +481,25 @@ TA_RX_WAIT_DATA [ANCHOR_RNG mode]
   │     rxResps++, remainingRespToRx--
   │     Record response RX timestamp
   │     rxResponseMaskAnc |= (1 << anchorID)
-  │     rnganchrxresp_signalsendfinal_or_rx_reenable():
+  │     rnganch_rxRespSendfinal_or_rxReenable():
   │       ├── [remainingRespToRx == 0]: DWT_SIG_DW_IDLE → send final
   │       └── [more expected]: delayed RX for next response
   │     → TA_TXFINAL_WAIT_SEND or stay in RX
   │
   └── TIMEOUT:
-        ├── [no responses]: rnganch_change_back_to_anchor()
-        ├── [error sending final]: rnganch_change_back_to_anchor()
+        ├── [no responses]: rnganch_changeBackToAnchor()
+        ├── [error sending final]: rnganch_changeBackToAnchor()
         └── [some responses]: → TA_TXFINAL_WAIT_SEND
 
 TA_TXFINAL_WAIT_SEND (ANCHOR_RNG mode)
   Build ANCH_FINAL (rangeNumAnc, rxResponseMaskAnc, timestamps)
   Delayed TX
-  ├── [late/failed]: rnganch_change_back_to_anchor()
+  ├── [late/failed]: rnganch_changeBackToAnchor()
   └── [success]: → TA_TX_WAIT_CONF (previousState = TXFINAL)
 
 TA_TX_WAIT_CONF
   [previousState == TXFINAL]:
-    rnganch_change_back_to_anchor()  // back to normal ANCHOR + LISTENER
+    rnganch_changeBackToAnchor()  // back to normal ANCHOR + LISTENER
 ```
 
 ### 5.8 RESPONDER Side (A1/A2 receiving ANCH_POLL)

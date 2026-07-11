@@ -18,19 +18,20 @@
 2. 每阶段独立提交,格式:`参考Trek1000代码进行重构, phase X: <内容> [YYYY-MM-DD HH:MM]`;
 3. 阶段内如需中断,提交信息注明断点位置,并同步更新本文档"当前断点"一节。
 
-## 进度总览(2026-07-07 更新)
+## 进度总览(2026-07-10 更新)
 
 | 阶段 | 内容 | 状态 | 提交 |
 |------|------|------|------|
 | Phase A | `instance_data_t` 统一 + 回调直驱事件流 | ✅ 已提交(待真机回归) | `4542790`+`f816688`(中间态)+`1fe8e48`(收尾) |
-| Phase B | `twr_set_replydelay()` 统一时序计算 | 🔶 代码完成,待编译+烧录验证 | 工作区 |
+| Phase B | `twr_set_replydelay()` 统一时序计算(TREK 单轨返工) | 🔶 代码完成,待编译+烧录验证 | 工作区 |
 | Phase C | Discovery 基站侧(ISO 0xC5 blink) | ⬜ 未开始 | — |
 | Phase D | 冗余清理 | ⬜ 未开始 | — |
 
 ### 当前断点
 
-无代码断点。Phase B 代码全部完成(2026-07-07,工作区未提交),等待用户编译+烧录验证
-(LEGACY=1,boot log 的 `TWR timing active` 六项应与旧常量逐项一致)。通过后提交 → Phase C。
+无代码断点。Phase B 于 2026-07-09 **推翻 LEGACY 双轨方案返工**(见 Phase B 一节),
+代码全部完成(工作区未提交),等待用户编译+烧录验证(验收以 A2A 为准,T2A 需 Tag 工程
+按新版 `docs/TWR_TIMING.md` 适配后才能回归)。通过后提交 → Phase C。
 
 ---
 
@@ -47,11 +48,11 @@
 
 | 决策点 | 结论 |
 |---|---|
-| 空口时序变更 | 允许。Tag 工程(`../Tag`,裸机)同步梳理更新;`TWR_TIMING_LEGACY` 开关做过渡 |
+| 空口时序变更 | 允许。Tag 工程(`../Tag`,裸机)同步梳理更新;~~`TWR_TIMING_LEGACY` 开关做过渡~~ 2026-07-09 改判:双轨太乱,彻底删除旧宏,单轨 TREK 公式,接受 Tag 适配前 T2A 不可用的过渡期 |
 | Blink 帧格式 | Trek 原版 ISO 0xC5 EUI-64 blink(12 字节);RNG_INIT 用长目的+短源混合帧头 |
 | 延迟架构 | 时间关键路径移入回调(task_uwb 上下文),Trek 同款;task_twrRun 删除 |
 | instance_data_t 范围 | 只收内部状态;对外全局保留:`anc_id/group_id/tag_id/distance_report[]/group_report[]/range_status/range_time/rx_power/ant_dly/distance_offset_cm/inst_ch/inst_prf/inst_dataRate` |
-| 交换状态 | **T2A/A2A 共用一套**(`remainingRespToRx/rxRespMask/共享时间戳`),禁止 a2a_* 平行副本;TX-done 用 `lastTxFcode` 分流 |
+| 交换状态 | 时间戳共享(同一时刻只在一个交换中);TX-done 用 `lastTxFcode` 分流。2026-07-10 改判:**T2A/A2A 处理彻底分开**——处理函数按 TREK 三函数拆分,逐交换计数器/掩码按模式拆为 `remainingRespToRx`(T2A,LISTENER 不变式)+`remainingRespToRxAnc`/`rxRespMaskAnc`(A2A;TREK 掩码本就分开,计数器 TREK 共用、本工程为清晰起见拆开)(见 Phase B 第 5 条) |
 
 ---
 
@@ -63,7 +64,7 @@
 
 - **`dw_instance.h`**:`dwDevice_t` → `instance_data_t`(单例,`instance_get()`),收编:
   角色(`device_mode/twr_mode/device_id/gatewayAnchor`)、
-  轮转(`remainingRespToRx/rxRespMask/wait4final/lastTxFcode/frame_seq_nb/range_nb/
+  轮转(`remainingRespToRx/rxRespMaskAnc/wait4final/lastTxFcode/frame_seq_nb/range_nb/
   a2a_range_nb/recv_tag_id/resp_valid/nextSlotTime`)、
   时间戳(responder `poll_rx_ts/resp_tx_ts/final_rx_ts`,initiator `poll_tx_ts/resp_rx_ts[]/
   final_tx_time/final_rx_time`)、`prev_range[]`、ANCRANGE 的 `a2a_distance[]/sframePeriod_ms/a2aStartTime_ms`;
@@ -73,7 +74,8 @@
   `calc_length_data()` 110K 分支加 `USE_DW1000` 保护(修 DW3000 目标编译错);
 - **`dw_instance_anchor.c`**:全函数 `inst->` 化,`a2aState_t`/`a2a_*` 静态副本/
   `handleResp_times`/`respTxIndex` 移除;核心机制:
-  - **`anch_respSlotProcess()`**(替代 `anch_txRespOrRxReEnable`)统一 resp 槽推进引擎:
+  - **`anch_respSlotProcess()`**(替代 `anch_txRespOrRxReEnable`;2026-07-10 改名
+    `anch_txresponse_or_rx_reenable`,TREK 同名)统一 resp 槽推进引擎:
     `nextSlotTime` 指向下一未处理槽的绝对 dwt 时间,每消耗一槽(收到/超时/自己发完)+= interval;
     发送时机 = TREK 算术式 `(remainingRespToRx + anc_id == MAX_AHCHOR_NUMBER-1) && lastTxFcode != ANCH_RESP`;
   - **`twrAnchor_sentHandle()`** 按 `lastTxFcode` switch 分流(ANCH_POLL/RESP2/FINAL → A2A,
@@ -98,41 +100,66 @@
 - [ ] `task_rtosMonitor` 确认 task_uwb 栈水位(接管状态机后负载变重);
 - [ ] 长跑 30min 无"单基站停收发"复发(`dw_main.c` ARFE/双 buffer 根因注释)。
 
-## Phase B:`twr_set_replydelay()` 统一时序计算 🔶(代码完成,待验证)
+## Phase B:`twr_set_replydelay()` 统一时序计算 🔶(TREK 单轨返工完成,待验证)
 
-**参照**:TREK §9(instance_set_replydelay)、§2.1(sfConfig_t)
+**参照**:TREK §9(instance_set_replydelay)、§2.1(sfConfig_t);
+原版源码 `Reference Example\Trek1000-RTLS-master\trek1000\src\application\instance_common.c:848`
 
-### 完成内容(2026-07-07)
+### 方案变更(2026-07-09)
 
-1. **`dw_instance.h`**:新增 `twrTimings_t`(`instance_data_t` 成员 `timings`):
-   `firstRespDly_us / replyInterval_us / ancRespTxBack_us / finalTxBack_us /
-   respRxTimeout_us / finalRxTimeout_us / pollRx2FinalRx_dwt / rngInitTxDly_us(Phase C 用)`;
-   新增 `TWR_TIMING_LEGACY`(=1)与 `TWR_TURNAROUND_US`(=500)开关;
-   删除 extern:`inst_final_rx_timeout/inst_resp_rx_timeout/inst_poll2final_time/inst_data_interval`;
-2. **`dw_main.c`**:实现 `twr_set_replydelay(inst, rf)`(两个芯片 init 在 dwt_configure 后各调一次):
-   - LEGACY 装填(全工程唯一引用旧时序宏处)+ 公式计算**两组都算**,boot log 打印对照
-     (`TWR timing active(...)` / `TWR timing calc-ref`),生效组由开关决定;
-   - 公式:`preamble_us=(plen+sfdlen)×1.01763`,`data_us(len)=calc_length_data(len)/1000`
-     (**calc_length_data 首次投入使用**),间隔=帧长+`TWR_TURNAROUND_US`,详见 `docs/TWR_TIMING.md`;
-   - 附带 `plen_symbols()/sfd_length()` helper;单次交换总时长 > slot 时 log_e 告警;
-   - 删除 4 个时序全局定义,两处速率阶梯精简为只选 `inst_one_slot_time`;
-3. **`dw_instance_anchor.c`**:删 `rateTiming_t/rate_timing()`,T2A+A2A 全部时序改读 `inst->timings`
-   (13 处消费点,数值经 LEGACY 装填与改前逐项一致);
-4. **`docs/TWR_TIMING.md`**(新增):字段表/LEGACY 数值表/公式/双端一致清单/切换流程;
-5. **A2A 容错修复**(真机发现:关掉 A1 后 A0 收不到 A2 的 resp2,整轮报废):
-   - 发起端初始接收窗只预算 1 个槽,A1 缺席时超时正好掐断 A2 正在空中的 resp2
-     (帧等待超时不因前导码检测停表),且"延迟开窗到下一槽"已过点 → 改为初始窗
-     一次性覆盖全部 responder 槽;
-   - 超时/接收错误改为**立即重开接收**兜后续槽(immediate 无过点风险),删除延迟重开窗;
-   - 收到**最后一台**基站(MAX_AHCHOR_NUMBER-1)的 resp2 即直接发 final,不再空等超时
-     (否则 final 延迟发送会过点)。
+首版 Phase B 采用"LEGACY 旧宏装填 + 公式计算"双轨并存、`TWR_TIMING_LEGACY` 开关切换,
+新旧宏交叉过于混乱。经用户确认**推翻双轨方案**:彻底删除 `TWR_TIMING_LEGACY`、
+`TWR_TURNAROUND_US` 与全部 18 个旧速率宏,`twr_set_replydelay()` 直接移植 TREK 原版
+`instance_set_replydelay()`,单轨公式计算。**空口时序即刻改变,与现网 Tag 不兼容**
+(Tag 工程按新版 `docs/TWR_TIMING.md` 适配后联调);A2A 双方同固件不受影响。
+
+### 完成内容(2026-07-09)
+
+1. **`dw_instance.h`**:删除 `TWR_TIMING_LEGACY/TWR_TURNAROUND_US` 与 18 个旧速率宏;
+   新增 TREK 常量 `DW_RX_ON_DELAY(16us)`、`RX_RESPONSE_TURNAROUND(500us,TREK 原值 300,
+   RTOS 保守起步,SWO 实测后收紧)`;`twrTimings_t` 整体替换为 TREK 字段集:
+   `fixedReplyDelayAnc32h / preambleDuration32h / pollTx2FinalTxDelay32h /
+   fixedReplyDelay_sy / fwto4RespFrame_sy / fwto4FinalFrame_sy`;
+   调度字段改 32h 单位:`nextSlotTime32h / final_tx_time32h / final_rx_time32h`(uint32);
+2. **`dw_main.c`**:`twr_set_replydelay()` 重写为 TREK 移植(帧长含 FCS_LEN,修正首版漏加;
+   新增 `conv_us_to_devtime()` helper);T2A final 时刻 = `(N+1)×fixedReplyDelay` 公式导出
+   (沿用 sfConfig 旧值 6100us 会与末槽 resp 空口重叠,核对时发现并改为公式;
+   sfConfig 仍无消费者,Phase D 议题保留);boot log 单组输出 + 交换超 slot 的 log_e 检查;
+3. **`dw_instance_anchor.c`**:全部时序消费点改 TREK 字段/32h 时间基:统一槽间隔
+   (首槽=pollRx+1×,无 ancBack/finalBack 偏移)、delayed RX 开窗提前 `preambleDuration32h`、
+   接收超时改 symbol 单位(顺带修正传 us 的 2.5% 偏差);A2A 槽位布局保留
+   (首 responder 槽后移一槽、final 槽位 = N+1),Phase A 状态机结构与 A2A 三项容错修复不动;
+4. **`docs/TWR_TIMING.md`** 重写:TREK 模型/字段表/公式/参考数值/Tag 适配清单;
+5. **T2A/A2A 处理彻底分开(2026-07-10,用户提出 rxRespMask/remainingRespToRx 共用太乱)**:
+   resp 收发处理按 TREK 三函数重组——T2A `anch_txresponse_or_rx_reenable()`(原
+   `anch_respSlotProcess` 改 TREK 同名,槽推进 `nextSlotTime32h += fixed` 移入函数内,
+   TREK 在函数内累加 delayedTRXTime32h 同款)、A2A 应答端 `anch_perpareAnc2AncResp()` +
+   `rnganch_txResponseOrRxReenable()`(从 ANCH_POLL case 提取)、A2A 发起端
+   `rnganch_rxRespSendfinal_or_rxReenable()`(resp2 接收与槽超时两路共用的
+   "发 final/继续开窗/回 ANCHOR"三选一);逐交换状态按模式拆分:`rxRespMask` → A2A 专用
+   `rxRespMaskAnc`(TREK rxResponseMaskAnc 同款),T2A 路径的两处掩码写入系死代码删除;
+   计数器拆为 `remainingRespToRx`(T2A 专用,LISTENER ⇔ -1 不变式,A2A 期间保持 -1)+
+   `remainingRespToRxAnc`(A2A 专用,`rnganch_changeBackToAnchor` 复位;TREK 共用一个,
+   本工程按用户要求拆开);A2A 函数统一 `rnganch_` 前缀
+   (`rnganch_start_a2a`/`rnganch_sendFinal`/`rnganch_changeBackToAnchor`)。
+   行为等价迁移,唯一增强:发起端收 resp2 后重开接收失败时改为立即发 final 收尾
+   (原裸调 rxenable 忽略返回值,失败会停摆到 A2A 兜底超时)。
+
+### 历史(首版,已被返工取代)
+
+2026-07-07 双轨版完成过:twrTimings_t(us 字段)+LEGACY 装填+公式对照打印;
+A2A 容错修复三项(初始窗全覆盖/超时立即重开/收到末台直接发 final)——**此三项在返工版中保留**。
 
 ### 验收(用户执行)
 
-- [ ] LEGACY=1 编译烧录,boot log `TWR timing active` 六项 == 旧常量(850K:1300/1600/300/300/1000/1300);
-- [ ] T2A + A2A 表现与 Phase A 一致;
-- [ ] `TWR_TIMING_LEGACY=0` 留待 Tag 端按 `docs/TWR_TIMING.md` 适配后双端联调
-      (届时 SWO 实测收紧 `TWR_TURNAROUND_US`)。
+- [ ] DW1000(及 DW3000)编译零错误,烧录;
+- [ ] boot log `TWR timing:` 数值与 `docs/TWR_TIMING.md` §4 参考值一致
+      (850K/前导1024:replyDelay≈1801us),无 `exceeds slot` 告警;
+- [ ] 三基站 A2A:距离正常,A0 周期发起不间断,关掉 A1 容错路径仍工作;
+- [ ] T2A 预期测不了距(Tag 未适配),但确认收到旧时序 poll 后走超时路径正确回 LISTENER,
+      长跑无停收;
+- [ ] Tag 工程(../Tag)按新版 `docs/TWR_TIMING.md` 适配后回归 T2A,SWO 实测收紧
+      `RX_RESPONSE_TURNAROUND`。
 
 ## Phase C:Discovery 基站侧(Trek 原版 ISO 0xC5)⬜
 
@@ -168,9 +195,10 @@
 
 ## 风险与约束
 
-1. **空口兼容**:`TWR_TIMING_LEGACY=1` 期间与现网 Tag 完全兼容;切 0 必须与 Tag 工程同步刷机;
+1. **空口兼容**:2026-07-09 起旧时序已彻底删除,现网 Tag 必须按 `docs/TWR_TIMING.md`
+   适配刷机后 T2A 才可用(过渡期已获用户确认);
 2. **task_uwb 单任务化**:handler 全程在 ISR 优先级任务内运行,耗时必须 < 最小时间窗;
-   `TWR_TURNAROUND_US` 是守护余量,Phase B 用 SWO 时戳实测后定值;
+   `RX_RESPONSE_TURNAROUND`(=500us)是守护余量,SWO 时戳实测后收紧(TREK 裸机原值 300);
 3. **帧过滤放开 reserved 仅限 A0**,DW3000 上必须实测(ARFE 教训);
-4. **回调内 starttx 失败路径**(delayed TX 过点)沿用 `rnganch_change_back_to_anchor`/
+4. **回调内 starttx 失败路径**(delayed TX 过点)沿用 `rnganch_changeBackToAnchor`/
    `anch_rxRenableImmdiate` 兜底,不新增行为。

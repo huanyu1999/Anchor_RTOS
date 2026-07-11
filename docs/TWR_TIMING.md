@@ -1,97 +1,91 @@
-# TWR 时序统一计算（Phase B）
+# TWR 时序统一计算（Phase B，TREK1000 单轨方案）
 
 > 本文是 **Anchor(本工程, RTOS) 与 Tag(裸机工程 `../Tag`) 双端时序对齐的唯一依据**。
-> Anchor 端所有 TWR 时序自 Phase B 起由 `twr_set_replydelay()`（`dw_main.c`）统一装填到
-> `instance_data_t.timings`（`twrTimings_t`），旧的 `FIRST_RESP_SEND_*` 等宏只剩 LEGACY 装填一处引用。
+> Anchor 端所有 TWR 时序由 `twr_set_replydelay()`（`dw_main.c`，移植 TREK1000
+> `instance_set_replydelay()`，`Reference Example\Trek1000-RTLS-master\trek1000\src\application\instance_common.c`）
+> 按帧长公式统一算出，装填到 `instance_data_t.timings`（`twrTimings_t`）。
+> **旧的 `FIRST_RESP_SEND_*` 等按速率展开的时序宏与 `TWR_TIMING_LEGACY` 双轨开关已于
+> 2026-07-09 彻底删除**，空口时序与旧版 Tag 不兼容，Tag 工程必须按本文适配后联调。
 
-## 1. 模式开关
+## 1. TREK 时序模型（与旧方案的三个本质区别）
 
-`dw_instance.h`:
+1. **统一槽间隔**：只有一个 `fixedReplyDelay`（= resp 整帧时长 + `RX_RESPONSE_TURNAROUND`）。
+   首个 resp 槽 = poll RX + 1×，相邻槽 +1×。不再有 firstRespDly/interval 之分，也没有
+   ancRespTxBack/finalTxBack 再延后偏移（翻转量已含在槽间隔内）。
+2. **RX 开窗提前一个前导码**：DW 延迟发送编程的是 RMARKER（SFD 结束）时刻，延迟接收编程的
+   是接收机开机时刻，而前导码在 RMARKER 之前飞完。所以接收方开窗 = 对方 RMARKER 槽时刻 −
+   `preambleDuration32h`（TREK `anch_enable_rx()` 同款）。
+3. **接收超时用 symbol 单位**（1.0256us，`dwt_setrxtimeout` 原生单位），由帧长公式算出。
 
-| 宏 | 取值 | 含义 |
+时间基：调度量统一用 **32h**（40bit DW 设备时间 >>8，≈4.006ns/单位），TREK
+`delayedTRXTime32h` 同款；TOF 计算仍用完整 40bit 硬件时间戳。
+
+## 2. 常量与字段
+
+`dw_instance.h`：
+
+| 常量 | 值 | 含义 |
 |---|---|---|
-| `TWR_TIMING_LEGACY` | **1（当前默认）** | 从旧宏装填，空口时序与现网 Tag 完全一致 |
-| | 0 | 按 §4 公式计算（更省空口时间）。**必须与 Tag 工程同步适配后同时刷机** |
-| `TWR_TURNAROUND_US` | 500 | 公式模式唯一可调余量：帧间处理翻转时间（含 RTOS 调度），SWO 实测后收紧 |
+| `DW_RX_ON_DELAY` | 16 us | DW 接收机使能到可收数据的开机延时 |
+| `RX_RESPONSE_TURNAROUND` | **500 us** | 帧间处理翻转余量。TREK 裸机原值 300；RTOS 回调路径保守取 500，SWO 实测后收紧（唯一可调余量） |
 
-boot log 会同时打印生效组（`TWR timing active`）与公式参考组（`TWR timing calc-ref`），
-以及"单次交换总时长 > slot 时长"的越界告警（log_e）。
+`twrTimings_t`（`twr_set_replydelay()` 装填）：
 
-## 2. 字段与消费点
-
-时间基准：DW 时间戳打在 **RMARKER**（SFD 结束处）；延迟发送编程的也是 RMARKER 时刻，
-前导码在该时刻之前发出。
-
-| `twrTimings_t` 字段 | 含义 | 替代的旧符号 |
+| 字段 | 公式 | 消费点 |
 |---|---|---|
-| `firstRespDly_us` | poll RX(RMARKER) → 首个 resp 槽基准 | `FIRST_RESP_SEND_*` |
-| `replyInterval_us` | 相邻 resp 槽间隔 | `DATA_INTERVAL_TIME_*` / `inst_data_interval` |
-| `ancRespTxBack_us` | 基站 resp TX 在槽基准上的再延后量 | `ANC_RESP_SEND_BACK_*` |
-| `finalTxBack_us` | final TX 在槽基准上的再延后量 | `TAG_FINALE_SEND_BACK_*` |
-| `respRxTimeout_us` | resp 接收超时（从开窗起算） | `RESP_RX_TIMEOUT_*` / `inst_resp_rx_timeout` |
-| `finalRxTimeout_us` | final 接收超时 | `FINAL_RX_TIMEOUT_*` / `inst_final_rx_timeout` |
-| `pollRx2FinalRx_dwt` | poll RX → final RX 开窗（dwt 单位）= `(firstRespDly + N×interval)×UUS` | `inst_poll2final_time` |
-| `rngInitTxDly_us` | blink RX → RNG_INIT TX（Phase C discovery）| （新增） |
+| `fixedReplyDelayAnc32h` | devtime(preamble + resp数据段 + TURNAROUND) >> 8 | 槽推进 / A2A 槽位 / final 槽位 |
+| `preambleDuration32h` | devtime(preamble) >> 8 + DW_RX_ON_DELAY | 所有 delayed RX 开窗提前量 |
+| `pollTx2FinalTxDelay32h` | (N+1) × fixedReplyDelayAnc32h | T2A final 接收窗基准 |
+| `fixedReplyDelay_sy` | (resp整帧 + TURNAROUND) / 1.0256 | 多槽接收超时窗算术（A2A 容错） |
+| `fwto4RespFrame_sy` | DW_RX_ON_DELAY + (preamble + (resp数据段+3000ns)/1000) / 1.0256 | resp 接收超时 |
+| `fwto4FinalFrame_sy` | 同式(T2A final) + 200 | final 接收超时（T2A 用 ×2 余量，TREK 同款） |
 
-时间轴（N = `MAX_AHCHOR_NUMBER`，槽 k 属于基站 k）：
+帧长输入：`calc_length_data(MSG_LEN + FCS_LEN)`（RS(63,55) 编码 + PHR 的 air time，ns；
+FCS 也在空口飞，须计入）。preamble = `(plen + sfdlen) × 1.01763us`（PRF64；PRF16 用 0.99359）。
 
-```
-poll RMARKER ──firstRespDly──► 槽0 ──interval──► 槽1 ──interval──► 槽2 ─...─► final RX 开窗
-                              │◄ancBack►resp0.TX                            (poll+firstRespDly+N×interval)
-基站开窗接收他站 resp 于槽起点；自己的槽在 槽起点+ancRespTxBack 发送。
-Tag 端 final TX = poll TX + firstRespDly + N×interval + finalTxBack。
-A2A 复用同一组字段（首个 responder 槽整体后移 1 个 interval，final 槽位 = N+1，见 dw_instance_anchor.c）。
-```
-
-## 3. LEGACY 模式数值（与现网一致，2026-07 现状）
-
-| 字段 | 850K | 6P8M | 110K(仅 DW1000) |
-|---|---|---|---|
-| firstRespDly_us | 1300 | 900 | 3000 |
-| replyInterval_us | 1600 | 1100 | 3900 |
-| ancRespTxBack_us | 300 | 100 | 1080 |
-| finalTxBack_us | 300 | 100 | 1080 |
-| respRxTimeout_us | 1000 | 450 | 3800 |
-| finalRxTimeout_us | 1300 | 600 | 6000 |
-| pollRx2FinalRx (N=3) | 6100us | 4200us | 14700us |
-| slot 预算（1 slot） | 12ms | 9ms | 28ms |
-
-单次交换占用 ≈ firstRespDly + N×interval + finalRxTimeout = 7400us @850K，须 < slot 时长。
-
-## 4. 公式模式（`TWR_TIMING_LEGACY=0`，未联调）
-
-参数：
-- `sym_us = 1.01763`（PRF64 前导符号时长 us；PRF16 用 0.99359）
-- `sfdlen`：DW 非标 SFD 按速率 110K=64 / 850K=16 / 6M8=8 symbol
-- `plen`：前导码 symbol 数（RF 配置，当前主用 1024）
-- `calc_length_data(len)`：RMARKER 之后数据段 air time(ns)，含 RS(63,55) 编码与 PHR
-  （110K PHR=172308ns，850K/6M8=21539ns）
-
-公式：
+## 3. 时间轴（N = `MAX_AHCHOR_NUMBER`）
 
 ```
-preamble_us      = (plen + sfdlen) × sym_us
-data_us(len)     = calc_length_data(len) / 1000
-firstRespDly_us  = data_us(POLL_MSG_LEN) + TWR_TURNAROUND_US + preamble_us
-replyInterval_us = preamble_us + data_us(RESP_MSG_LEN) + TWR_TURNAROUND_US
-ancRespTxBack_us = finalTxBack_us = TWR_TURNAROUND_US / 2
-respRxTimeout_us = ancRespTxBack + preamble_us + data_us(RESP) + TWR_TURNAROUND_US/2
-finalRxTimeout_us= finalTxBack + preamble_us + data_us(FINAL) + TWR_TURNAROUND_US/2
-pollRx2FinalRx   = (firstRespDly + N × replyInterval) × UUS_TO_DWT_TIME
+T2A（槽 k 归基站 k，k=0..N-1）：
+poll RMARKER ──1×fixed──► 槽0 ──1×fixed──► 槽1 ──1×fixed──► 槽2 ...
+resp_k RMARKER = pollRx + (k+1)×fixedReplyDelay
+接收方开窗 = 槽时刻 − preambleDuration
+final：Tag final TX RMARKER = poll TX + (N+1)×fixedReplyDelay（双端同公式）
+       ── 取 (N+1)× 而非 N×：末槽 resp 数据段在其 RMARKER 后还要飞、final 前导码在其
+          RMARKER 前就开始飞，(N+1)× 天然隔开一个槽避免空口重叠
+       Anchor final 窗 = pollRx + (N+1)×fixedReplyDelay − preambleDuration，超时 fwto4Final×2
+
+A2A（首个 responder 槽整体后移一槽，调度余量）：
+resp2(pos)  RMARKER = pollRx + (pos+2)×fixedReplyDelay   （pos = anc_id − initiator_id − 1）
+final       RMARKER = pollTx + (A2A_FINAL_SCHEDULE_INDEX+1)×fixedReplyDelay
+                    = pollTx + (N+2)×fixedReplyDelay
 ```
 
-参考值 @850K/前导1024/N=3：preamble≈1058us，firstRespDly≈1760us，interval≈1785us
-（比 LEGACY 宽松，因为 LEGACY 的隐含 turnaround 只有 ~300us；`TWR_TURNAROUND_US`
-按 SWO 实测 poll RX 回调进入→starttx 返回的真实耗时收紧后，公式值应能压到 LEGACY 之下）。
+## 4. 参考数值（850K / 前导1024 / N=3 / TURNAROUND=500，boot log 核对用）
 
-## 5. 双端必须一致的量（Tag 工程适配清单）
+- preamble ≈ (1024+16)×1.01763 ≈ **1058 us**
+- resp 数据段(19+2 B) ≈ 243 us → resp 整帧 ≈ 1301 us
+- **fixedReplyDelay ≈ 1801 us**（32h ≈ 449,000 量级）
+- **pollTx2FinalTxDelay = 4×1801 ≈ 7204 us**
+- fwto4RespFrame ≈ 1289 sy；fwto4FinalFrame ≈ 1720 sy
+- T2A：末槽 resp 落地于 pollRx+5646us，final 前导码 7204−1058=6146us 才开始 ✓ 无重叠；
+  单次交换 ≈ 8.8ms < 12ms slot ✓
+- A2A：final RMARKER = pollTx + 5×1801 ≈ 9005us，+final 数据段 ≈ 9.5ms < 12ms slot（偏紧，
+  boot log 越界 log_e 兜底；靠收紧 RX_RESPONSE_TURNAROUND 优化）
 
-1. `firstRespDly_us`、`replyInterval_us`（Tag 开 resp 接收窗 / 计算各基站 resp 槽位）；
-2. `finalTxBack_us`（Tag final TX 时刻 = poll TX + firstRespDly + N×interval + finalTxBack；
-   对应 Anchor 的 `pollRx2FinalRx_dwt` 开窗）；
-3. 帧长定义 `POLL_MSG_LEN / RESP_MSG_LEN / FIANL_MSG_LEN` 与 `MAX_AHCHOR_NUMBER`；
+boot log 输出：`TWR timing: replyDelay=... preamble=... fwtoResp=... fwtoFinal=... pollTx2Final=...`，
+另有 log_e 检查：T2A/A2A 单次交换超 slot 时告警。
+（`sfConfig.pollTxToFinalTxDly_us` 仅作记录不再被消费，final 时刻由公式导出。）
+
+## 5. Tag 工程适配清单（双端必须一致）
+
+1. **resp 槽位**：Tag 各基站 resp 接收窗按 `pollTx + (k+1)×fixedReplyDelay − preamble` 开，
+   `fixedReplyDelay` 用同一公式（同帧长、同 RX_RESPONSE_TURNAROUND=500）算出；
+2. **final TX** = poll TX + `(N+1)×fixedReplyDelay`（同公式导出，当前 ≈7204us）；
+3. 帧长定义 `POLL_MSG_LEN / RESP_MSG_LEN / FIANL_MSG_LEN`、`FCS_LEN` 计入、`MAX_AHCHOR_NUMBER`；
 4. RF 配置（信道/速率/前导码长度/SFD 类型/PRF）；
-5. 超帧参数 `ONE_SLOT_TIME_MS_* × inst_slot_number`（A0 sleep correction 基准）。
+5. 超帧参数 `ONE_SLOT_TIME_MS_* × inst_slot_number`（A0 sleep correction 基准，未变）。
 
-**切换流程**：Tag 按本文实现同一公式 → 双端同时置 `TWR_TIMING_LEGACY=0` 并刷机 →
-SWO 校准 `TWR_TURNAROUND_US` → 回归（成功率、距离、长跑）。
+**联调流程**：Tag 按本文实现同一公式并刷机 →（双端已无 LEGACY 开关，Anchor 先刷不影响 A2A，
+但 T2A 在 Tag 刷机前测不了距）→ SWO 实测回调耗时，收紧 `RX_RESPONSE_TURNAROUND` →
+回归（成功率、距离、长跑）。

@@ -8,9 +8,7 @@ Embedded firmware for a **Railroad Active Warning Device — Anchor node**, targ
 
 ## Build System
 
-Two parallel build systems exist:
-- **CMake + arm-none-eabi-gcc** (primary for command-line builds)
-- **Keil MDK-ARM** (`MDK-ARM/Anchor.uvprojx`) for IDE-based development
+**CMake + arm-none-eabi-gcc** is the only build system (the Keil MDK-ARM project has been removed from the repo).
 
 ### CMake Build Commands
 
@@ -35,8 +33,8 @@ The toolchain (`toolchain.cmake`) auto-discovers `arm-none-eabi-gcc` via `where`
 ### Layer Structure
 
 ```
-01_Core/App/          - Application logic (FreeRTOS tasks, GNSS, network, alarm state)
-01_Core/App/dw1000_application/ - UWB positioning algorithm (TWR anchor role)
+01_Core/App/          - Application logic (FreeRTOS tasks, GNSS, network, alarm state,
+                        UWB TWR anchor algorithm: dw_main.c / dw_instance_anchor.c / dw_sort.c)
 01_Core/Board/        - Board-level abstraction (GPIO, DW1000 board init)
 01_Core/Dev/          - Device drivers (CAN, button, GNSS, JQ8400 audio)
 01_Core/Drv/          - Low-level peripheral drivers (SPI, I2C, UART, timers)
@@ -73,12 +71,12 @@ Key RTOS primitives (`01_Core/App/Inc/os_event.h`):
 - `queue_processDis` — 单次 TWR 成功后的距离，task_uwb（回调内） → task_minHeapManage
 - Semaphores: `sema_uwbInt`（DW IRQ）, `sema_tagDistClear`（TIM2 20ms）, `sema_w5500Int`, `sema_elogLock`, `sema_gnssReceive`
 
-### UWB Ranging (`dw1000_application/`)
+### UWB Ranging (`01_Core/App/Src/`)
 
 - `dw_main.c` — DW1000 init, radio configuration, ranging loop
-- `instance_anchor.c` — Anchor-side TWR protocol state machine
+- `dw_instance_anchor.c` — Anchor-side TWR protocol state machine（T2A + A2A，回调直驱）；`ANCH_FRAME_TRACE_ENABLE` 帧级收发调试日志开关
 - `dw_sort.c` — Processes raw distance measurements, derives min-distance report
-- `dw_instance.h` — Shared state: `distance_report[8]`, `group_report[8]`, `range_status`, algorithm pointer
+- `dw_instance.h` — `instance_data_t` 单例（经 `instance_get()` 访问，TWR 内部状态全部收入其中，参照 TREK1000）；对外上报全局变量：`distance_report[8]`, `group_report[8]`, `range_status`
 
 Radio configs are channel-5 presets (850K baud, variable preamble lengths). Active algorithm: `uwbTwr_AnchorAlgorithm`.
 
@@ -119,10 +117,6 @@ Uses **EasyLogger** (`01_Core/Com/easylogger/`), built as static lib `libelog.a`
 | FreeRTOS tick | 1000 Hz |
 | FreeRTOS heap | 4 KB (`heap_4`) |
 
-## TWR 状态机器参考
-参考 `.claude/TREK1000_TWR_STATE_MACHINE_REFERENCE.md` 了解 TWR 状态机的完整规格。
+## TWR 状态机参考
+完整规格见 `docs/TREK1000_TWR_STATE_MACHINE_REFERENCE.md`，需要时再读取。
 TREK1000 重构（4 阶段）的进度与交接以 `docs/trek1000_refactor_plan.md` 为唯一事实来源。
-
-## Memory 规则
-
-每次对话结束前，主动询问用户是否需要更新 memory。

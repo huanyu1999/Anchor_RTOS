@@ -17,16 +17,19 @@
 static uint8_t tx_resp_msg[RESP_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0x00, 0x00, 0x00, 0x80, RTLS_MSG_ANCH_RESP, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 #if defined(ANCRANGE)
+#define A2A_RESPONDER_COUNT            (MAX_AHCHOR_NUMBER - 1)
+#define A2A_FINAL_SCHEDULE_INDEX       (A2A_RESPONDER_COUNT + 2)
+
 static uint8_t tx_poll_anchor_msg[ANCH_POLL_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0xFF, 0xFF, 0x00, 0x80, RTLS_MSG_ANCH_POLL, 0x00};
 static uint8_t tx_anch_resp2_msg[ANCH_RESP2_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0xFF, 0xFF, 0x00, 0x80, RTLS_MSG_ANCH_RESP2, 0x00, 0x00, 0x00, 0x00, 0x00};
 static uint8_t tx_anch_final_msg[ANCH_FINAL_MSG_LEN];
 
-#define A2A_RESPONDER_COUNT            (MAX_AHCHOR_NUMBER - 1)
-#define A2A_FINAL_SCHEDULE_INDEX       (A2A_RESPONDER_COUNT + 2)
-
-static void anch_start_a2a(instance_data_t *inst, uint8_t expectedResps);
-static void anch_a2a_sendFinal(instance_data_t *inst);
-static void rnganch_change_back_to_anchor(instance_data_t *inst);
+static void rnganch_start_a2a(instance_data_t *inst, uint8_t expectedResps);
+static void rnganch_sendFinal(instance_data_t *inst);
+static void rnganch_changeBackToAnchor(instance_data_t *inst);
+static void anch_perpareAnc2AncResp(instance_data_t *inst, uint8_t initiator_id);
+static void rnganch_txResponseOrRxReenable(instance_data_t *inst, uint8_t initiator_id);
+static void rnganch_rxRespSendfinal_or_rxReenable(instance_data_t *inst, bool lastRespRxd);
 #endif
 
 /* 接收数据buffer */
@@ -41,9 +44,10 @@ static uint32_t twrAnchor_onEvent(instance_data_t *inst, uwbEvent_t event);
 static void twrAnchor_rxOkHandle(instance_data_t *inst);
 static void twrAnchor_sentHandle(instance_data_t *inst);
 static uint8_t twrAnchor_rxErrorOrTimeoutHandle(instance_data_t *inst);
-static void anch_respSlotProcess(instance_data_t *inst);
+static void anch_txresponse_or_rx_reenable(instance_data_t *inst);
 static void anch_rxRenableImmdiate(instance_data_t *inst);
 static void anch_perpareAnc2TagResp(instance_data_t *inst);
+
 static inline uint64_t get_tx_timestamp_u64(void);
 static inline uint64_t get_rx_timestamp_u64(void);
 static inline void final_msg_get_ts(const uint8_t *ts_field, uint32_t *ts);
@@ -61,13 +65,13 @@ static int twrAnchor_Init(instance_data_t *inst)
     dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  // 设置帧过滤模式开启
 #endif
     dwt_setpreambledetecttimeout(0);                        // 清除前导码超时，一直接收
-    dwt_setrxtimeout(0);                                       // 清除接收数据超时，一直接收
-    int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);            // 打开接收机，等待接收数据，初始接收，进行一次buffer对齐
-    if(ret == DWT_ERROR)                                            // 打开接收失败
+    dwt_setrxtimeout(0);                                    // 清除接收数据超时，一直接收
+    int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);         // 打开接收机，等待接收数据，初始接收，进行一次buffer对齐
+    if(ret == DWT_ERROR)                                    // 打开接收失败
     {
         return 0;
     }
-    inst->twr_mode = LISTENER;                                      // 空闲状态，等待接收 poll (tag 或 anchor)
+    inst->twr_mode = LISTENER;                              // 空闲状态，等待接收 poll (tag 或 anchor)
     return 1;
 }
 
@@ -100,7 +104,6 @@ static uint32_t twrAnchor_onEvent(instance_data_t *inst, uwbEvent_t event)
  * 后续实现时可直接复用，无需重复定义 */
 
 /****************************************************interrupt handle function************************************************/
-
 static void twrAnchor_rxOkHandle(instance_data_t *inst)
 {
     uint32 frame_len;
@@ -121,17 +124,30 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
     uint8_t f_code = rx_buffer[FUNC_CODE_IDX];
 
 #if defined(ANCRANGE)
-    if (inst->device_mode == ANCHOR_RNG && inst->twr_mode == INITIATOR
-        && f_code != RTLS_MSG_ANCH_RESP2)
+    /*
+     *当前设备模式为A2A模式
+     *并且当前TWR状态为已经发送poll帧，twr引擎模式为INITIATOR
+     *并且当前接收到的帧不为基站发送的resp帧
+     *则设置接收超时时间（相邻resp槽位间隔+resp帧接收超时），重新立即使能接收
+     */
+    if (inst->device_mode == ANCHOR_RNG && 
+        inst->twr_mode == INITIATOR &&
+        f_code != RTLS_MSG_ANCH_RESP2)
     {
-        dwt_setrxtimeout(inst->timings.replyInterval_us + inst->timings.respRxTimeout_us);
+        dwt_setrxtimeout(inst->timings.fixedReplyDelay_sy + inst->timings.fwto4RespFrame_sy);
         dwt_rxenable(DWT_START_RX_IMMEDIATE);
         return;
     }
+    /*
+     *当前设备模式为A2A模式
+     *并且当前TWR状态为已经发送了基站resp帧，twr引擎模式为RESPONDER_A
+     *并且当前接收到的帧不为基站发送的final
+     *则设置接收超时时间（final帧接收超时），重新立即使能接收
+     */
     if (inst->twr_mode == RESPONDER_A && f_code != RTLS_MSG_ANCH_FINAL)
     {
         /* RESPONDER_A only waits for FINAL. */
-        dwt_setrxtimeout(inst->timings.finalRxTimeout_us);
+        dwt_setrxtimeout(inst->timings.fwto4FinalFrame_sy);
         dwt_rxenable(DWT_START_RX_IMMEDIATE);
         return;
     }
@@ -147,10 +163,10 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
             break;
         }
 #endif
-        inst->twr_mode = RESPONDER_T;
-        inst->range_nb    = rx_buffer[RANGE_NB_IDX];             // 取range_nb，resp发送时发送相同的range_nb
-        inst->recv_tag_id = rx_buffer[SENDER_SHORT_ADD_IDX];     // 取发送标签的ID
-        if (inst->recv_tag_id >= inst_slot_number)               // 标签ID如果大于标签总容量则退出
+        inst->twr_mode = RESPONDER_T;                         // 准备答复TAG的Poll帧
+        inst->range_nb = rx_buffer[RANGE_NB_IDX];             // 取range_nb，resp发送时发送相同的range_nb
+        inst->recv_tag_id = rx_buffer[SENDER_SHORT_ADD_IDX];  // 取发送标签的ID
+        if (inst->recv_tag_id >= inst_slot_number)            // 标签ID如果大于标签总容量则退出
         {
             anch_rxRenableImmdiate(inst);         // 直接开启下一轮接收poll，无需同步buffer，暂定没问题
             break;
@@ -158,18 +174,16 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
 
         range_time = portGetTickCnt();            // 取得twr刚开始接收到poll的Tick
         inst->poll_rx_ts = get_rx_timestamp_u64();// 获得poll_rx时间戳
-        /* 初始化本轮交换状态：nextSlotTime 指向首个 resp 槽（TREK delayedTRXTime 机制），
-         * 每消耗一槽（收到/超时/自己发完）累加一个 interval，取代旧 respTxIndex 位走位 + handleResp_times 双计数 */
-        // ANCH_FRAME_TRACE_LOG("T2A rx poll: A%d <- T%d rn=%d",
-        //                      anc_id, inst->recv_tag_id, inst->range_nb);
+        /* 初始化本轮交换状态：nextSlotTime32h 基准 = poll RX，槽引擎每次进入先推进一槽
+         * （TREK anch_txresponse_or_rx_reenable 同款：delayedTRXTime32h 由函数内累加），
+         * 首个 resp 槽即 poll RX + 1×槽间隔 */
+        // ANCH_FRAME_TRACE_LOG("T2A rx poll: A%d <- T%d rn=%d", anc_id, inst->recv_tag_id, inst->range_nb);
         inst->wait4final = 0;
         inst->lastTxFcode = 0;
-        inst->rxRespMask = 0;
         inst->remainingRespToRx = MAX_AHCHOR_NUMBER - 1;         // 还需接收的其他基站 resp 帧数量
-        inst->nextSlotTime = inst->poll_rx_ts
-            + (uint64_t)inst->timings.firstRespDly_us * UUS_TO_DWT_TIME;
+        inst->nextSlotTime32h = (uint32_t)(inst->poll_rx_ts >> 8); // 设置后续resp的发送时间
         anch_perpareAnc2TagResp(inst);            // 可以在这里就将要发送的resp帧写入发送缓存
-        anch_respSlotProcess(inst);               // 判断是发送resp帧、开窗接收其他基站resp帧，还是开窗接收标签final帧
+        anch_txresponse_or_rx_reenable(inst);     // 判断是发送resp帧、开窗接收其他基站resp帧，还是开窗接收标签final帧
         break;
 
     case RTLS_MSG_TAG_FINAL:                      // 基站每接收到一个标签的final帧，就进行一次TOF计算
@@ -239,14 +253,11 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         anch_rxRenableImmdiate(inst);           // 直接开启下一轮接收poll，无需同步buffer，因为dwt_isr中已经处理过buffer切换
         break;
 
-    case RTLS_MSG_ANCH_RESP:
+    case RTLS_MSG_ANCH_RESP:                    // 接收到T2A阶段的，其他基站发送的resp帧
         // ANCH_FRAME_TRACE_LOG("T2A rx resp: A%d <- A%d rn=%d current=%d",
-        //                      anc_id, rx_buffer[SENDER_SHORT_ADD_IDX],
-        //                      rx_buffer[RANGE_NB_IDX], inst->range_nb);
+        //                      anc_id, rx_buffer[SENDER_SHORT_ADD_IDX], rx_buffer[RANGE_NB_IDX], inst->range_nb);
         if (rx_buffer[RANGE_NB_IDX] == inst->range_nb)  // 和当前测距具有相同的range_nb
         {
-            inst->rxRespMask |= (uint8_t)(1 << rx_buffer[SENDER_SHORT_ADD_IDX]);  // 记录已收到该基站的 resp
-
             if((rx_buffer[RESP_MSG_GROUP_IDX] & 0x7f) == (group_id & 0x7f)) // 只取和自己组号相同的其他基站数据上报
             {
                 uint8_t recv_anc_id = rx_buffer[SENDER_SHORT_ADD_IDX];     //取基站ID
@@ -257,14 +268,13 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
                 group_report[recv_anc_id] = rx_buffer[RESP_MSG_GROUP_IDX] & 0x7f;  // 将最高bit置0，最高bit为校准基站标志位
             }
         }
-        // 不管校验有没有通过，该 resp 槽都已消耗，推进到下一槽
+        // 不管校验有没有通过，该 resp 槽都已消耗（槽推进在引擎内完成）
         inst->remainingRespToRx--;
-        inst->nextSlotTime += (uint64_t)inst->timings.replyInterval_us * UUS_TO_DWT_TIME;
-        anch_respSlotProcess(inst);        // 判断是发送resp帧、继续开窗接收resp帧，还是开窗接收final帧
+        anch_txresponse_or_rx_reenable(inst);    // 判断是发送resp帧、继续开窗接收resp帧，还是开窗接收final帧
         break;
 
 #if defined(ANCRANGE)
-    case RTLS_MSG_ANCH_POLL:              // 基站接收到其他基站发送的poll帧
+    case RTLS_MSG_ANCH_POLL:              // 基站接收到其他基站发送的poll帧，准备发送resp帧
     {
         if (anc_id == 0)
         {
@@ -276,44 +286,10 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         inst->twr_mode = RESPONDER_A;
         inst->poll_rx_ts = get_rx_timestamp_u64();
         inst->a2a_range_nb = rx_buffer[RANGE_NB_IDX];
-        // log_d("A2A A%d rxd poll from A%d", anc_id, initiator_id);
         ANCH_FRAME_TRACE_LOG("A2A A%d rxd poll from A%d", anc_id, initiator_id);
 
-        uint8_t resp_position = anc_id - initiator_id - 1;
-        /* A2A 的第一个 responder 原来直接占用首个响应槽，DW3000 上这个槽太紧，
-         * 容易在 dwt_starttx() 时已经“过点”。回调虽已直驱状态机（无队列转发），
-         * 仍保留整体后移一个 interval 的调度余量，公式模式联调时再评估收紧。 */
-        /* Shift A1/A2 response slots later to leave enough scheduling margin. */
-        uint64_t resp_tx_time = inst->poll_rx_ts
-            + ((uint64_t)(inst->timings.firstRespDly_us + (resp_position + 1) * inst->timings.replyInterval_us) * UUS_TO_DWT_TIME)
-            + ((uint64_t)inst->timings.ancRespTxBack_us * UUS_TO_DWT_TIME);
-        /* Open FINAL RX from the slot boundary, leaving guard time before the actual FINAL preamble arrives. */
-        inst->final_rx_time = inst->poll_rx_ts
-            + ((uint64_t)(inst->timings.firstRespDly_us + A2A_FINAL_SCHEDULE_INDEX * inst->timings.replyInterval_us) * UUS_TO_DWT_TIME);
-
-        tx_anch_resp2_msg[SEQ_NB_IDX] = inst->frame_seq_nb++;
-        tx_anch_resp2_msg[PANID_IDX] = (uint8_t)PAN_ID;
-        tx_anch_resp2_msg[PANID_IDX + 1] = (uint8_t)(PAN_ID >> 8);
-        tx_anch_resp2_msg[SENDER_SHORT_ADD_IDX] = anc_id;
-        tx_anch_resp2_msg[RECEIVER_SHORT_ADD_IDX] = 0xFF;
-        tx_anch_resp2_msg[FUNC_CODE_IDX] = RTLS_MSG_ANCH_RESP2;
-        tx_anch_resp2_msg[RANGE_NB_IDX] = inst->a2a_range_nb;
-        int32_t prev_dis = inst->a2a_distance[initiator_id];
-        tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX]     = (uint8_t)(prev_dis);
-        tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX + 1] = (uint8_t)(prev_dis >> 8);
-        tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX + 2] = (uint8_t)(prev_dis >> 16);
-        tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX + 3] = (uint8_t)(prev_dis >> 24);
-
-        dwt_writetxdata(ANCH_RESP2_MSG_LEN + FCS_LEN, tx_anch_resp2_msg, 0);
-        dwt_writetxfctrl(ANCH_RESP2_MSG_LEN + FCS_LEN, 0, 1);
-        dwt_setdelayedtrxtime((uint32)(resp_tx_time >> 8));
-        inst->lastTxFcode = RTLS_MSG_ANCH_RESP2;            // TX-done 事件按此分流
-        if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
-        {
-            // log_d("A2A A%d resp2 starttx failed, init=A%d pos=%d rn=%d",
-            //         anc_id, initiator_id, resp_position, inst->a2a_range_nb);
-            rnganch_change_back_to_anchor(inst);
-        }
+        anch_perpareAnc2AncResp(inst, initiator_id);          // resp2 帧打包写入发送缓存
+        rnganch_txResponseOrRxReenable(inst, initiator_id);   // 排槽并延时发送 resp2，失败回 ANCHOR
         break;
     }
 
@@ -326,11 +302,11 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         }
         uint8_t resp_anc_id = rx_buffer[SENDER_SHORT_ADD_IDX];
         inst->resp_rx_ts[resp_anc_id] = get_rx_timestamp_u64();
-        inst->rxRespMask |= (1 << resp_anc_id);
-        inst->remainingRespToRx--;
-        // log_d("A2A A%d rxd resp2 from A%d, remain=%d", anc_id, resp_anc_id, inst->remainingRespToRx);
+        inst->rxRespMaskAnc |= (1 << resp_anc_id);
+        inst->remainingRespToRxAnc--;
+
         ANCH_FRAME_TRACE_LOG("A2A A%d rxd resp2 from A%d, remain=%d",
-                             anc_id, resp_anc_id, inst->remainingRespToRx);
+                             anc_id, resp_anc_id, inst->remainingRespToRxAnc);
 
         int32_t prev_dis = (int32_t)(rx_buffer[A2A_RESP2_PREV_DIS_IDX]
             | ((uint32_t)rx_buffer[A2A_RESP2_PREV_DIS_IDX + 1] << 8)
@@ -348,15 +324,7 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         /* resp2 槽按基站号时间排序：收到最后一台（MAX_AHCHOR_NUMBER-1）的 resp2 时，
          * 缺席基站的槽已全部过去，直接发 final，不再空等一个超时窗
          * （否则 final 延迟发送会因等待超时而“过点”） */
-        if (inst->remainingRespToRx == 0 || resp_anc_id == MAX_AHCHOR_NUMBER - 1)
-        {
-            anch_a2a_sendFinal(inst);
-        }
-        else
-        {
-            dwt_setrxtimeout(inst->timings.replyInterval_us + inst->timings.respRxTimeout_us);
-            dwt_rxenable(DWT_START_RX_IMMEDIATE);
-        }
+        rnganch_rxRespSendfinal_or_rxReenable(inst, resp_anc_id == MAX_AHCHOR_NUMBER - 1);
         break;
     }
 
@@ -374,7 +342,7 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         if (!((valid >> anc_id) & 0x01))
         {
             ANCH_FRAME_TRACE_LOG("A2A A%d final valid mask miss, mask=0x%02X", anc_id, valid);
-            rnganch_change_back_to_anchor(inst);
+            rnganch_changeBackToAnchor(inst);
             break;
         }
 
@@ -410,7 +378,7 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
             inst->a2a_distance[initiator_id] = (int32_t)(dist_m * 1000);
             log_i("A2A: A%d-A%d = %.2f m (responder)", initiator_id, anc_id, dist_m);
         }
-        rnganch_change_back_to_anchor(inst);
+        rnganch_changeBackToAnchor(inst);
         break;
     }
 #endif
@@ -422,47 +390,41 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
     }
 }
 
-/* TX-done 事件按 lastTxFcode 分流（对应 TREK previousState 的作用） */
+/* 基站TX-done 事件按 lastTxFcode 分流（对应 TREK previousState 的作用），每次发送成功，就跳转该函数 */
 static void twrAnchor_sentHandle(instance_data_t *inst)
 {
     switch (inst->lastTxFcode)
     {
 #if defined(ANCRANGE)
     case RTLS_MSG_ANCH_POLL:      // A2A 发起端：poll 已发出，预排 final 发送时刻
-        // log_d("A2A A%d poll sent", anc_id);
-        // ANCH_FRAME_TRACE_LOG("A2A A%d poll sent", anc_id);
         inst->poll_tx_ts = get_tx_timestamp_u64();
         /* FINAL is pre-scheduled from POLL TX, after all RESP2 slots plus one extra guard slot. */
-        inst->final_tx_time = inst->poll_tx_ts
-            + ((uint64_t)(inst->timings.firstRespDly_us + A2A_FINAL_SCHEDULE_INDEX * inst->timings.replyInterval_us) * UUS_TO_DWT_TIME)
-            + ((uint64_t)inst->timings.finalTxBack_us * UUS_TO_DWT_TIME);
+        inst->final_tx_time32h = (uint32_t)(inst->poll_tx_ts >> 8)
+            + (uint32_t)(A2A_FINAL_SCHEDULE_INDEX + 1) * inst->timings.fixedReplyDelayAnc32h;
         break;
+
     case RTLS_MSG_ANCH_RESP2:    // A2A 应答端：resp2 已发出，开窗等 final
-        // log_d("A2A A%d resp2 sent", anc_id);
         // ANCH_FRAME_TRACE_LOG("A2A A%d resp2 sent", anc_id);
         inst->resp_tx_ts = get_tx_timestamp_u64();
-        /* Arm delayed RX after RESP2 really leaves the air. */
-        dwt_setdelayedtrxtime((uint32)(inst->final_rx_time >> 8));
-        dwt_setrxtimeout(inst->timings.finalRxTimeout_us);
+        /* Arm delayed RX after RESP2 really leaves the air, open one preamble early. */
+        dwt_setdelayedtrxtime(inst->final_rx_time32h - inst->timings.preambleDuration32h);
+        dwt_setrxtimeout(inst->timings.fwto4FinalFrame_sy);
         dwt_setpreambledetecttimeout(PRE_TIMEOUT);
         if (dwt_rxenable(DWT_START_RX_DELAYED) == DWT_ERROR)
         {
             log_d("A2A A%d final rx enable failed", anc_id);
-            rnganch_change_back_to_anchor(inst);
+            rnganch_changeBackToAnchor(inst);
         }
         break;
     case RTLS_MSG_ANCH_FINAL:                       // A2A 发起端：final 已发出，本轮结束
-        // log_d("A2A A%d final sent", anc_id);
         // ANCH_FRAME_TRACE_LOG("A2A A%d final sent", anc_id);
-        rnganch_change_back_to_anchor(inst);
+        rnganch_changeBackToAnchor(inst);
         break;
 #endif
-    case RTLS_MSG_ANCH_RESP:                        // T2A：自己的 resp 槽已消耗，推进到下一槽
-        // ANCH_FRAME_TRACE_LOG("T2A tx resp: A%d -> T%d rn=%d",
-        //                      anc_id, inst->recv_tag_id, inst->range_nb);
+    case RTLS_MSG_ANCH_RESP:                        // T2A：自己的 resp 槽已消耗（槽推进在引擎内完成）
+        // ANCH_FRAME_TRACE_LOG("T2A tx resp: A%d -> T%d rn=%d", anc_id, inst->recv_tag_id, inst->range_nb);
     default:
-        inst->nextSlotTime += (uint64_t)inst->timings.replyInterval_us * UUS_TO_DWT_TIME;
-        anch_respSlotProcess(inst);
+        anch_txresponse_or_rx_reenable(inst);
         break;
     }
 }
@@ -476,57 +438,40 @@ static uint8_t twrAnchor_rxErrorOrTimeoutHandle(instance_data_t *inst)
          * 某槽超时/接收出错不终止本轮：立即重开接收兜住后续槽
          * （immediate 开窗无延迟“过点”风险；resp2 是广播帧，帧过滤不挡）。
          * 槽数耗尽后只要收到过 resp2 就发 final，让在线 responder 完成本轮 TWR。 */
-        if (inst->remainingRespToRx > 0)
+        if (inst->remainingRespToRxAnc > 0)
         {
             // log_d("A2A A%d wait resp2 timeout, remain=%d mask=0x%02X rn=%d",
-                    // anc_id, inst->remainingRespToRx, inst->rxRespMask, inst->a2a_range_nb);
-            inst->remainingRespToRx--;
+                    // anc_id, inst->remainingRespToRxAnc, inst->rxRespMaskAnc, inst->a2a_range_nb);
+            inst->remainingRespToRxAnc--;
         }
-        if (inst->remainingRespToRx > 0)
-        {
-            dwt_setrxtimeout(inst->timings.replyInterval_us + inst->timings.respRxTimeout_us);
-            dwt_setpreambledetecttimeout(0);
-            if (dwt_rxenable(DWT_START_RX_IMMEDIATE) != DWT_ERROR)
-            {
-                return 0;
-            }
-        }
-        if (inst->rxRespMask != 0)
-        {
-            anch_a2a_sendFinal(inst);
-        }
-        else
-        {
-            rnganch_change_back_to_anchor(inst);
-        }
+        rnganch_rxRespSendfinal_or_rxReenable(inst, false);
         return 0;
     }
-    if (inst->twr_mode == RESPONDER_A)
+    if (inst->twr_mode == RESPONDER_A)      // 发送A2A resp帧的基站，接收final超时
     {
         log_d("A2A A%d wait final timeout", anc_id);
-        rnganch_change_back_to_anchor(inst);
+        rnganch_changeBackToAnchor(inst);
         return 0;
     }
 #endif
 
-    // 接收超时有3种情况：等poll期间杂散错误、resp槽超时、final接收超时
+    // T2A模式，接收超时有3种情况：等poll期间杂散错误、resp槽超时、final接收超时
     if (inst->remainingRespToRx == -1)          // 空闲/等poll期间（不变式：LISTENER ⇔ remaining == -1），杂散事件不得开窗
     {
         range_status = RANGE_ERROR;
         anch_rxRenableImmdiate(inst);
         return 0;
     }
-    else if (inst->wait4final != 0)             // 接收final帧出现异常
+    else if (inst->wait4final != 0)             // T2A模式，接收final帧出现异常
     {
         range_status = RANGE_ERROR;
         anch_rxRenableImmdiate(inst);
         return 2;
     }
-    else if (inst->remainingRespToRx > 0)       // 接收resp帧出现异常：该槽已消耗，推进到下一槽
+    else if (inst->remainingRespToRx > 0)       // T2A模式，接收resp帧出现异常：该槽已消耗（槽推进在引擎内完成）
     {
         inst->remainingRespToRx--;
-        inst->nextSlotTime += (uint64_t)inst->timings.replyInterval_us * UUS_TO_DWT_TIME;
-        anch_respSlotProcess(inst);
+        anch_txresponse_or_rx_reenable(inst);
         return 1;
     }
 
@@ -535,11 +480,15 @@ static uint8_t twrAnchor_rxErrorOrTimeoutHandle(instance_data_t *inst)
     return 3;
 }
 
-/* T2A resp 槽统一推进引擎（TREK anch_txresponse_or_rx_reenable 同款思路）：
- * 由 poll 接收、resp 接收成功/接收超时、自身 resp 发完各事件驱动，nextSlotTime 始终指向
- * 下一个未处理 resp 槽的绝对 dwt 时间（TREK delayedTRXTime 机制），调用前由事件方累加。
- * 三选一：轮到本基站则延时发送 resp；还有他站 resp 槽则延时开窗接收；否则开窗等 final。 */
-static void anch_respSlotProcess(instance_data_t *inst)
+/* T2A resp 槽统一推进引擎（TREK anch_txresponse_or_rx_reenable 同名移植，仅 T2A 使用，
+ * A2A 走 rnganch_* / rnganchrxresp_* 两个函数，两条路径彻底分开）：
+ * 由 poll 接收、resp 接收成功/接收超时、自身 resp 发完各事件驱动。nextSlotTime32h 基准为
+ * poll RX 时刻，每次进入本函数先推进一槽（TREK 在函数内累加 delayedTRXTime32h 同款），
+ * 推进后即指向当前待处理 resp 槽的 RMARKER 时刻。
+ * 三选一：轮到本基站则延时发送 resp；还有他站 resp 槽则延时开窗接收（提前一个前导码）；
+ * 否则开窗等 final（Tag final TX = poll TX + pollTx2FinalTxDelay，双端同值）。
+ */
+static void anch_txresponse_or_rx_reenable(instance_data_t *inst)
 {
     if (inst->remainingRespToRx < 0)   // 不变式：LISTENER ⇔ remaining == -1，杂散事件不得开窗
     {
@@ -547,14 +496,14 @@ static void anch_respSlotProcess(instance_data_t *inst)
         return;
     }
 
+    inst->nextSlotTime32h += inst->timings.fixedReplyDelayAnc32h;   // 每消耗一槽推进一次
+
     /* 已消耗槽数 == anc_id 时轮到本基站发送（TREK: remainingRespToRx + anc_id == N-1），
      * lastTxFcode 挡住发送完成后同一条件再次成立的重入 */
     if ((inst->remainingRespToRx + anc_id == MAX_AHCHOR_NUMBER - 1)
         && inst->lastTxFcode != RTLS_MSG_ANCH_RESP)
     {
-        uint64_t resp_tx_time = inst->nextSlotTime
-            + (uint64_t)inst->timings.ancRespTxBack_us * UUS_TO_DWT_TIME;
-        dwt_setdelayedtrxtime((uint32)(resp_tx_time >> 8));
+        dwt_setdelayedtrxtime(inst->nextSlotTime32h);   // resp RMARKER 落在槽时刻（翻转量已含在槽间隔内）
         inst->lastTxFcode = RTLS_MSG_ANCH_RESP;
         if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
         {
@@ -569,8 +518,9 @@ static void anch_respSlotProcess(instance_data_t *inst)
 #else
         dwt_enableframefilter(DWT_FF_NOTYPE_EN);    // 关闭帧过滤，能够接收所有数据
 #endif
-        dwt_setdelayedtrxtime((uint32)(inst->nextSlotTime >> 8));   // 从槽起点开窗
-        dwt_setrxtimeout(inst->timings.respRxTimeout_us);           // 设置接收数据超时时间
+        /* 他站 resp RMARKER 在槽时刻，前导码在其之前飞完，开窗须提前一个前导码（TREK anch_enable_rx） */
+        dwt_setdelayedtrxtime(inst->nextSlotTime32h - inst->timings.preambleDuration32h);
+        dwt_setrxtimeout(inst->timings.fwto4RespFrame_sy);          // 设置接收数据超时时间
         dwt_setpreambledetecttimeout(PRE_TIMEOUT);  // 设置接收前导码超时时间
         if (dwt_rxenable(DWT_START_RX_DELAYED) == DWT_ERROR)
         {
@@ -580,9 +530,10 @@ static void anch_respSlotProcess(instance_data_t *inst)
     else                                            // resp阶段结束，延时开窗等标签final
     {
         inst->wait4final = WAIT4TAGFINAL;
-        uint64_t final_rx_time = inst->poll_rx_ts + inst->timings.pollRx2FinalRx_dwt;
-        dwt_setdelayedtrxtime((uint32)(final_rx_time >> 8));
-        dwt_setrxtimeout(inst->timings.finalRxTimeout_us);
+        uint32_t final_rx_time32h = (uint32_t)(inst->poll_rx_ts >> 8)
+            + inst->timings.pollTx2FinalTxDelay32h - inst->timings.preambleDuration32h;
+        dwt_setdelayedtrxtime(final_rx_time32h);
+        dwt_setrxtimeout(inst->timings.fwto4FinalFrame_sy * 2);     // TREK 同款：final 窗超时加倍余量
         dwt_setpreambledetecttimeout(PRE_TIMEOUT);
         if (dwt_rxenable(DWT_START_RX_DELAYED) == DWT_ERROR)
         {
@@ -601,15 +552,16 @@ static void anch_rxRenableImmdiate(instance_data_t *inst)
 #endif
     dwt_setpreambledetecttimeout(0);                         // 清除前导码超时，一直接收
     dwt_setrxtimeout(0);                                     // 清除接收数据超时，一直接收
-    (void)dwt_rxenable(DWT_START_RX_IMMEDIATE);              // 打开接收机，等待接收数据
+    dwt_rxenable(DWT_START_RX_IMMEDIATE);                    // 打开接收机，等待接收数据
     inst->twr_mode = LISTENER;                               // 空闲状态，等待接收 poll (tag 或 anchor)
-    /* 不变式：LISTENER ⇔ remainingRespToRx == -1，交换状态一并复位 */
+    /* T2A 不变式：LISTENER ⇔ remainingRespToRx == -1，交换状态一并复位
+     * （remainingRespToRx 为 T2A 专用，A2A 期间保持 -1，A2A 用 remainingRespToRxAnc） */
     inst->remainingRespToRx = -1;
     inst->wait4final = 0;
     inst->lastTxFcode = 0;
 }
 
-// 将要发送的resp帧打包好，存入发送缓存
+// T2A模式，基站将要发送给标签的resp帧打包好，存入发送缓存
 static void anch_perpareAnc2TagResp(instance_data_t *inst)
 {
     /* resp数据打包 */
@@ -668,23 +620,99 @@ static void anch_perpareAnc2TagResp(instance_data_t *inst)
 }
 
 #if defined(ANCRANGE)
-static void rnganch_change_back_to_anchor(instance_data_t *inst)
+/* A2A模式下的基站切换为T2A模式下基站，同Tag进行TWR */
+static void rnganch_changeBackToAnchor(instance_data_t *inst)
 {
     inst->device_mode = ANCHOR;
-    inst->final_rx_time = 0;
+    inst->final_rx_time32h = 0;
+    inst->remainingRespToRxAnc = 0;     // A2A 专用计数器随本轮交换结束复位
     dwt_setrxtimeout(0);
     dwt_setrxaftertxdelay(0);
-    anch_rxRenableImmdiate(inst);       // 内部复位 twr_mode/remainingRespToRx/lastTxFcode
+    anch_rxRenableImmdiate(inst);       // 内部复位 twr_mode/remainingRespToRx(T2A)/lastTxFcode
 }
 
-static void anch_start_a2a(instance_data_t *inst, uint8_t expectedResps)
+/* A2A 应答端 resp2 帧打包写入发送缓存（TREK anch_prepare_anc2anc_response 对应），
+ * 收到发起端 poll 后调用，随后由 rnganch_txResponseOrRxReenable 排槽发送 */
+static void anch_perpareAnc2AncResp(instance_data_t *inst, uint8_t initiator_id)
+{
+    tx_anch_resp2_msg[SEQ_NB_IDX] = inst->frame_seq_nb++;
+    tx_anch_resp2_msg[PANID_IDX] = (uint8_t)PAN_ID;
+    tx_anch_resp2_msg[PANID_IDX + 1] = (uint8_t)(PAN_ID >> 8);
+    tx_anch_resp2_msg[SENDER_SHORT_ADD_IDX] = anc_id;
+    tx_anch_resp2_msg[RECEIVER_SHORT_ADD_IDX] = 0xFF;
+    tx_anch_resp2_msg[FUNC_CODE_IDX] = RTLS_MSG_ANCH_RESP2;
+    tx_anch_resp2_msg[RANGE_NB_IDX] = inst->a2a_range_nb;
+    int32_t prev_dis = inst->a2a_distance[initiator_id];    // 上一轮与发起端的测距结果回传
+    tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX]     = (uint8_t)(prev_dis);
+    tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX + 1] = (uint8_t)(prev_dis >> 8);
+    tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX + 2] = (uint8_t)(prev_dis >> 16);
+    tx_anch_resp2_msg[A2A_RESP2_PREV_DIS_IDX + 3] = (uint8_t)(prev_dis >> 24);
+
+    dwt_writetxdata(ANCH_RESP2_MSG_LEN + FCS_LEN, tx_anch_resp2_msg, 0);
+    dwt_writetxfctrl(ANCH_RESP2_MSG_LEN + FCS_LEN, 0, 1);
+}
+
+/* A2A 应答端排槽并延时发送 resp2（TREK rnganch_txResponseOrRxReenable 对应）：
+ * 发送失败直接回 ANCHOR（TREK 是重开接收，本工程 resp2 过点即本轮报废，等下轮 poll）。
+ * final 接收窗在 TX-done（sentHandle 的 RESP2 分支）里再开，不用 TREK 的 W4R 机制 */
+static void rnganch_txResponseOrRxReenable(instance_data_t *inst, uint8_t initiator_id)
+{
+    uint8_t resp_position = anc_id - initiator_id - 1;
+    /* A2A 的第一个 responder 原来直接占用首个响应槽，DW3000 上这个槽太紧，
+     * 容易在 dwt_starttx() 时已经“过点”。回调虽已直驱状态机（无队列转发），
+     * 仍保留整体后移一个槽的调度余量，SWO 实测收紧 RX_RESPONSE_TURNAROUND 时再评估。
+     * 槽 k 的 RMARKER 时刻 = poll RX + (k+1)×fixedReplyDelay，responder 占槽 pos+1 */
+    uint32_t resp_tx_time32h = (uint32_t)(inst->poll_rx_ts >> 8)
+                             + (uint32_t)(resp_position + 1) * inst->timings.fixedReplyDelayAnc32h; // A1 resp帧发送的时间，安排在poll接收后，加上一个resp帧槽位，推测poll帧处理需要时间，函数调度也需要，要留出一个槽位的时间给MCU处理
+
+    /* final 槽基准（开窗时再提前一个前导码） */
+    inst->final_rx_time32h = (uint32_t)(inst->poll_rx_ts >> 8)
+                            + (uint32_t)(A2A_FINAL_SCHEDULE_INDEX + 1) * inst->timings.fixedReplyDelayAnc32h;
+
+    dwt_setdelayedtrxtime(resp_tx_time32h);
+    inst->lastTxFcode = RTLS_MSG_ANCH_RESP2;            // TX-done 事件按此分流
+    if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
+    {
+        // log_d("A2A A%d resp2 starttx failed, init=A%d pos=%d rn=%d",
+        //         anc_id, initiator_id, resp_position, inst->a2a_range_nb);
+        rnganch_changeBackToAnchor(inst);
+    }
+}
+
+/* A2A 发起端 resp2 收到/槽超时后的三选一（TREK rnganch_rxRespSendfinal_or_rxReenable
+ * ：还有槽且未到末台则继续开窗收 resp2；否则收到过 resp2 就发 final，一台都没收到
+ * 回 ANCHOR。lastRespRxd = 收到的是末台（MAX_AHCHOR_NUMBER-1）的 resp2，缺席基站的槽
+ * 已全部过去，直接发 final 不再空等（继续开窗失败时同样收尾，不让接收机停摆） */
+static void rnganch_rxRespSendfinal_or_rxReenable(instance_data_t *inst, bool lastRespRxd)
+{
+    if (inst->remainingRespToRxAnc > 0 && !lastRespRxd)
+    {
+        dwt_setrxtimeout(inst->timings.fixedReplyDelay_sy + inst->timings.fwto4RespFrame_sy);
+        dwt_setpreambledetecttimeout(0);
+        if (dwt_rxenable(DWT_START_RX_IMMEDIATE) != DWT_ERROR)
+        {
+            return;
+        }
+    }
+    
+    if (inst->rxRespMaskAnc != 0)   // A2A 发起端，resp标志不为0，代表至少有一次A2A resp帧接收成功，那么可以发送final帧，完成A2A TWR
+    {
+        rnganch_sendFinal(inst);
+    }
+    else
+    {
+        rnganch_changeBackToAnchor(inst);
+    }
+}
+
+static void rnganch_start_a2a(instance_data_t *inst, uint8_t expectedResps)
 {
     dwt_forcetrxoff();
     inst->device_mode = ANCHOR_RNG;
     inst->twr_mode = INITIATOR;
     inst->a2a_range_nb++;
-    inst->remainingRespToRx = expectedResps;
-    inst->rxRespMask = 0;
+    inst->remainingRespToRxAnc = expectedResps;
+    inst->rxRespMaskAnc = 0;
 
     tx_poll_anchor_msg[SEQ_NB_IDX] = inst->frame_seq_nb++;
     tx_poll_anchor_msg[PANID_IDX] = (uint8_t)PAN_ID;
@@ -700,17 +728,15 @@ static void anch_start_a2a(instance_data_t *inst, uint8_t expectedResps)
     /* 接收窗一次性覆盖全部 responder 槽（槽序号 1..A2A_RESPONDER_COUNT，整体后移一槽）。
      * 只预算一个槽的话，中间某台不在线（如关掉 A1）时超时会掐断正在接收的后续 resp2
      * （帧等待超时不因前导码检测停表），且延迟重开窗已过点，导致整轮报废。 */
-    dwt_setrxtimeout(inst->timings.firstRespDly_us
-                     + A2A_RESPONDER_COUNT * inst->timings.replyInterval_us
-                     + inst->timings.ancRespTxBack_us + inst->timings.respRxTimeout_us);
+    dwt_setrxtimeout((A2A_RESPONDER_COUNT + 1) * inst->timings.fixedReplyDelay_sy + inst->timings.fwto4RespFrame_sy);
     inst->lastTxFcode = RTLS_MSG_ANCH_POLL;         // TX-done 事件按此分流
-    if (dev_uwbStartTx(UWB_TX_MODE_IMMEDIATE, true) == DWT_ERROR)       // 期待延迟接收
+    if (dev_uwbStartTx(UWB_TX_MODE_IMMEDIATE, true) == DWT_ERROR)  // 期待延迟接收
     {
-        rnganch_change_back_to_anchor(inst);
+        rnganch_changeBackToAnchor(inst);
     }
 }
 
-static void anch_a2a_sendFinal(instance_data_t *inst)
+static void rnganch_sendFinal(instance_data_t *inst)
 {
     memset(tx_anch_final_msg, 0, ANCH_FINAL_MSG_LEN);
     tx_anch_final_msg[0] = 0x41;
@@ -724,17 +750,18 @@ static void anch_a2a_sendFinal(instance_data_t *inst)
     tx_anch_final_msg[SENDER_SHORT_ADD_IDX + 1] = 0x80;
     tx_anch_final_msg[FUNC_CODE_IDX] = RTLS_MSG_ANCH_FINAL;
     tx_anch_final_msg[RANGE_NB_IDX] = inst->a2a_range_nb;
-    tx_anch_final_msg[A2A_FINAL_VALID_IDX] = inst->rxRespMask;
+    tx_anch_final_msg[A2A_FINAL_VALID_IDX] = inst->rxRespMaskAnc;
 
     final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_POLL_TX_TS_IDX], inst->poll_tx_ts);
     /* FINAL 是延时发送、时间戳由调度时间手工算出，不是硬件读取，
      * 必须补上 TX 天线延时才能和 poll_tx/resp_tx(硬件已含天线延时)保持一致。
-     * 漏加会让 responder 侧 Da 偏小、TOF 偏大(实测 ~15m 误差)。 */
-    uint64_t final_tx_ts_embed = (inst->final_tx_time & MASK_TXDTS) + ant_dly;
+     * 漏加会让 responder 侧 Da 偏小、TOF 偏大(实测 ~15m 误差)。
+     * 32h<<8 还原 40bit：MASK_TXDTS 本就丢弃低 9 位，bit9 以上无损。 */
+    uint64_t final_tx_ts_embed = ((((uint64_t)inst->final_tx_time32h) << 8) & MASK_TXDTS) + ant_dly;
     final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_FINAL_TX_TS_IDX], final_tx_ts_embed);
     for (uint8_t i = 1; i <= A2A_RESPONDER_COUNT; i++)
     {
-        if ((inst->rxRespMask >> i) & 0x01)
+        if ((inst->rxRespMaskAnc >> i) & 0x01)
         {
             final_msg_set_ts(&tx_anch_final_msg[A2A_FINAL_RESP_RX_TS_BASE + (i - 1) * FINAL_MSG_TS_LEN], inst->resp_rx_ts[i]);
         }
@@ -742,13 +769,13 @@ static void anch_a2a_sendFinal(instance_data_t *inst)
 
     dwt_writetxdata(ANCH_FINAL_MSG_LEN + FCS_LEN, tx_anch_final_msg, 0);
     dwt_writetxfctrl(ANCH_FINAL_MSG_LEN + FCS_LEN, 0, 1);
-    dwt_setdelayedtrxtime((uint32)(inst->final_tx_time >> 8));
+    dwt_setdelayedtrxtime(inst->final_tx_time32h);
     inst->lastTxFcode = RTLS_MSG_ANCH_FINAL;        // TX-done 事件按此分流
     if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
     {
         // ANCH_FRAME_TRACE_LOG("A2A A%d final starttx failed, mask=0x%02X rn=%d",
-        //         anc_id, inst->rxRespMask, inst->a2a_range_nb);
-        rnganch_change_back_to_anchor(inst);
+        //         anc_id, inst->rxRespMaskAnc, inst->a2a_range_nb);
+        rnganch_changeBackToAnchor(inst);
     }
 }
 
@@ -760,7 +787,7 @@ void anch_checkA2ATrigger(instance_data_t *inst)
     if (anc_id == 0 && portGetTickCnt() >= inst->a2aStartTime_ms)
     {
         inst->a2aStartTime_ms += inst->sframePeriod_ms;
-        anch_start_a2a(inst, A2A_RESPONDER_COUNT);
+        rnganch_start_a2a(inst, A2A_RESPONDER_COUNT);
     }
 }
 #endif

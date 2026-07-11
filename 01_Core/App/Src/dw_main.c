@@ -29,7 +29,9 @@ sfConfig_t sfConfig = {
     .slotDuration_ms = 12,          // 单slot时间，单位ms
     .sfPeriod_ms = (MAX_TAG_NUMBER + 2) * 20,  // 整个superframe周期时间，单位ms
     .tagPeriod_ms = (MAX_TAG_NUMBER + 2) * 20, // 标签测距周期时间，单位ms,先设置为跟superframe周期时间一致，后续tag睡眠唤醒功能要使用
-    .pollTxToFinalTxDly_us = 1300 + 3 * 1600,  // poll发送到final发送的延时，单位us
+    /* poll TX → final TX 总延时。仅作记录：实际生效值由 twr_set_replydelay() 按
+     * (MAX_AHCHOR_NUMBER+1)×槽间隔 公式算出（timings.pollTx2FinalTxDelay32h），非此静态值 */
+    .pollTxToFinalTxDly_us = 6100,
 };  // super frame 配置，针对不同通信速率，不同的基站部署个数，选择不同的配置
 
 #if defined(USE_DW3000)
@@ -382,91 +384,71 @@ static uint8_t sfd_length(void)
     return (inst_dataRate == DWT_BR_850K) ? 16 : 8;
 }
 
-/* 统一计算 TWR 时序（对应 TREK instance_set_replydelay），dwt_configure 之后调用一次。
- * LEGACY 装填值与公式计算值都会算出并打印对照表，便于公式模式联调校准；
- * 实际生效哪组由 TWR_TIMING_LEGACY 决定（见 dw_instance.h 注释与 docs/TWR_TIMING.md）。 */
+/* us → DW 设备时间单位（40bit，~15.65ps/tick），TREK instance_convert_usec_to_devtimeu 移植 */
+static uint64_t conv_us_to_devtime(double microsecu)
+{
+    return (uint64_t)((microsecu / (double)DWT_TIME_UNITS) / 1e6);
+}
+
+/* 统一计算 TWR 时序，TREK1000 instance_set_replydelay()（instance_common.c）移植，
+ * dwt_configure 之后调用一次。全部时序（含 final 时刻）由帧长公式导出，无按速率展开的时序宏；
+ * 字段语义见 dw_instance.h twrTimings_t 注释，双端约定与参考数值见 docs/TWR_TIMING.md。 */
 static void twr_set_replydelay(instance_data_t *inst, const dwt_config_t *rf)
 {
-    twrTimings_t legacy, calc;
+    twrTimings_t *t = &inst->timings;
+    int margin = 3000;      // ns，接收超时里的帧长余量（TREK 同值）
 
-    /* ---- LEGACY：旧宏装填（全工程唯一引用旧时序宏的地方），空口时序与现网 Tag 一致 ---- */
+    /* 帧长 air time(ns)：MSG_LEN 为 MHR+载荷，FCS 也在空口飞，须计入（TREK 含 FRAME_CRC）。
+     * final 超时按较长的 T2A final 计算，A2A final 更短、共用同一超时偏保守 */
+    float msgdatalen_resp  = calc_length_data(RESP_MSG_LEN  + FCS_LEN);
+    float msgdatalen_final = calc_length_data(FIANL_MSG_LEN + FCS_LEN);
+
+    /* 前导码时长(us)：PRF64 符号 1.01763us，PRF16 用 0.99359us */
 #if defined(USE_DW1000)
-    if (inst_dataRate == DWT_BR_110K)
-    {
-        legacy.firstRespDly_us   = FIRST_RESP_SEND_110K;
-        legacy.replyInterval_us  = DATA_INTERVAL_TIME_110K;
-        legacy.ancRespTxBack_us  = ANC_RESP_SEND_BACK_110K;
-        legacy.finalTxBack_us    = TAG_FINALE_SEND_BACK_110K;
-        legacy.respRxTimeout_us  = RESP_RX_TIMEOUT_110K;
-        legacy.finalRxTimeout_us = FINAL_RX_TIMEOUT_110K;
-    }
-    else
-#endif
-    if (inst_dataRate == DWT_BR_6M8)
-    {
-        legacy.firstRespDly_us   = FIRST_RESP_SEND_6P8M;
-        legacy.replyInterval_us  = DATA_INTERVAL_TIME_6P8M;
-        legacy.ancRespTxBack_us  = ANC_RESP_SEND_BACK_6P8M;
-        legacy.finalTxBack_us    = TAG_FINALE_SEND_BACK_6P8M;
-        legacy.respRxTimeout_us  = RESP_RX_TIMEOUT_6P8M;
-        legacy.finalRxTimeout_us = FINAL_RX_TIMEOUT_6P8M;
-    }
-    else
-    {
-        legacy.firstRespDly_us   = FIRST_RESP_SEND_850K;
-        legacy.replyInterval_us  = DATA_INTERVAL_TIME_850K;
-        legacy.ancRespTxBack_us  = ANC_RESP_SEND_BACK_850K;
-        legacy.finalTxBack_us    = TAG_FINALE_SEND_BACK_850K;
-        legacy.respRxTimeout_us  = RESP_RX_TIMEOUT_850K;
-        legacy.finalRxTimeout_us = FINAL_RX_TIMEOUT_850K;
-    }
-    legacy.pollRx2FinalRx_dwt = (uint64_t)(legacy.firstRespDly_us
-        + MAX_AHCHOR_NUMBER * legacy.replyInterval_us) * UUS_TO_DWT_TIME;
-    legacy.rngInitTxDly_us    = legacy.replyInterval_us;    // discovery 未上线，先按一个槽间隔
-
-    /* ---- 公式模式：按帧长推导（TREK §9 适配 N 基站），数值待 SWO 实测收紧 ----
-     * dwt 时间戳打在 RMARKER（SFD 结束），poll 数据段在 RMARKER 之后还要飞 poll_data_us；
-     * 延迟发送编程的也是 RMARKER 时刻，前导码在其之前发出，所以槽间隔必须容纳整帧+翻转 */
-    float sym_us        = 1.01763f;                             // PRF64 前导符号时长(us)，PRF16 用 0.99359
-    float preamble_us   = (plen_symbols(rf) + sfd_length()) * sym_us;
-    float poll_data_us  = calc_length_data(POLL_MSG_LEN)  / 1000.0f;
-    float resp_data_us  = calc_length_data(RESP_MSG_LEN)  / 1000.0f;
-    float final_data_us = calc_length_data(FIANL_MSG_LEN) / 1000.0f;
-
-    calc.firstRespDly_us   = (uint32_t)(poll_data_us + TWR_TURNAROUND_US + preamble_us);
-    calc.replyInterval_us  = (uint32_t)(preamble_us + resp_data_us + TWR_TURNAROUND_US);
-    calc.ancRespTxBack_us  = TWR_TURNAROUND_US / 2;             // RX 先于 TX 半个翻转量开窗
-    calc.finalTxBack_us    = TWR_TURNAROUND_US / 2;
-    calc.respRxTimeout_us  = (uint32_t)(calc.ancRespTxBack_us + preamble_us + resp_data_us) + TWR_TURNAROUND_US / 2;
-    calc.finalRxTimeout_us = (uint32_t)(calc.finalTxBack_us + preamble_us + final_data_us) + TWR_TURNAROUND_US / 2;
-    calc.pollRx2FinalRx_dwt = (uint64_t)(calc.firstRespDly_us
-        + MAX_AHCHOR_NUMBER * calc.replyInterval_us) * UUS_TO_DWT_TIME;
-    calc.rngInitTxDly_us    = calc.replyInterval_us;
-
-#if (TWR_TIMING_LEGACY == 1)
-    inst->timings = legacy;
+    float sym_us = (rf->prf == DWT_PRF_16M) ? 0.99359f : 1.01763f;
 #else
-    inst->timings = calc;
+    float sym_us = 1.01763f;    // DW3000 本工程固定 PRF64（txCode 9~24 隐含）
 #endif
+    float preamble_us = (plen_symbols(rf) + sfd_length()) * sym_us;
 
-    /* 两组对照输出（验收依据：LEGACY=1 时生效组必须等于旧常量） */
-    log_i("TWR timing active(%s): 1stResp=%u interval=%u ancBack=%u finalBack=%u respTO=%u finalTO=%u",
-          (TWR_TIMING_LEGACY == 1) ? "LEGACY" : "CALC",
-          (unsigned)inst->timings.firstRespDly_us,  (unsigned)inst->timings.replyInterval_us,
-          (unsigned)inst->timings.ancRespTxBack_us, (unsigned)inst->timings.finalTxBack_us,
-          (unsigned)inst->timings.respRxTimeout_us, (unsigned)inst->timings.finalRxTimeout_us);
-    log_i("TWR timing calc-ref: 1stResp=%u interval=%u respTO=%u finalTO=%u (preamble=%uus turnaround=%uus)",
-          (unsigned)calc.firstRespDly_us, (unsigned)calc.replyInterval_us,
-          (unsigned)calc.respRxTimeout_us, (unsigned)calc.finalRxTimeout_us,
-          (unsigned)preamble_us, (unsigned)TWR_TURNAROUND_US);
+    /* resp 整帧时长(us)与统一槽间隔(us) */
+    float respframe_us   = preamble_us + msgdatalen_resp / 1000.0f;
+    float replyDelay_us  = respframe_us + RX_RESPONSE_TURNAROUND; // resp帧收发的一槽位的时间 一个resp帧占用信道的时间加上RX_RESPONSE_TURNAROUND（MCU软件处理resp帧以及执行下一步动作的时间）
 
-    /* 单次 TWR 交换（poll→resp×N→final 收完）必须放得进一个 slot */
-    uint32_t exchange_us = inst->timings.firstRespDly_us
-        + MAX_AHCHOR_NUMBER * inst->timings.replyInterval_us
-        + inst->timings.finalRxTimeout_us;
-    if (exchange_us > (uint32_t)inst_one_slot_time * 1000U)
+    /* 接收超时(symbol)：RX 开机延时 + 前导码 + 数据段 + 余量 */
+    int respframe_sy  = DW_RX_ON_DELAY + (int)((preamble_us + (msgdatalen_resp  + margin) / 1000.0f) / 1.0256f);
+    int finalframe_sy = DW_RX_ON_DELAY + (int)((preamble_us + (msgdatalen_final + margin) / 1000.0f) / 1.0256f);
+
+    t->fixedReplyDelayAnc32h  = (uint32_t)(conv_us_to_devtime(replyDelay_us) >> 8);
+    t->fixedReplyDelay_sy     = (uint16_t)(replyDelay_us / 1.0256f); // 转换成symbol
+    t->preambleDuration32h    = (uint32_t)(conv_us_to_devtime(preamble_us) >> 8) + DW_RX_ON_DELAY;           // 前导码持续时间转换为DW设备时间单位
+
+    /* T2A final 时刻 = poll TX + (N+1)×槽间隔（Tag 端同公式）。
+     * 不能取 N×：最后一个 resp 槽的数据段在其 RMARKER 之后还要飞，而 final 的前导码
+     * 在 final RMARKER 之前就开始飞，(N+1)× 天然留出一个槽的间隔避免空口重叠 */
+    t->pollTx2FinalTxDelay32h = (MAX_AHCHOR_NUMBER + 1) * t->fixedReplyDelayAnc32h;
+    t->fwto4RespFrame_sy      = (uint16_t)respframe_sy; // fwto: frame wait timeout
+    t->fwto4FinalFrame_sy     = (uint16_t)(finalframe_sy + 200);    // 加余量防过早超时（TREK 同值）
+
+    uint32_t finalDelay_us = (uint32_t)((MAX_AHCHOR_NUMBER + 1) * replyDelay_us);
+    // log_i("TWR timing: replyDelay=%uus(32h=%lu) preamble=%uus fwtoResp=%usy fwtoFinal=%usy pollTx2Final=%uus",
+        // (unsigned)replyDelay_us, 
+        // (unsigned long)t->fixedReplyDelayAnc32h,
+        // (unsigned)preamble_us,
+        // (unsigned)t->fwto4RespFrame_sy, 
+        // (unsigned)t->fwto4FinalFrame_sy,
+        // (unsigned)finalDelay_us);
+
+    /* 单次交换必须放得进一个 slot。
+     * T2A：poll 前导 + pollTx→finalTx 总延时 + final 数据段；
+     * A2A：final 槽位 = N+1（首 responder 槽整体后移一槽，见 dw_instance_anchor.c），
+     *      final RMARKER = pollTx + (N+2)×槽间隔，之后还要飞 final 数据段 */
+    uint32_t t2a_us = (uint32_t)(preamble_us + finalDelay_us + msgdatalen_final / 1000.0f);
+    uint32_t a2a_us = (uint32_t)(preamble_us + (MAX_AHCHOR_NUMBER + 2) * replyDelay_us + msgdatalen_final / 1000.0f);
+    uint32_t slot_us = (uint32_t)inst_one_slot_time * 1000U;
+    if (t2a_us > slot_us || a2a_us > slot_us)
     {
-        log_e("TWR exchange %uus exceeds slot %ums!", (unsigned)exchange_us, inst_one_slot_time);
+        log_e("TWR exchange exceeds slot %ums! T2A=%uus A2A=%uus", inst_one_slot_time, (unsigned)t2a_us, (unsigned)a2a_us);
     }
 }
 
@@ -883,8 +865,9 @@ static void instance_dataInit(instance_data_t *inst)
      * DW1000 也需要和 DW3000 一样从拨码读取，否则所有基站都会被当成 A0。 */
     inst->device_id = dev_getDipVal();
     inst->gatewayAnchor = (inst->device_id == 0);
-    inst->remainingRespToRx = -1;    // -1 = 空闲，未处于任何交换中
-    inst->rxRespMask = 0;
+    inst->remainingRespToRx = -1;    // -1 = 空闲，未处于 T2A 交换中
+    inst->remainingRespToRxAnc = 0;
+    inst->rxRespMaskAnc = 0;
     inst->wait4final = 0;
     inst->lastTxFcode = 0;
 #if defined(USE_DW3000)

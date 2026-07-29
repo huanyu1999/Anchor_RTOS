@@ -55,7 +55,7 @@ typedef int32_t  int32;
 #define SOFTWARE_VER                   "V1.0"
 
 #define ANCRANGE                        1
-#define MAX_AHCHOR_NUMBER               3       // 系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
+#define MAX_AHCHOR_NUMBER               4       // 系统内最大基站数量，取4或者8，比如实际3个取4，实际6个取8
 #define MAX_TAG_NUMBER                  50      // 设置最大标签个数
 
 /* 天线延时
@@ -85,7 +85,7 @@ typedef int32_t  int32;
 /* 数据帧超时及延时时间*/
 #define PRE_TIMEOUT                     5
 
-#if (MAX_AHCHOR_NUMBER == 3)            // 每个时隙的持续时间，时隙时间过小，会导致相邻ID的标签，位于后方的标签无法测距，被上一个标签测距所影响，尝试增大该值，但是标签的时隙值不能相同，否则还是一样的情况？
+#if (MAX_AHCHOR_NUMBER == 4)            // 每个时隙的持续时间，时隙时间过小，会导致相邻ID的标签，位于后方的标签无法测距，被上一个标签测距所影响，尝试增大该值，但是标签的时隙值不能相同，否则还是一样的情况？
 #define ONE_SLOT_TIME_MS_110K           28
 #define ONE_SLOT_TIME_MS_850K           12
 #define ONE_SLOT_TIME_MS_6P8M           9
@@ -122,8 +122,8 @@ typedef int32_t  int32;
 #define POLL_MSG_LEN                    16
 #define RESP_MSG_LEN                    19
 #define FIANL_MSG_LEN                   (22 + 5 * MAX_AHCHOR_NUMBER + 10)
-#define BLINK_MSG_LEN                   10
-#define INIT_MSG_LEN                    12
+#define BLINK_MSG_LEN                   10      // ISO 0xC5 EUI-64 blink：fctrl(1)+seq(1)+EUI64(8)，不含 FCS（TREK 原版）
+#define RNG_INIT_MSG_LEN                20      // 混合帧头 fctrl(2)+seq(1)+PAN(2)+目的EUI64(8)+源短址(2) + fcode(1)+sleepCorr(2)+tagAddr(2)，不含 FCS
 #define ANCH_POLL_MSG_LEN               11      // header(9) + fcode(1) + range_nb(1)
 #define ANCH_RESP2_MSG_LEN              15      // header(9) + fcode(1) + range_nb(1) + prev_dis(4)
 #define ANCH_FINAL_MSG_LEN              (12 + FINAL_MSG_TS_LEN * 2 + FINAL_MSG_TS_LEN * (MAX_AHCHOR_NUMBER - 1))  // header(9)+fcode(1)+range_nb(1)+valid(1)+poll_tx(4)+final_tx(4)+resp_rx(4)×N
@@ -165,6 +165,17 @@ typedef int32_t  int32;
 #define A2A_FINAL_POLL_TX_TS_IDX        12
 #define A2A_FINAL_FINAL_TX_TS_IDX       (A2A_FINAL_POLL_TX_TS_IDX + FINAL_MSG_TS_LEN)
 #define A2A_FINAL_RESP_RX_TS_BASE       (A2A_FINAL_FINAL_TX_TS_IDX + FINAL_MSG_TS_LEN)
+
+/* Discovery 帧字段索引（TREK 原版布局）。
+ * blink 为 ISO 0xC5 帧，无 fcode/PAN，须在 switch(f_code) 前按 rx_buffer[0]==0xC5 特判；
+ * RNG_INIT 用混合帧头（64bit 目的 = 标签 EUI64，16bit 源），载荷字段为小端
+ * （TREK RES_TAG_SLP0/ADD0 = LSB；注意与本工程 RESP 帧 sleepCorr 大端不同，Tag 端按帧类型区分） */
+#define BLINK_TAG_EUI64_IDX             2       // blink 帧内标签 EUI64 起始
+#define RNG_INIT_DEST_ADDR_IDX          5       // 目的地址 = 标签 EUI64（8B）
+#define RNG_INIT_SRC_ADDR_IDX           13      // 源短地址（2B，0x8000|anc_id 小端）
+#define RNG_INIT_FCODE_IDX              15
+#define RNG_INIT_SLP_IDX                16      // sleepCorrection int16 小端
+#define RNG_INIT_TAG_ADD_IDX            18      // 分配的 tag_id/时隙号 uint16 小端
 
 /* Function codes — naming follows TREK1000 RTLS convention */
 #define RTLS_MSG_TAG_POLL               0x21    // Tag poll (broadcast)
@@ -295,6 +306,10 @@ typedef struct instance_data_s {
     uint32_t final_rx_time32h;      // 应答端 final 延迟接收槽基准(32h，开窗时再减前导码)
 
     int32_t  prev_range[MAX_TAG_LIST_SIZE];     // 各标签上一轮测距值(mm)，下轮 resp 回传
+    /* Discovery（A0/gateway 专用）：blink 注册的标签 EUI64 表，下标即分配的 tag_id/时隙号，
+     * RAM 驻留，A0 重启后标签重新 blink 注册（TREK tagList 同款） */
+    uint8_t  tagList[MAX_TAG_LIST_SIZE][8];
+    uint8_t  tagListLen;
 #if defined(ANCRANGE)
     int32_t  a2a_distance[MAX_AHCHOR_NUMBER];   // 与各基站的 A2A 距离(mm)
     /* A2A 超帧调度（A0 专用） */

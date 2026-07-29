@@ -538,7 +538,9 @@ static void dev_dw3000Init(instance_data_t *inst)
     dwt_settxantennadelay(ant_dly);
 
     dwt_setpanid(PAN_ID);
-    dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
+    /* A0/gateway 额外放开 reserved 帧类型（ISO 0xC5 blink，discovery 用），其余基站不动 */
+    dwt_configureframefilter(DWT_FF_ENABLE_802_15_4,
+        DWT_FF_DATA_EN | DWT_FF_ACK_EN | (inst->gatewayAnchor ? DWT_FF_RSVD_EN : 0));
 
     dwt_setlnapamode(DWT_LNA_ENABLE | DWT_PA_ENABLE);
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
@@ -612,7 +614,8 @@ static void dev_dw1000Init(instance_data_t *inst)
     dwt_settxantennadelay(ant_dly);
 
     dwt_setpanid(PAN_ID);
-    dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);
+    /* A0/gateway 额外放开 reserved 帧类型（ISO 0xC5 blink，discovery 用），其余基站不动 */
+    dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN | (inst->gatewayAnchor ? DWT_FF_RSVD_EN : 0));
     dwt_setlnapamode(1, 1);
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 

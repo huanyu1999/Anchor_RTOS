@@ -18,20 +18,19 @@
 2. 每阶段独立提交,格式:`参考Trek1000代码进行重构, phase X: <内容> [YYYY-MM-DD HH:MM]`;
 3. 阶段内如需中断,提交信息注明断点位置,并同步更新本文档"当前断点"一节。
 
-## 进度总览(2026-07-10 更新)
+## 进度总览(2026-07-12 更新)
 
 | 阶段 | 内容 | 状态 | 提交 |
 |------|------|------|------|
 | Phase A | `instance_data_t` 统一 + 回调直驱事件流 | ✅ 已提交(待真机回归) | `4542790`+`f816688`(中间态)+`1fe8e48`(收尾) |
-| Phase B | `twr_set_replydelay()` 统一时序计算(TREK 单轨返工) | 🔶 代码完成,待编译+烧录验证 | 工作区 |
-| Phase C | Discovery 基站侧(ISO 0xC5 blink) | ⬜ 未开始 | — |
+| Phase B | `twr_set_replydelay()` 统一时序计算(TREK 单轨返工) | ✅ 已提交 | `9b51b55`+`653ea38`(单轨返工) |
+| Phase C | Discovery 基站侧(ISO 0xC5 blink) | 🔶 代码完成,待编译+烧录验证 | 工作区 |
 | Phase D | 冗余清理 | ⬜ 未开始 | — |
 
 ### 当前断点
 
-无代码断点。Phase B 于 2026-07-09 **推翻 LEGACY 双轨方案返工**(见 Phase B 一节),
-代码全部完成(工作区未提交),等待用户编译+烧录验证(验收以 A2A 为准,T2A 需 Tag 工程
-按新版 `docs/TWR_TIMING.md` 适配后才能回归)。通过后提交 → Phase C。
+无代码断点。Phase C 代码于 2026-07-12 全部完成(工作区未提交),等待用户编译+烧录验证
+(验证方法见 Phase C 第 5 条;Tag 端未就绪,可用另一台设备发构造 blink 帧)。通过后提交 → Phase D。
 
 ---
 
@@ -161,24 +160,43 @@ A2A 容错修复三项(初始窗全覆盖/超时立即重开/收到末台直接�
 - [ ] Tag 工程(../Tag)按新版 `docs/TWR_TIMING.md` 适配后回归 T2A,SWO 实测收紧
       `RX_RESPONSE_TURNAROUND`。
 
-## Phase C:Discovery 基站侧(Trek 原版 ISO 0xC5)⬜
+## Phase C:Discovery 基站侧(Trek 原版 ISO 0xC5)🔶(代码完成,待验证)
 
 **参照**:TREK anchor discovery(instance_anch.c)
 
-1. **帧过滤(仅 A0/gateway 放开)**:DW1000 `dwt_enableframefilter(... | DWT_FF_RSVD_EN)`(0x040),
-   DW3000 `dwt_configureframefilter(..., | DWT_FF_RSVD_EN)`(0x010);A1/A2 不动;
-   DW3000 必须实测:非法 reserved 帧要走 rxfailedcallback 且接收机被正确重开(此前有 ARFE 静默停收教训);
-2. **blink 识别**:`rxOkHandle` 的 `switch(f_code)` **之前**特判 `rx_buffer[0]==0xC5 && frame_len==12`
-   (blink 无 fcode/PAN),仅 `gatewayAnchor && twr_mode==LISTENER` 时处理,否则 re-enable;
-3. **tagList 管理**:`anch_add_tag_to_list(uint8 *eui64)` 移植 Trek 原逻辑(顺序扫描,slot 即分配的
-   tag_id/时隙号,上限 `MAX_TAG_NUMBER`,RAM 驻留,A0 重启后标签重新 blink 注册);
-4. **RNG_INIT 发送**:帧控 `0x41 0x8C`(64bit 目的=标签 EUI + 16bit 源);载荷 = fcode 0x38 +
-   sleepCorrection(int16) + tag_id(2B);sleep correction 从 `anch_perpareAnc2TagResp()` 提取公共函数
-   `calc_tag_sleep_correction(slot, nowMs)`,RNG_INIT 路径额外 `+ sfPeriod`(Trek:最小 1.5 周期);
-   `twr_mode=RESPONDER_B`,delayed TX @ blinkRxTs + `timings.rngInitTxDly_us`;sentHandle 中
-   RESPONDER_B → 回 LISTENER + re-enable;
-5. **验证**:Tag 端未就绪前用另一台设备发构造 blink 帧,A0 注册 tagList 并发 RNG_INIT(SWO log +
-   第三台监听抓帧);A1/A2 对 blink 无反应。
+### 完成内容(2026-07-12)
+
+1. **帧过滤(仅 A0/gateway 放开)**:统一收口 `anch_setFrameFilter()`(dw_instance_anchor.c),
+   `twrAnchor_Init`/`anch_rxRenableImmdiate` 及 dw_main.c 两处 boot 初始化共用:
+   DW1000 `DWT_FF_RSVD_EN`(0x040)、DW3000 `DWT_FF_RSVD_EN`(0x010),按 `inst->gatewayAnchor`
+   条件叠加,A1/A2 不动;DW3000 必须实测:非法 reserved 帧要走 rxfailedcallback 且接收机被
+   正确重开(此前有 ARFE 静默停收教训);
+2. **blink 识别**:`rxOkHandle` 的 `switch(f_code)` 之前特判 `rx_buffer[0]==0xC5 &&
+   frame_len==BLINK_MSG_LEN+FCS_LEN`(blink 无 fcode/PAN),仅 `gatewayAnchor &&
+   twr_mode==LISTENER` 时进 `anch_processTagBlink()`,否则 re-enable;特判放在 A2A 两个
+   容错 guard **之后**——A2A 交换中收到 blink 走容错重开窗不打断交换,同时挡住 blink 的
+   EUI 字节碰巧等于 0x7B 被 RESP2 分支误读时间戳的角落;
+3. **tagList 管理**:`anch_add_tag_to_list(inst, eui64)` 移植 Trek 原逻辑(顺序扫描,已注册
+   返回原 slot,slot 即分配的 tag_id/时隙号,上限 `MAX_TAG_LIST_SIZE=50`,RAM 驻留
+   `inst->tagList[50][8]`+400B,A0 重启后标签重新 blink 注册);
+4. **RNG_INIT 发送**:帧控 `0x41 0x8C`(64bit 目的=标签 EUI + 16bit 源 0x8000|anc_id),
+   `RNG_INIT_MSG_LEN=20`(旧 `INIT_MSG_LEN` 删除);载荷 = fcode 0x38 + sleepCorrection(int16)
+   + tag_id(2B),**小端**(TREK RES_TAG_SLP0/ADD0 原版布局;注意与本工程 RESP 帧 sleepCorr
+   大端不同,Tag 端按帧类型区分);sleep correction 从 `anch_perpareAnc2TagResp()` 提取公共
+   函数 `calc_tag_sleep_correction(slot, nowMs)`,RNG_INIT 路径额外 +1 周期(Trek:最小 1.5
+   周期);`twr_mode=RESPONDER_B`,delayed TX @ blinkRx32h + `fixedReplyDelayAnc32h`
+   (方案原文写 `timings.rngInitTxDly_us`,该字段在 Phase B 单轨返工后不存在,TREK 原版
+   本就用 fixedReplyDelayAnc,直接沿用,不新增字段);sentHandle 增 `RTLS_MSG_RNG_INIT`
+   分支 → `anch_rxRenableImmdiate`(RESPONDER_B 回 LISTENER);starttx 过点失败同样回
+   LISTENER,标签会再 blink;
+5. **验证(用户执行)**:
+   - [ ] DW1000(及 DW3000)编译零错误,烧录;
+   - [ ] Tag 端未就绪前用另一台设备发构造 blink 帧(ISO 0xC5:fctrl 0xC5 + seq + EUI64,
+         共 10B+FCS),A0 SWO 出 `DISC: A0 rxd blink ... -> slot N` 并发 RNG_INIT
+         (第三台监听抓帧);同一 EUI 重复 blink 返回同一 slot;
+   - [ ] A1/A2 对 blink 无反应(帧过滤拒绝,DW3000 确认走 rxfailedcallback 后正常重开);
+   - [ ] 三基站 A2A 回归:blink 混入时 A2A 距离输出不间断;
+   - [ ] T2A/A2A 长跑无停收。
 
 ## Phase D:冗余清理 ⬜
 

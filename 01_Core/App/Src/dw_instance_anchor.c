@@ -2,6 +2,7 @@
 #include "dw_sort.h"
 #include "cmsis_os.h"
 #include "elog.h"
+#include <stdio.h>
 
 #define ANCH_FRAME_TRACE_ENABLE 1
 
@@ -11,10 +12,29 @@
 #define ANCH_FRAME_TRACE_LOG(...) ((void)0)
 #endif
 
+/* 距离打印开关：连 A0 的 RTT 即可看到测距结果，T2A/A2A 各每轮一行：
+ *   DIST rn=17  T0->A0:   12.34 | T0->A1:   12.50 | T0->A2:   13.01 (m)
+ *   A2A  rn=5   | A0-A1:   30.12 | A0-A2:   28.45 (m)
+ * T2A 行：A0 为本轮实测值，A1/A2 为其 resp 帧回传的上一轮值（慢一拍）；
+ * A2A 行：均为 responder resp2 回传的上一轮值。缺数据的显示 ----。
+ * 仅 A0 打印，其他基站保持安静 */
+#define ANCH_DIST_PRINT_ENABLE 1
+
+#if ANCH_DIST_PRINT_ENABLE
+/* 仅打印用：本轮已旁听到 resp 的他站位掩码（非 TWR 引擎状态，T2A 引擎仍不用掩码） */
+static uint8_t dist_print_rxMask;
+#endif
+
 /* 保存当前ID标签的测距值，下次发送resp时发给标签 */
 
 /* RESP数据帧格式 */
 static uint8_t tx_resp_msg[RESP_MSG_LEN] = {0x41, 0x88, 0, 0xCA, 0xDE, 0x00, 0x00, 0x00, 0x80, RTLS_MSG_ANCH_RESP, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+/* RNG_INIT 数据帧格式（discovery 应答，A0 → 标签）：帧头 0x41 0x8C = 64bit 目的 + 16bit 源，
+ * 目的地址 = blink 携带的标签 EUI64，载荷 = fcode + sleepCorrection + 分配的 tag_id（TREK srd_msg_dlss 同款） */
+static uint8_t tx_rng_init_msg[RNG_INIT_MSG_LEN] = {0x41, 0x8C, 0, 0xCA, 0xDE,
+                                                    0, 0, 0, 0, 0, 0, 0, 0,      /* 目的 EUI64，发送前填 */
+                                                    0x00, 0x80, RTLS_MSG_RNG_INIT, 0, 0, 0, 0};
 
 #if defined(ANCRANGE)
 #define A2A_RESPONDER_COUNT            (MAX_AHCHOR_NUMBER - 1)
@@ -47,6 +67,11 @@ static uint8_t twrAnchor_rxErrorOrTimeoutHandle(instance_data_t *inst);
 static void anch_txresponse_or_rx_reenable(instance_data_t *inst);
 static void anch_rxRenableImmdiate(instance_data_t *inst);
 static void anch_perpareAnc2TagResp(instance_data_t *inst);
+static void anch_setFrameFilter(const instance_data_t *inst);
+static int32_t calc_tag_sleep_correction(uint8_t slot, uint32_t nowMs);
+static void anch_processTagBlink(instance_data_t *inst);
+static int anch_add_tag_to_list(instance_data_t *inst, const uint8_t *eui64);
+static void anch_prepareRngInitResp(instance_data_t *inst, const uint8_t *tagEui64, uint16_t slot);
 
 static inline uint64_t get_tx_timestamp_u64(void);
 static inline uint64_t get_rx_timestamp_u64(void);
@@ -56,14 +81,22 @@ static inline void final_msg_set_ts(uint8_t *ts_field, uint64_t ts);
 // 单套 TWR anchor 算法，DW1000/DW3000 通过函数内 USE_DW1000/USE_DW3000 条件编译区分
 uwbAlgorithm_t uwbTwr_AnchorAlgorithm = { .init = twrAnchor_Init, .onEvent = twrAnchor_onEvent };
 
+/* 常规帧过滤设置：data/ack 帧；A0/gateway 额外放开 reserved 帧类型（ISO 0xC5 blink，discovery 用）。
+ * DW3000 上放开 reserved 后必须真机确认非法 reserved 帧走 rxfailedcallback 且接收机被正确重开（ARFE 教训） */
+static void anch_setFrameFilter(const instance_data_t *inst)
+{
+    uint16_t ff_mode = DWT_FF_DATA_EN | DWT_FF_ACK_EN | (inst->gatewayAnchor ? DWT_FF_RSVD_EN : 0);
+#if defined(USE_DW3000)
+    dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, ff_mode);
+#else
+    dwt_enableframefilter(ff_mode);
+#endif
+}
+
 /*****************************************CCCC**DW1000 event function********************************************/
 static int twrAnchor_Init(instance_data_t *inst)
 {
-#if defined(USE_DW3000)
-    dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
-#else
-    dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);  // 设置帧过滤模式开启
-#endif
+    anch_setFrameFilter(inst);                              // 设置帧过滤模式开启
     dwt_setpreambledetecttimeout(0);                        // 清除前导码超时，一直接收
     dwt_setrxtimeout(0);                                    // 清除接收数据超时，一直接收
     int ret = dwt_rxenable(DWT_START_RX_IMMEDIATE);         // 打开接收机，等待接收数据，初始接收，进行一次buffer对齐
@@ -153,6 +186,23 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
     }
 #endif
 
+    /* ISO 0xC5 blink（discovery）：无 fcode/PAN，必须在 switch(f_code) 前按帧控字节特判。
+     * 仅 A0/gateway 空闲监听时处理（帧过滤只对 A0 放开 reserved 帧；resp 旁听窗关过滤时
+     * 其他基站也可能收到，与未知帧同样处理——重新开窗）。注意须放在 A2A 特判之后，
+     * A2A 交换中收到 blink 走上面的容错重开窗，不得打断交换 */
+    if (rx_buffer[0] == 0xC5 && frame_len == BLINK_MSG_LEN + FCS_LEN)
+    {
+        if (inst->gatewayAnchor && inst->twr_mode == LISTENER)
+        {
+            anch_processTagBlink(inst);
+        }
+        else
+        {
+            anch_rxRenableImmdiate(inst);
+        }
+        return;
+    }
+
     switch (f_code)
     {
     case RTLS_MSG_TAG_POLL:
@@ -181,6 +231,9 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         inst->wait4final = 0;
         inst->lastTxFcode = 0;
         inst->remainingRespToRx = MAX_AHCHOR_NUMBER - 1;         // 还需接收的其他基站 resp 帧数量
+#if ANCH_DIST_PRINT_ENABLE
+        dist_print_rxMask = 0;                    // 仅打印用，逐轮清零
+#endif
         inst->nextSlotTime32h = (uint32_t)(inst->poll_rx_ts >> 8); // 设置后续resp的发送时间
         anch_perpareAnc2TagResp(inst);            // 可以在这里就将要发送的resp帧写入发送缓存
         anch_txresponse_or_rx_reenable(inst);     // 判断是发送resp帧、开窗接收其他基站resp帧，还是开窗接收标签final帧
@@ -241,13 +294,46 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
                 extern osMessageQueueId_t queue_processDis;
                 osMessageQueuePut(queue_processDis, &send_processeDis, 0, 0);
 
-                range_status = RANGE_TWR_OK;  
+                range_status = RANGE_TWR_OK;
                 dev_ledBlink(UWB_OK_LED);
             }
-            else     
+            else
             {
                 range_status = RANGE_ERROR;     // 本基站发送的resp消息无效，测距失败
             }
+#if ANCH_DIST_PRINT_ENABLE
+            /* 每轮拼一行打印：final 已收完、交换结束，此处不影响时序。
+             * A0 为本轮实测；A1/A2 为其 resp 回传的上一轮值；没数据的显示 ---- */
+            if (anc_id == 0)
+            {
+                char line[96];
+                int len;
+                if (range_status == RANGE_TWR_OK)
+                {
+                    len = snprintf(line, sizeof(line), "DIST rn=%-3u T%u->A0: %7.2f",
+                                   inst->range_nb, inst->recv_tag_id, distance_now_m);
+                }
+                else
+                {
+                    len = snprintf(line, sizeof(line), "DIST rn=%-3u T%u->A0:    ----",
+                                   inst->range_nb, inst->recv_tag_id);
+                }
+                for (uint8_t a = 1; a < MAX_AHCHOR_NUMBER; a++)
+                {
+                    if (dist_print_rxMask & (1 << a))
+                    {
+                        len += snprintf(line + len, sizeof(line) - len, " | T%u->A%u: %7.2f",
+                                        inst->recv_tag_id, a, distance_report[a] / 1000.0);
+                    }
+                    else
+                    {
+                        len += snprintf(line + len, sizeof(line) - len, " | T%u->A%u:    ----",
+                                        inst->recv_tag_id, a);
+                    }
+                }
+                log_i("%s (m)", line);
+            }
+#endif
         }
         dwt_forcetrxoff();                      // 该函数重置了host side receive buffer pointer，导致双buffer模式下，TWR测距只能成功一次，后续TWR测距均失败
         anch_rxRenableImmdiate(inst);           // 直接开启下一轮接收poll，无需同步buffer，因为dwt_isr中已经处理过buffer切换
@@ -266,6 +352,9 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
                 distance_report[recv_anc_id] += (int32_t)rx_buffer[RESP_MSG_PREV_DIS_IDX+2] << 8;
                 distance_report[recv_anc_id] += (int32_t)rx_buffer[RESP_MSG_PREV_DIS_IDX+3];
                 group_report[recv_anc_id] = rx_buffer[RESP_MSG_GROUP_IDX] & 0x7f;  // 将最高bit置0，最高bit为校准基站标志位
+#if ANCH_DIST_PRINT_ENABLE
+                dist_print_rxMask |= (uint8_t)(1 << recv_anc_id);
+#endif
             }
         }
         // 不管校验有没有通过，该 resp 槽都已消耗（槽推进在引擎内完成）
@@ -305,17 +394,18 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         inst->rxRespMaskAnc |= (1 << resp_anc_id);
         inst->remainingRespToRxAnc--;
 
-        ANCH_FRAME_TRACE_LOG("A2A A%d rxd resp2 from A%d, remain=%d",
-                             anc_id, resp_anc_id, inst->remainingRespToRxAnc);
+        // ANCH_FRAME_TRACE_LOG("A2A A%d rxd resp2 from A%d, remain=%d",
+        //                      anc_id, resp_anc_id, inst->remainingRespToRxAnc);
 
         int32_t prev_dis = (int32_t)(rx_buffer[A2A_RESP2_PREV_DIS_IDX]
             | ((uint32_t)rx_buffer[A2A_RESP2_PREV_DIS_IDX + 1] << 8)
             | ((uint32_t)rx_buffer[A2A_RESP2_PREV_DIS_IDX + 2] << 16)
             | ((uint32_t)rx_buffer[A2A_RESP2_PREV_DIS_IDX + 3] << 24));
-        if (anc_id == 0)
-        {
-            log_i("A2A: A%d rxd resp2 from A%d prev=%.2f m", anc_id, resp_anc_id, prev_dis / 1000.0);
-        }
+        /* 逐帧打印已合并到 final 发送完成处的单行输出（sentHandle 的 ANCH_FINAL 分支） */
+        // if (anc_id == 0)
+        // {
+        //     log_i("A2A: A%d rxd resp2 from A%d prev=%.2f m", anc_id, resp_anc_id, prev_dis / 1000.0);
+        // }
         if (prev_dis > 0)
         {
             inst->a2a_distance[resp_anc_id] = prev_dis;
@@ -370,13 +460,13 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
         tof = tof_dtu * DWT_TIME_UNITS;
         dist_m = tof * SPEED_OF_LIGHT;
 
-// #if defined(USE_DW1000)
-//         dist_m = dist_m - dwt_getrangebias(inst_ch, (float)dist_m, inst_prf);
-// #endif
+#if defined(USE_DW1000)
+        dist_m = dist_m - dwt_getrangebias(inst_ch, (float)dist_m, inst_prf);
+#endif
         if (dist_m > 0 && dist_m < 20000.0)
         {
             inst->a2a_distance[initiator_id] = (int32_t)(dist_m * 1000);
-            log_i("A2A: A%d-A%d = %.2f m (responder)", initiator_id, anc_id, dist_m);
+            log_i("A2A  rn=%-3u A%d-A%d = %.2f m (responder)", inst->a2a_range_nb, initiator_id, anc_id, dist_m);
         }
         rnganch_changeBackToAnchor(inst);
         break;
@@ -418,9 +508,36 @@ static void twrAnchor_sentHandle(instance_data_t *inst)
         break;
     case RTLS_MSG_ANCH_FINAL:                       // A2A 发起端：final 已发出，本轮结束
         // ANCH_FRAME_TRACE_LOG("A2A A%d final sent", anc_id);
+#if ANCH_DIST_PRINT_ENABLE
+        /* A2A 每轮拼一行打印：值为各 responder resp2 回传的上一轮 A0-Ax 距离（慢一拍），
+         * 本轮没收到谁的 resp2 就显示 ----。final 已发出、交换结束，此处不影响时序 */
+        if (anc_id == 0)
+        {
+            char line[80];
+            int len = snprintf(line, sizeof(line), "A2A  rn=%-3u", inst->a2a_range_nb);
+            for (uint8_t a = 1; a <= A2A_RESPONDER_COUNT; a++)
+            {
+                if ((inst->rxRespMaskAnc >> a) & 0x01)
+                {
+                    len += snprintf(line + len, sizeof(line) - len, " | A0-A%u: %7.2f",
+                                    a, inst->a2a_distance[a] / 1000.0);
+                }
+                else
+                {
+                    len += snprintf(line + len, sizeof(line) - len, " | A0-A%u:    ----", a);
+                }
+            }
+            log_i("%s (m)", line);
+        }
+#endif
         rnganch_changeBackToAnchor(inst);
         break;
 #endif
+    case RTLS_MSG_RNG_INIT:                         // discovery：RNG_INIT 已发出，回 LISTENER 等标签首个 poll
+        ANCH_FRAME_TRACE_LOG("DISC A%d rng_init sent", anc_id);
+        anch_rxRenableImmdiate(inst);               // 内部复位 twr_mode(RESPONDER_B→LISTENER)/lastTxFcode
+        break;
+
     case RTLS_MSG_ANCH_RESP:                        // T2A：自己的 resp 槽已消耗（槽推进在引擎内完成）
         // ANCH_FRAME_TRACE_LOG("T2A tx resp: A%d -> T%d rn=%d", anc_id, inst->recv_tag_id, inst->range_nb);
     default:
@@ -545,11 +662,7 @@ static void anch_txresponse_or_rx_reenable(instance_data_t *inst)
 // 使能立即接收，基站TWR处理最开始的阶段，一般在TWR进行过程中出错调用
 static void anch_rxRenableImmdiate(instance_data_t *inst)
 {
-#if defined(USE_DW3000)
-    dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, DWT_FF_DATA_EN | DWT_FF_ACK_EN);
-#else
-    dwt_enableframefilter(DWT_FF_DATA_EN | DWT_FF_ACK_EN);   // 设置帧过滤模式开启
-#endif
+    anch_setFrameFilter(inst);                               // 设置帧过滤模式开启
     dwt_setpreambledetecttimeout(0);                         // 清除前导码超时，一直接收
     dwt_setrxtimeout(0);                                     // 清除接收数据超时，一直接收
     dwt_rxenable(DWT_START_RX_IMMEDIATE);                    // 打开接收机，等待接收数据
@@ -585,27 +698,9 @@ static void anch_perpareAnc2TagResp(instance_data_t *inst)
     if (anc_id == 0)                                      // A0负责校准标签时序，防冲突
     {
         tx_resp_msg[RESP_MSG_GROUP_IDX] = group_id | 0x80; // 参与时序校准
-        int error = 0;
-        int currentSlotTime = 0;
-        int expectedSlotTime = 0;
-        int sframePeriod_ms = inst_one_slot_time * inst_slot_number;    // sframePeriod_ms 为整个TWR周期的总时间= 单slot时间*slot个数(标签总容量)
-        int slotDuration_ms = inst_one_slot_time;                       // slotDuration_ms 为单slot时间
-        int tagSleepCorrection_ms = 0;
+        int32_t tagSleepCorrection_ms = calc_tag_sleep_correction(inst->recv_tag_id, range_time);
 
-        currentSlotTime  = range_time % sframePeriod_ms;         // currentSlotTime 当前正在通信标签的实际slot
-        expectedSlotTime = inst->recv_tag_id * slotDuration_ms;  // expectedSlotTime 当前正在通信标签应该处于的slot
-        error = expectedSlotTime - currentSlotTime;              // error 计算slot差异 用于校准
-
-        if (error < (-(sframePeriod_ms >> 1))) // if error is more  than 0.5 period, add whole period to give up to 1.5 period sleep
-        {
-            tagSleepCorrection_ms = (sframePeriod_ms + error);
-        }
-        else // the minimum Sleep time will be 0.5 period
-        {
-            tagSleepCorrection_ms = error;
-        }
-
-        tx_resp_msg[RESP_MSG_SLEEP_COR_IDX] = (tagSleepCorrection_ms >> 8) & 0xFF; // 校准时间高8位存储在 index 11 
+        tx_resp_msg[RESP_MSG_SLEEP_COR_IDX] = (tagSleepCorrection_ms >> 8) & 0xFF; // 校准时间高8位存储在 index 11
         tx_resp_msg[RESP_MSG_SLEEP_COR_IDX + 1] = tagSleepCorrection_ms & 0xFF;    // 校准时间低8位存储在 index 12
     }
     else
@@ -617,6 +712,101 @@ static void anch_perpareAnc2TagResp(instance_data_t *inst)
 
     dwt_writetxdata(RESP_MSG_LEN + FCS_LEN, tx_resp_msg, 0); // 数据写入DW1000数据缓冲区
     dwt_writetxfctrl(RESP_MSG_LEN + FCS_LEN, 0, 1);
+}
+
+/* 标签睡眠校准量(ms)：把标签下次 poll 引导到它自己的时隙（TREK 同款算法）。
+ * nowMs 取当前事件（poll/blink 接收）的 tick；返回值区间 (-0.5 周期, +1 周期)，
+ * T2A resp 直接下发，RNG_INIT 路径再额外 +1 周期（TREK：注册后至少睡 1.5 周期） */
+static int32_t calc_tag_sleep_correction(uint8_t slot, uint32_t nowMs)
+{
+    int32_t sframePeriod_ms = (int32_t)inst_one_slot_time * inst_slot_number;  // 整个TWR周期的总时间 = 单slot时间 × slot个数(标签总容量)
+    int32_t currentSlotTime  = (int32_t)(nowMs % (uint32_t)sframePeriod_ms);   // 当前正在通信标签的实际slot时刻
+    int32_t expectedSlotTime = (int32_t)slot * inst_one_slot_time;             // 该标签应该处于的slot时刻
+    int32_t error = expectedSlotTime - currentSlotTime;
+
+    if (error < (-(sframePeriod_ms >> 1))) // if error is more than 0.5 period, add whole period to give up to 1.5 period sleep
+    {
+        return sframePeriod_ms + error;
+    }
+    return error;
+}
+
+/* discovery：A0 收到标签 ISO 0xC5 blink（rxOkHandle 特判入口，仅 gateway+LISTENER）。
+ * 注册进 tagList 拿到 slot（即分配的 tag_id），随后在 blinkRx + 1×槽间隔处延时发送
+ * RNG_INIT（TREK rx_ok_cb_anch 的 DWT_SIG_RX_BLINK 路径同款）；表满或发送过点则重开接收 */
+static void anch_processTagBlink(instance_data_t *inst)
+{
+    int slot = anch_add_tag_to_list(inst, &rx_buffer[BLINK_TAG_EUI64_IDX]);
+    if (slot < 0)                                   // tagList 已满，无法接纳新标签
+    {
+        ANCH_FRAME_TRACE_LOG("DISC A%d tagList full, blink dropped", anc_id);
+        anch_rxRenableImmdiate(inst);
+        return;
+    }
+    inst->twr_mode = RESPONDER_B;
+    anch_prepareRngInitResp(inst, &rx_buffer[BLINK_TAG_EUI64_IDX], (uint16_t)slot);
+
+    /* RNG_INIT RMARKER = blink RX + 1×槽间隔（TREK 用 fixedReplyDelayAnc32h 同款） */
+    uint64_t blink_rx_ts = get_rx_timestamp_u64();
+    dwt_setdelayedtrxtime((uint32_t)(blink_rx_ts >> 8) + inst->timings.fixedReplyDelayAnc32h);
+    inst->lastTxFcode = RTLS_MSG_RNG_INIT;
+    if (dev_uwbStartTx(UWB_TX_MODE_DELAYED, false) == DWT_ERROR)
+    {
+        ANCH_FRAME_TRACE_LOG("DISC A%d rng_init starttx failed, slot=%d", anc_id, slot);
+        anch_rxRenableImmdiate(inst);               // 过点即本次注册应答失败，标签会再 blink
+        return;
+    }
+    /* 日志放在延时发送排定之后，EUI 格式化不占 blink→RNG_INIT 时间窗 */
+    log_i("DISC: A%d rxd blink, tag eui %02X%02X%02X%02X%02X%02X%02X%02X -> slot %d",
+          anc_id,
+          rx_buffer[BLINK_TAG_EUI64_IDX + 7], rx_buffer[BLINK_TAG_EUI64_IDX + 6],
+          rx_buffer[BLINK_TAG_EUI64_IDX + 5], rx_buffer[BLINK_TAG_EUI64_IDX + 4],
+          rx_buffer[BLINK_TAG_EUI64_IDX + 3], rx_buffer[BLINK_TAG_EUI64_IDX + 2],
+          rx_buffer[BLINK_TAG_EUI64_IDX + 1], rx_buffer[BLINK_TAG_EUI64_IDX],
+          slot);
+}
+
+/* discovery：标签 EUI64 注册表顺序扫描（TREK anch_add_tag_to_list 移植），
+ * 已注册返回原 slot，否则占用首个空槽；返回 -1 = 表满。下标即分配的 tag_id/时隙号 */
+static int anch_add_tag_to_list(instance_data_t *inst, const uint8_t *eui64)
+{
+    static const uint8_t blank[8] = {0};
+
+    for (int i = 0; i < MAX_TAG_LIST_SIZE; i++)
+    {
+        if (memcmp(inst->tagList[i], eui64, 8) == 0)    // 该标签已注册（重启/漏收 RNG_INIT 后重新 blink）
+        {
+            return i;
+        }
+        if (memcmp(inst->tagList[i], blank, 8) == 0)    // 首个空槽，接纳新标签
+        {
+            memcpy(inst->tagList[i], eui64, 8);
+            inst->tagListLen = i + 1;
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* discovery：RNG_INIT 帧打包写入发送缓存（TREK anch_prepare_anc2tag_rangeinitresponse 对应）。
+ * sleepCorrection 额外 +1 周期（叠加 calc 结果后最小 1.5 周期，TREK 同款），
+ * 载荷小端（与本工程 RESP 帧 sleepCorr 大端不同，见 dw_instance.h 索引区注释） */
+static void anch_prepareRngInitResp(instance_data_t *inst, const uint8_t *tagEui64, uint16_t slot)
+{
+    int32_t sleepCorrection_ms = calc_tag_sleep_correction((uint8_t)slot, portGetTickCnt())
+                               + (int32_t)inst_one_slot_time * inst_slot_number;
+
+    tx_rng_init_msg[SEQ_NB_IDX] = inst->frame_seq_nb++;
+    memcpy(&tx_rng_init_msg[RNG_INIT_DEST_ADDR_IDX], tagEui64, 8);
+    tx_rng_init_msg[RNG_INIT_SRC_ADDR_IDX]     = anc_id;    // 源短地址 0x8000|anc_id 小端
+    tx_rng_init_msg[RNG_INIT_SRC_ADDR_IDX + 1] = 0x80;
+    tx_rng_init_msg[RNG_INIT_SLP_IDX]     = sleepCorrection_ms & 0xFF;
+    tx_rng_init_msg[RNG_INIT_SLP_IDX + 1] = (sleepCorrection_ms >> 8) & 0xFF;
+    tx_rng_init_msg[RNG_INIT_TAG_ADD_IDX]     = slot & 0xFF;
+    tx_rng_init_msg[RNG_INIT_TAG_ADD_IDX + 1] = (slot >> 8) & 0xFF;
+
+    dwt_writetxdata(RNG_INIT_MSG_LEN + FCS_LEN, tx_rng_init_msg, 0);
+    dwt_writetxfctrl(RNG_INIT_MSG_LEN + FCS_LEN, 0, 1);
 }
 
 #if defined(ANCRANGE)

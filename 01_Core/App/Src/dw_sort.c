@@ -121,7 +121,7 @@ void disManager_logSummary(distance_manager_t *mgr)
     }
     if (pos > 0)
     {
-        log_d("[tags] %s", buf);
+        // log_d("[tags] %s", buf);
     }
 }
 

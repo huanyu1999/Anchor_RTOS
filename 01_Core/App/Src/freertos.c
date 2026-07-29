@@ -429,16 +429,16 @@ void task_anchorDisHandling(void *arg)
                 lastFusionLogTick = now;
                 if (anchorRxIdx == 0xFF)
                 {
-                    log_d("self:tag-%u %.2fm | remote:N/A | final:tag-%u %.2fm",
-                           anchorSelfIdx, (float)anchorSelfDis / 1000.0f,
-                           anchorFinalIdx, (float)anchorFinalDis / 1000.0f);
+                    // log_d("self:tag-%u %.2fm | remote:N/A | final:tag-%u %.2fm",
+                    //        anchorSelfIdx, (float)anchorSelfDis / 1000.0f,
+                    //        anchorFinalIdx, (float)anchorFinalDis / 1000.0f);
                 }
                 else
                 {
-                    log_d("self:tag-%u %.2fm | remote:tag-%u %.2fm | final:tag-%u %.2fm",
-                           anchorSelfIdx, (float)anchorSelfDis / 1000.0f,
-                           anchorRxIdx, (float)anchorRxDis / 1000.0f,
-                           anchorFinalIdx, (float)anchorFinalDis / 1000.0f);
+                    // log_d("self:tag-%u %.2fm | remote:tag-%u %.2fm | final:tag-%u %.2fm",
+                    //        anchorSelfIdx, (float)anchorSelfDis / 1000.0f,
+                    //        anchorRxIdx, (float)anchorRxDis / 1000.0f,
+                    //        anchorFinalIdx, (float)anchorFinalDis / 1000.0f);
                 }
             }
         }
@@ -587,8 +587,8 @@ void task_eventHandler(void *arg)
                 alarm_state_t newLevel = alarm_levelFromDist(voiceOutputDis);
                 if (newLevel != cur_alarmState)
                 {
-                    log_d("alarm level %d -> %d, dis=%d",
-                           cur_alarmState, newLevel, voiceOutputDis);
+                    // log_d("alarm level %d -> %d, dis=%d",
+                    //        cur_alarmState, newLevel, voiceOutputDis);
                 }
                 cur_alarmState = newLevel;
                 alarm_applyLevel(cur_alarmState, voice_buf);

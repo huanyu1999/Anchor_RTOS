@@ -3,6 +3,7 @@
 #include "cmsis_os.h"
 
 extern osMessageQueueId_t queue_alarm;
+extern osMessageQueueId_t queue_tofReport;
 
 /**************************************************************alarm Output**************************************************************/
 typedef enum {

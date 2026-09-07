@@ -23,6 +23,19 @@ extern w5500_device dev_w5500;
 static uint8_t tx_buf[NET_FRAME_MAX_SIZE];  /* 发送帧缓冲 */
 static uint8_t push_seq;                    /* 推送帧自增序号 */
 
+typedef struct __attribute__((packed))
+{
+    uint8_t  version;
+    uint8_t  tag_id;
+    uint8_t  range_nb;
+    uint8_t  valid_mask;
+    uint8_t  flags;
+    uint32_t tick_ms;
+    uint16_t tag_battery_mv;
+    int32_t  tof_dtu[MAX_AHCHOR_NUMBER];
+    int16_t  rssi_cdbm[MAX_AHCHOR_NUMBER];
+} net_tof_push_t;
+
 /* ========================= CRC8 ========================= */
 uint8_t net_crc8(const uint8_t *data, uint16_t len)
 {
@@ -113,6 +126,30 @@ int net_protocol_send_push(uint8_t cmd, const uint8_t *data, uint16_t data_len)
     return frame_pack_and_send(cmd, push_seq++, data, data_len);
 }
 
+int net_protocol_send_tof_report(const uwb_tof_report_t *report)
+{
+    if (report == NULL)
+    {
+        return -1;
+    }
+
+    net_tof_push_t payload;
+    payload.version = 1;
+    payload.tag_id = report->tag_id;
+    payload.range_nb = report->range_nb;
+    payload.valid_mask = report->valid_mask;
+    payload.flags = report->flags;
+    payload.tick_ms = report->tick_ms;
+    payload.tag_battery_mv = report->tag_battery_mv;
+    memcpy(payload.tof_dtu, report->tof_dtu, sizeof(payload.tof_dtu));
+    memcpy(payload.rssi_cdbm, report->rssi_cdbm, sizeof(payload.rssi_cdbm));
+
+    return net_protocol_send_push(report->type == UWB_TOF_REPORT_A2A
+                                      ? CMD_PUSH_A2A_TOF
+                                      : CMD_PUSH_TAG_TOF,
+                                  (const uint8_t *)&payload, sizeof(payload));
+}
+
 /* ========================= 命令处理 ========================= */
 
 /** CMD_QUERY_DEV_INFO 应答：设备信息 */
@@ -176,6 +213,56 @@ static void handle_set_config(const net_frame_t *req)
 
     uint8_t resp = RESP_OK;
     net_protocol_send_resp(req->cmd, req->seq, &resp, 1);
+}
+
+static void handle_set_a2a_enable(const net_frame_t *req)
+{
+    if (req->data_len != sizeof(net_a2a_enable_req_t))
+    {
+        uint8_t resp = RESP_ERR_PARAM;
+        net_protocol_send_resp(req->cmd, req->seq, &resp, 1);
+        return;
+    }
+
+    const net_a2a_enable_req_t *cfg = (const net_a2a_enable_req_t *)req->data;
+    if (cfg->enabled > 1)
+    {
+        uint8_t resp = RESP_ERR_PARAM;
+        net_protocol_send_resp(req->cmd, req->seq, &resp, 1);
+        return;
+    }
+
+    if (uwb_set_a2a_enabled(cfg->enabled) != 0)
+    {
+        uint8_t resp = RESP_ERR_ROLE;
+        net_protocol_send_resp(req->cmd, req->seq, &resp, 1);
+        return;
+    }
+
+    uint8_t resp[2] = { RESP_OK, cfg->enabled };
+    net_protocol_send_resp(req->cmd, req->seq, resp, sizeof(resp));
+}
+
+static void handle_query_a2a_status(const net_frame_t *req)
+{
+    uwb_a2a_status_t snapshot;
+
+    if (uwb_get_a2a_status(&snapshot) != 0)
+    {
+        uint8_t resp = RESP_ERR_ROLE;
+        net_protocol_send_resp(req->cmd, req->seq, &resp, 1);
+        return;
+    }
+
+    uint8_t resp[1 + sizeof(net_a2a_status_t)];
+    net_a2a_status_t *status = (net_a2a_status_t *)&resp[1];
+    resp[0] = RESP_OK;
+    status->enabled = snapshot.enabled;
+    status->valid_mask = snapshot.valid_mask;
+    status->range_nb = snapshot.range_nb;
+    status->missed_reports = snapshot.missed_reports;
+    memcpy(status->tof_dtu, snapshot.tof_dtu, sizeof(status->tof_dtu));
+    net_protocol_send_resp(req->cmd, req->seq, resp, sizeof(resp));
 }
 
 /** CMD_LOG_LIST 处理：列举日志目录 */
@@ -298,6 +385,12 @@ static void dispatch_frame(const net_frame_t *frame)
         break;
     case CMD_SET_CONFIG:
         handle_set_config(frame);
+        break;
+    case CMD_SET_A2A_ENABLE:
+        handle_set_a2a_enable(frame);
+        break;
+    case CMD_QUERY_A2A_STATUS:
+        handle_query_a2a_status(frame);
         break;
     case CMD_LOG_LIST:
         handle_log_list(frame);

@@ -13,6 +13,7 @@
 #define MODULE_UWB_ENABLE           1   /* UWB 测距（DW1000/DW3000） */
 #define MODULE_ALARM_ENABLE         0   /* 分级报警（语音 + 蜂鸣器 + LED） */
 #define MODULE_CAN_ENABLE           0   /* CAN 总线通信（双基站联动） */
+#define UWB_DISCOVERY_ENABLE        0   /* ISO 0xC5 Blink / RNG_INIT discovery；默认关闭 */
 
 /* ======================== 存储 & 日志 ======================== */
 #define MODULE_EMMC_ENABLE          0   /* eMMC + FatFS */

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "dw_instance.h"
 
 /**
  * @brief MCU ↔ 上位机 TCP 二进制通信协议
@@ -36,6 +37,10 @@
 #define CMD_LOG_LIST            0x10    /* 列举日志目录 */
 #define CMD_LOG_READ            0x11    /* 读取日志文件（分块） */
 #define CMD_TAG_STATUS          0x20    /* MCU → 上位机：标签实时状态推送 */
+#define CMD_SET_A2A_ENABLE      0x21    /* 上位机 → A0：A2A 周期测距开关 */
+#define CMD_QUERY_A2A_STATUS    0x22    /* 上位机 → A0：A2A 最新状态 */
+#define CMD_PUSH_TAG_TOF        0x30    /* A0 → 上位机：Tag 四基站 ToF 组 */
+#define CMD_PUSH_A2A_TOF        0x31    /* A0 → 上位机：A0 到三台基站 ToF 组 */
 
 /* ========================= 通用应答状态码 ========================= */
 #define RESP_OK                 0x00
@@ -44,6 +49,7 @@
 #define RESP_ERR_PARAM          0x03
 #define RESP_ERR_BUSY           0x04
 #define RESP_ERR_FILE           0x05    /* 文件操作失败 */
+#define RESP_ERR_ROLE           0x06    /* 命令仅允许 A0 执行 */
 
 /* ========================= 数据结构 ========================= */
 
@@ -66,6 +72,22 @@ typedef struct __attribute__((packed))
     uint16_t ant_delay;         /* 天线延时 */
     int32_t  dist_offset_cm;    /* 距离校准偏移 cm */
 } net_rf_config_t;
+
+/** A0 的 A2A 控制请求（CMD_SET_A2A_ENABLE） */
+typedef struct __attribute__((packed))
+{
+    uint8_t enabled;
+} net_a2a_enable_req_t;
+
+/** A2A 控制/状态应答。ToF 仅 A1/A2/A3 槽有意义，单位为 DTU。 */
+typedef struct __attribute__((packed))
+{
+    uint8_t  enabled;
+    uint8_t  valid_mask;
+    uint8_t  range_nb;
+    uint32_t missed_reports;
+    int32_t  tof_dtu[MAX_AHCHOR_NUMBER];
+} net_a2a_status_t;
 
 /** 日志读取请求（CMD_LOG_READ 的 DATA） */
 typedef struct __attribute__((packed))
@@ -150,6 +172,9 @@ int net_protocol_send_resp(uint8_t cmd, uint8_t seq, const uint8_t *data, uint16
  * @return 0 成功，-1 发送失败
  */
 int net_protocol_send_push(uint8_t cmd, const uint8_t *data, uint16_t data_len);
+
+/** 将 UWB 回调投递的 ToF 快照编码为 CMD_PUSH_TAG_TOF / CMD_PUSH_A2A_TOF。 */
+int net_protocol_send_tof_report(const uwb_tof_report_t *report);
 
 /**
  * @brief  CRC8 计算 (poly = 0x07, init = 0x00)

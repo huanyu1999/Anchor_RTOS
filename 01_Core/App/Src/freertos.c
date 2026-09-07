@@ -143,6 +143,16 @@ const osMessageQueueAttr_t queue_alarm_attr = {
     .mq_mem  = &queue_alarm_buf, .mq_size = sizeof(queue_alarm_buf), .cb_mem  = &queue_alarm_cb, .cb_size = sizeof(queue_alarm_cb),
 };
 
+/* UWB 回调只投递 ToF 快照；task_eth 负责实际 TCP 发送，避免 W5500 访问进入时序关键路径。 */
+osMessageQueueId_t queue_tofReport;
+static uwb_tof_report_t queue_tofReport_buf[16];
+static StaticQueue_t queue_tofReport_cb;
+static const osMessageQueueAttr_t queue_tofReport_attr = {
+    .name   = "queue_tofReport",
+    .mq_mem = &queue_tofReport_buf, .mq_size = sizeof(queue_tofReport_buf),
+    .cb_mem = &queue_tofReport_cb, .cb_size = sizeof(queue_tofReport_cb),
+};
+
 /**************************************************************Thread**************************************************************/
 osThreadId_t task_uwb_handle;
 static uint8_t task_uwb_buf[2048];              // 回调直驱 TWR 状态机（原 task_twrRun 职责并入，含 double 运算与 log），1280→2048；task_twrRun 的 2048 已删除，净 RAM 不增
@@ -254,6 +264,7 @@ void MX_FREERTOS_Init(void)
     queue_minimalDis = osMessageQueueNew(16, sizeof(outDistance_t), &queue_minimalDis_attr);
     queue_canRxDis   = osMessageQueueNew(16, sizeof(outDistance_t), &canRxDisQueue_attr);
     queue_alarm      = osMessageQueueNew(18, sizeof(alarm_event_t), &queue_alarm_attr);
+    queue_tofReport  = osMessageQueueNew(16, sizeof(uwb_tof_report_t), &queue_tofReport_attr);
     sema_w5500Int    = osSemaphoreNew(1, 0, &sema_w5500Int_attr);
     sema_elogLock    = osSemaphoreNew(1, 1, &sema_elogLock_attr);
     sema_gnssReceive = osSemaphoreNew(1, 0, &sema_gnssReceive_attr);

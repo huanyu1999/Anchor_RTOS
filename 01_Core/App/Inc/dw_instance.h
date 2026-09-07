@@ -120,12 +120,12 @@ typedef int32_t  int32;
 
 /* 数据帧长度 */
 #define POLL_MSG_LEN                    16
-#define RESP_MSG_LEN                    19
+#define RESP_MSG_LEN                    22      // 加入上一轮 ToF、结果序号和 RSSI，Tag 端需同步更新
 #define FIANL_MSG_LEN                   (22 + 5 * MAX_AHCHOR_NUMBER + 10)
 #define BLINK_MSG_LEN                   10      // ISO 0xC5 EUI-64 blink：fctrl(1)+seq(1)+EUI64(8)，不含 FCS（TREK 原版）
 #define RNG_INIT_MSG_LEN                20      // 混合帧头 fctrl(2)+seq(1)+PAN(2)+目的EUI64(8)+源短址(2) + fcode(1)+sleepCorr(2)+tagAddr(2)，不含 FCS
 #define ANCH_POLL_MSG_LEN               11      // header(9) + fcode(1) + range_nb(1)
-#define ANCH_RESP2_MSG_LEN              15      // header(9) + fcode(1) + range_nb(1) + prev_dis(4)
+#define ANCH_RESP2_MSG_LEN              16      // header(9) + fcode(1) + range_nb(1) + prev_tof(4) + result_seq(1)
 #define ANCH_FINAL_MSG_LEN              (12 + FINAL_MSG_TS_LEN * 2 + FINAL_MSG_TS_LEN * (MAX_AHCHOR_NUMBER - 1))  // header(9)+fcode(1)+range_nb(1)+valid(1)+poll_tx(4)+final_tx(4)+resp_rx(4)×N
 
 /* 数据帧数组索引 */
@@ -142,9 +142,11 @@ typedef int32_t  int32;
 #define POLL_MSG_USER_IDX               14
 
 #define RESP_MSG_SLEEP_COR_IDX          11
-#define RESP_MSG_PREV_DIS_IDX           13
+#define RESP_MSG_PREV_TOF_IDX           13      // 上一轮 ToF，int32，小端 DTU
 #define RESP_MSG_ALARM_IDX              17
 #define RESP_MSG_GROUP_IDX              18
+#define RESP_MSG_RESULT_SEQ_IDX         19      // 上一轮结果所属的 tag range_nb
+#define RESP_MSG_RSSI_IDX               20      // 上一轮接收 tag poll 的 RSSI，int16，centi-dBm，小端
 
 // #define INIT_MSG_SLEEP_COR_IDX          10
 
@@ -154,12 +156,10 @@ typedef int32_t  int32;
 #define FINAL_MSG_A0_GROUP_ID_IDX       22
 #define FINAL_MSG_RESP1_RX_TS_IDX       23
 #define FINAL_MSG_RESP2_RX_TS_IDX       28
-// #define FINAL_MSG_A0_GROUP_ID_IDX       20
-// #define FINAL_MSG_RESP1_RX_TS_IDX       21
-// #define FINAL_MSG_RESP2_RX_TS_IDX       26
 
 /* A2A(基站间测距) FINAL 帧字段索引 */
-#define A2A_RESP2_PREV_DIS_IDX          11
+#define A2A_RESP2_PREV_TOF_IDX          11
+#define A2A_RESP2_RESULT_SEQ_IDX        15
 
 #define A2A_FINAL_VALID_IDX             11
 #define A2A_FINAL_POLL_TX_TS_IDX        12
@@ -266,6 +266,33 @@ typedef struct {
     uint16_t fwto4FinalFrame_sy;      // final 帧接收超时（symbol，按较长的 T2A final 计算 + 余量）
 } twrTimings_t;
 
+/* UWB 回调向 task_eth 投递的只读快照。ToF 为 DS-TWR 公式输出的 DTU，
+ * 不换算距离、不应用 DW1000 range bias，坐标终端据此统一解算。 */
+typedef enum {
+    UWB_TOF_REPORT_TAG = 1,
+    UWB_TOF_REPORT_A2A = 2,
+} uwbTofReportType_t;
+
+typedef struct {
+    uint8_t  type;
+    uint8_t  tag_id;             // A2A 报告固定为 0xFF
+    uint8_t  range_nb;
+    uint8_t  valid_mask;         // bit i = Anchor i 的 ToF 有效
+    uint8_t  flags;              // bit0 = 4-anchor 完整组，bit1 = 3-anchor 降级组
+    uint32_t tick_ms;            // A0 聚合完成时的本地 tick
+    uint16_t tag_battery_mv;     // 0xFFFF = Tag 尚未上报电量
+    int32_t  tof_dtu[MAX_AHCHOR_NUMBER];
+    int16_t  rssi_cdbm[MAX_AHCHOR_NUMBER]; // 0x7FFF = 未知
+} uwb_tof_report_t;
+
+typedef struct {
+    uint8_t  enabled;
+    uint8_t  valid_mask;
+    uint8_t  range_nb;
+    uint32_t missed_reports;
+    int32_t  tof_dtu[MAX_AHCHOR_NUMBER];
+} uwb_a2a_status_t;
+
 /******************************************************TWR Instance************************************************************/
 /* 统一实例管理结构（参照 TREK1000 instance_data_t），单例经 instance_get() 访问。
  *
@@ -293,6 +320,7 @@ typedef struct instance_data_s {
     uint8_t  a2a_range_nb;          // A2A 测距序号（发起端自增；TREK rangeNumAnc 同理独立）
     uint8_t  recv_tag_id;           // 当前测距标签 ID
     uint8_t  resp_valid;            // 标签 final 帧携带的有效 resp 掩码
+    int16_t  current_poll_rssi_cdbm; // 当前 Tag poll 接收 RSSI，final 成功后随 ToF 一并归档
     uint32_t nextSlotTime32h;       // 下一 resp 槽的绝对调度时间(32h)，逐事件累加（TREK delayedTRXTime32h 同款）
 
     /* responder 侧时间戳（T2A / A2A 共用，交换互斥所以安全） */
@@ -306,12 +334,23 @@ typedef struct instance_data_s {
     uint32_t final_rx_time32h;      // 应答端 final 延迟接收槽基准(32h，开窗时再减前导码)
 
     int32_t  prev_range[MAX_TAG_LIST_SIZE];     // 各标签上一轮测距值(mm)，下轮 resp 回传
+    /* 每个 Anchor 对 Tag 的上一轮原始 ToF 结果。每台设备只写自己的 anc_id 槽；
+     * A0 旁听其他 RESP 后填入远端槽，并按 result_seq 聚合后交给 task_eth。 */
+    int32_t  tag_tof_dtu[MAX_TAG_LIST_SIZE][MAX_AHCHOR_NUMBER];
+    int16_t  tag_rssi_cdbm[MAX_TAG_LIST_SIZE][MAX_AHCHOR_NUMBER];
+    uint8_t  tag_result_seq[MAX_TAG_LIST_SIZE][MAX_AHCHOR_NUMBER];
+    uint8_t  tag_result_valid[MAX_TAG_LIST_SIZE][MAX_AHCHOR_NUMBER];
     /* Discovery（A0/gateway 专用）：blink 注册的标签 EUI64 表，下标即分配的 tag_id/时隙号，
      * RAM 驻留，A0 重启后标签重新 blink 注册（TREK tagList 同款） */
     uint8_t  tagList[MAX_TAG_LIST_SIZE][8];
     uint8_t  tagListLen;
 #if defined(ANCRANGE)
     int32_t  a2a_distance[MAX_AHCHOR_NUMBER];   // 与各基站的 A2A 距离(mm)
+    int32_t  a2a_tof_dtu[MAX_AHCHOR_NUMBER];
+    uint8_t  a2a_result_seq[MAX_AHCHOR_NUMBER];
+    uint8_t  a2a_result_valid[MAX_AHCHOR_NUMBER];
+    uint8_t  a2a_enabled;            // A0 TCP 控制；默认开启，当前交换结束后才生效
+    uint32_t a2a_missed_reports;
     /* A2A 超帧调度（A0 专用） */
     uint32_t sframePeriod_ms;       // 超帧周期
     uint32_t a2aStartTime_ms;       // 下次 A2A 触发的绝对 tick
@@ -396,5 +435,7 @@ instance_data_t* instance_get(void);
 int dev_uwbStartTx(uwb_tx_mode_t mode, bool response_expected);
 #if defined(ANCRANGE)
 void anch_checkA2ATrigger(instance_data_t *inst);
+int uwb_set_a2a_enabled(uint8_t enabled);
+int uwb_get_a2a_status(uwb_a2a_status_t *status);
 #endif
 #endif

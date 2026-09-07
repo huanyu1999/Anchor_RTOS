@@ -1,5 +1,7 @@
 #include "dw_instance.h"
 #include "dw_sort.h"
+#include "app_config.h"
+#include "os_event.h"
 #include "cmsis_os.h"
 #include "elog.h"
 #include <stdio.h>
@@ -72,6 +74,14 @@ static int32_t calc_tag_sleep_correction(uint8_t slot, uint32_t nowMs);
 static void anch_processTagBlink(instance_data_t *inst);
 static int anch_add_tag_to_list(instance_data_t *inst, const uint8_t *eui64);
 static void anch_prepareRngInitResp(instance_data_t *inst, const uint8_t *tagEui64, uint16_t slot);
+static int16_t anch_get_rssi_cdbm(void);
+static int32_t read_i32_le(const uint8_t *src);
+static void write_i32_le(uint8_t *dst, int32_t value);
+static void write_i16_le(uint8_t *dst, int16_t value);
+static void anch_publish_tag_tof(instance_data_t *inst, uint8_t tag_id, uint8_t range_nb);
+#if defined(ANCRANGE)
+static void anch_publish_a2a_tof(instance_data_t *inst);
+#endif
 
 static inline uint64_t get_tx_timestamp_u64(void);
 static inline uint64_t get_rx_timestamp_u64(void);
@@ -85,12 +95,64 @@ uwbAlgorithm_t uwbTwr_AnchorAlgorithm = { .init = twrAnchor_Init, .onEvent = twr
  * DW3000 上放开 reserved 后必须真机确认非法 reserved 帧走 rxfailedcallback 且接收机被正确重开（ARFE 教训） */
 static void anch_setFrameFilter(const instance_data_t *inst)
 {
-    uint16_t ff_mode = DWT_FF_DATA_EN | DWT_FF_ACK_EN | (inst->gatewayAnchor ? DWT_FF_RSVD_EN : 0);
+    uint16_t ff_mode = DWT_FF_DATA_EN | DWT_FF_ACK_EN;
+#if UWB_DISCOVERY_ENABLE
+    if (inst->gatewayAnchor)
+    {
+        ff_mode |= DWT_FF_RSVD_EN;
+    }
+#else
+    (void)inst;
+#endif
 #if defined(USE_DW3000)
     dwt_configureframefilter(DWT_FF_ENABLE_802_15_4, ff_mode);
 #else
     dwt_enableframefilter(ff_mode);
 #endif
+}
+
+static int16_t anch_get_rssi_cdbm(void)
+{
+#if defined(USE_DW1000)
+    dwt_rxdiag_t diag;
+    dwt_readdiagnostics(&diag);
+    float rssi = diag.rxPower * 100.0f;
+    if (rssi > 32766.0f)
+    {
+        return 32766;
+    }
+    if (rssi < -32768.0f)
+    {
+        return -32768;
+    }
+    return (int16_t)rssi;
+#else
+    return INT16_MAX;
+#endif
+}
+
+static int32_t read_i32_le(const uint8_t *src)
+{
+    return (int32_t)((uint32_t)src[0]
+        | ((uint32_t)src[1] << 8)
+        | ((uint32_t)src[2] << 16)
+        | ((uint32_t)src[3] << 24));
+}
+
+static void write_i32_le(uint8_t *dst, int32_t value)
+{
+    uint32_t raw = (uint32_t)value;
+    dst[0] = (uint8_t)raw;
+    dst[1] = (uint8_t)(raw >> 8);
+    dst[2] = (uint8_t)(raw >> 16);
+    dst[3] = (uint8_t)(raw >> 24);
+}
+
+static void write_i16_le(uint8_t *dst, int16_t value)
+{
+    uint16_t raw = (uint16_t)value;
+    dst[0] = (uint8_t)raw;
+    dst[1] = (uint8_t)(raw >> 8);
 }
 
 /*****************************************CCCC**DW1000 event function********************************************/
@@ -190,7 +252,7 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
      * 仅 A0/gateway 空闲监听时处理（帧过滤只对 A0 放开 reserved 帧；resp 旁听窗关过滤时
      * 其他基站也可能收到，与未知帧同样处理——重新开窗）。注意须放在 A2A 特判之后，
      * A2A 交换中收到 blink 走上面的容错重开窗，不得打断交换 */
-    if (rx_buffer[0] == 0xC5 && frame_len == BLINK_MSG_LEN + FCS_LEN)
+    if (UWB_DISCOVERY_ENABLE && rx_buffer[0] == 0xC5 && frame_len == BLINK_MSG_LEN + FCS_LEN)
     {
         if (inst->gatewayAnchor && inst->twr_mode == LISTENER)
         {
@@ -224,6 +286,7 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
 
         range_time = portGetTickCnt();            // 取得twr刚开始接收到poll的Tick
         inst->poll_rx_ts = get_rx_timestamp_u64();// 获得poll_rx时间戳
+        inst->current_poll_rssi_cdbm = anch_get_rssi_cdbm();
         /* 初始化本轮交换状态：nextSlotTime32h 基准 = poll RX，槽引擎每次进入先推进一槽
          * （TREK anch_txresponse_or_rx_reenable 同款：delayedTRXTime32h 由函数内累加），
          * 首个 resp 槽即 poll RX + 1×槽间隔 */
@@ -286,8 +349,20 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
                 {
                     distance_now_m = -1;
                 }
-                /* 保存本次测距值(mm)，下个周期在 resp 的 PREV_DIS 字段回传给标签 */
+                /* A0 在写入本轮结果前，聚合上一轮四 Anchor ToF。远端值在本轮 RESP 中
+                 * 回传；按 result_seq 严格匹配，避免将丢帧后的旧值混进定位组。 */
+                if (anc_id == 0 && inst->tag_result_valid[inst->recv_tag_id][0])
+                {
+                    anch_publish_tag_tof(inst, inst->recv_tag_id,
+                                         inst->tag_result_seq[inst->recv_tag_id][0]);
+                }
+
+                /* 保存本次测距值(mm)供本地报警，并保存原始 ToF 供下一轮 A0 聚合。 */
                 inst->prev_range[inst->recv_tag_id] = (int32_t)(distance_now_m * 1000);
+                inst->tag_tof_dtu[inst->recv_tag_id][anc_id] = (int32_t)tof_dtu;
+                inst->tag_rssi_cdbm[inst->recv_tag_id][anc_id] = inst->current_poll_rssi_cdbm;
+                inst->tag_result_seq[inst->recv_tag_id][anc_id] = inst->range_nb;
+                inst->tag_result_valid[inst->recv_tag_id][anc_id] = 1;
                 send_processeDis.distance = distance_now_m * 1000;
                 send_processeDis.tag_id   = inst->recv_tag_id;
                 send_processeDis.last_updateTick = range_time;
@@ -342,16 +417,26 @@ static void twrAnchor_rxOkHandle(instance_data_t *inst)
     case RTLS_MSG_ANCH_RESP:                    // 接收到T2A阶段的，其他基站发送的resp帧
         // ANCH_FRAME_TRACE_LOG("T2A rx resp: A%d <- A%d rn=%d current=%d",
         //                      anc_id, rx_buffer[SENDER_SHORT_ADD_IDX], rx_buffer[RANGE_NB_IDX], inst->range_nb);
-        if (rx_buffer[RANGE_NB_IDX] == inst->range_nb)  // 和当前测距具有相同的range_nb
+        if (frame_len >= RESP_MSG_LEN + FCS_LEN && rx_buffer[RANGE_NB_IDX] == inst->range_nb)  // 和当前测距具有相同的range_nb
         {
             if((rx_buffer[RESP_MSG_GROUP_IDX] & 0x7f) == (group_id & 0x7f)) // 只取和自己组号相同的其他基站数据上报
             {
                 uint8_t recv_anc_id = rx_buffer[SENDER_SHORT_ADD_IDX];     //取基站ID
-                distance_report[recv_anc_id]  = (int32_t)rx_buffer[RESP_MSG_PREV_DIS_IDX]   << 24;
-                distance_report[recv_anc_id] += (int32_t)rx_buffer[RESP_MSG_PREV_DIS_IDX+1] << 16;
-                distance_report[recv_anc_id] += (int32_t)rx_buffer[RESP_MSG_PREV_DIS_IDX+2] << 8;
-                distance_report[recv_anc_id] += (int32_t)rx_buffer[RESP_MSG_PREV_DIS_IDX+3];
-                group_report[recv_anc_id] = rx_buffer[RESP_MSG_GROUP_IDX] & 0x7f;  // 将最高bit置0，最高bit为校准基站标志位
+                if (recv_anc_id < MAX_AHCHOR_NUMBER && recv_anc_id != anc_id)
+                {
+                    int32_t prev_tof_dtu = read_i32_le(&rx_buffer[RESP_MSG_PREV_TOF_IDX]);
+                    uint8_t result_seq = rx_buffer[RESP_MSG_RESULT_SEQ_IDX];
+                    int16_t result_rssi = (int16_t)((uint16_t)rx_buffer[RESP_MSG_RSSI_IDX]
+                        | ((uint16_t)rx_buffer[RESP_MSG_RSSI_IDX + 1] << 8));
+
+                    inst->tag_tof_dtu[inst->recv_tag_id][recv_anc_id] = prev_tof_dtu;
+                    inst->tag_rssi_cdbm[inst->recv_tag_id][recv_anc_id] = result_rssi;
+                    inst->tag_result_seq[inst->recv_tag_id][recv_anc_id] = result_seq;
+                    inst->tag_result_valid[inst->recv_tag_id][recv_anc_id] = (prev_tof_dtu > 0);
+                    distance_report[recv_anc_id] = (int32_t)((double)prev_tof_dtu
+                        * DWT_TIME_UNITS * SPEED_OF_LIGHT * 1000.0);
+                    group_report[recv_anc_id] = rx_buffer[RESP_MSG_GROUP_IDX] & 0x7f;
+                }
 #if ANCH_DIST_PRINT_ENABLE
                 dist_print_rxMask |= (uint8_t)(1 << recv_anc_id);
 #endif
@@ -687,13 +772,22 @@ static void anch_perpareAnc2TagResp(instance_data_t *inst)
     tx_resp_msg[FUNC_CODE_IDX]          = RTLS_MSG_ANCH_RESP;
     tx_resp_msg[RESP_MSG_GROUP_IDX]     = group_id;
 
-    /* 把上一周期算出的测距值(mm)以大端写入 resp 的 PREV_DIS 字段，回传给标签显示。
-     * 标签按大端读取(见 instance_tag.c)。首个周期 prev_range 为 0，标签显示 0，
-     * 下一周期起即为真实距离。recv_tag_id 已在 POLL 处理中设好。 */
-    tx_resp_msg[RESP_MSG_PREV_DIS_IDX]     = (uint8_t)(inst->prev_range[inst->recv_tag_id] >> 24);
-    tx_resp_msg[RESP_MSG_PREV_DIS_IDX + 1] = (uint8_t)(inst->prev_range[inst->recv_tag_id] >> 16);
-    tx_resp_msg[RESP_MSG_PREV_DIS_IDX + 2] = (uint8_t)(inst->prev_range[inst->recv_tag_id] >> 8);
-    tx_resp_msg[RESP_MSG_PREV_DIS_IDX + 3] = (uint8_t)(inst->prev_range[inst->recv_tag_id]);
+    /* 上一轮本 Anchor 的 ToF 结果：A0 在下一轮旁听其它 RESP 后按 result_seq 聚合。
+     * Tag 固件需将旧 PREV_DIS 解释改为这一小端 ToF 字段，并采用新的 RESP_MSG_LEN。 */
+    if (inst->tag_result_valid[inst->recv_tag_id][anc_id])
+    {
+        write_i32_le(&tx_resp_msg[RESP_MSG_PREV_TOF_IDX],
+                     inst->tag_tof_dtu[inst->recv_tag_id][anc_id]);
+        tx_resp_msg[RESP_MSG_RESULT_SEQ_IDX] = inst->tag_result_seq[inst->recv_tag_id][anc_id];
+        write_i16_le(&tx_resp_msg[RESP_MSG_RSSI_IDX],
+                     inst->tag_rssi_cdbm[inst->recv_tag_id][anc_id]);
+    }
+    else
+    {
+        write_i32_le(&tx_resp_msg[RESP_MSG_PREV_TOF_IDX], 0);
+        tx_resp_msg[RESP_MSG_RESULT_SEQ_IDX] = 0;
+        write_i16_le(&tx_resp_msg[RESP_MSG_RSSI_IDX], INT16_MAX);
+    }
 
     if (anc_id == 0)                                      // A0负责校准标签时序，防冲突
     {

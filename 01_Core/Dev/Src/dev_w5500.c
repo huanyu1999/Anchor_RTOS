@@ -260,7 +260,7 @@ void w5500_isr(void) {
     uint8_t tmp, sn;
     sir_val = getSIR();         // 获取是哪些socket触发了中断
     if (sir_val != 0xff) {
-        setSIMR(0x00);          // 暂时关闭Socket 中断，避免中断处理有产生新的中断
+        setSIMR(0x00);       // 暂时关闭Socket 中断，避免中断处理有产生新的中断
         for (sn = 0; sn < _WIZCHIP_SOCK_NUM_; sn++) {
             tmp = 0;
             if (sir_val & IS_SOCKET_INT(sn)) {

@@ -86,6 +86,19 @@ static void push_tag_status(void)
     net_protocol_send_push(CMD_TAG_STATUS, payload, idx);
 }
 
+/* TCP 发送只在普通优先级 task_eth 执行；UWB 回调通过 queue_tofReport 无阻塞投递。 */
+static void push_tof_reports(void)
+{
+    uwb_tof_report_t report;
+    uint8_t sent = 0;
+
+    while (sent < 4 && osMessageQueueGet(queue_tofReport, &report, NULL, 0) == osOK)
+    {
+        net_protocol_send_tof_report(&report);
+        sent++;
+    }
+}
+
 /* ========================= 网络任务 ========================= */
 
 void task_eth(void *arg)
@@ -111,6 +124,8 @@ void task_eth(void *arg)
         {
             w5500_isr();
         }
+
+        push_tof_reports();
 
         /* 定时推送标签状态 */
         uint32_t now = osKernelGetTickCount();
